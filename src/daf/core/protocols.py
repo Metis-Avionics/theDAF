@@ -1,0 +1,75 @@
+"""Protocol definitions for repository, cache, and algorithm abstractions."""
+
+from typing import Any, Protocol
+
+
+class Repository[T](Protocol):
+    """Abstract repository protocol for data access."""
+
+    async def get(self, key: str) -> T | None:
+        """Retrieve an item by key. Returns None if not found."""
+        ...
+
+    async def save(self, key: str, value: T) -> None:
+        """Save an item with the given key."""
+        ...
+
+    async def delete(self, key: str) -> None:
+        """Delete an item by key."""
+        ...
+
+    async def list_all(self) -> dict[str, T]:
+        """List all items in the repository."""
+        ...
+
+
+class Cache(Protocol):
+    """Abstract cache protocol."""
+
+    async def get(self, key: str) -> Any | None:
+        """Retrieve a value from cache. Returns None if not found or expired."""
+        ...
+
+    async def set(self, key: str, value: Any) -> None:
+        """Store a value in cache."""
+        ...
+
+    async def delete(self, key: str) -> None:
+        """Delete a value from cache."""
+        ...
+
+    async def clear(self) -> None:
+        """Clear all values from cache."""
+        ...
+
+
+class Algorithm(Protocol):
+    """Abstract algorithm protocol."""
+
+    async def execute(self, input_data: Any) -> Any:
+        """Execute the algorithm with the given input."""
+        ...
+
+    async def get_stats(self) -> dict[str, Any]:
+        """Get execution statistics."""
+        ...
+
+
+class Authorizer(Protocol):
+    """Abstract authorizer protocol for access control."""
+
+    async def authorize(
+        self, operation: str, resource_id: str | None, user: Any
+    ) -> None:
+        """Authorize an operation on a resource for a given user.
+
+        Args:
+            operation: The operation being performed.
+            resource_id: The resource being accessed, or None for creation.
+            user: The authenticated user context.
+
+        Raises:
+            AuthorizationError: If the user is not authorized.
+            NotFoundError: If the resource does not exist.
+        """
+        ...
