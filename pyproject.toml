@@ -1,5 +1,5 @@
 [project]
-name = "fastapi-data-access-factory"
+name = "thedaf"
 version = "0.1.0"
 description = "A typed data-access abstraction and FastAPI integration layer for composable query and mutation execution."
 readme = "README.md"
