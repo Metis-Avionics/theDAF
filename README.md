@@ -138,7 +138,7 @@ Validation happens at the boundary. Algorithm and repository logic never receive
 ### With uv
 
 ```bash
-uv pip install fastapi-data-access-factory
+uv pip install thedaf
 ```
 
 ### Optional dependencies
@@ -146,13 +146,13 @@ uv pip install fastapi-data-access-factory
 For FastAPI integration with rate limiting:
 
 ```bash
-uv pip install fastapi-data-access-factory[fastapi]
+uv pip install thedaf[fastapi]
 ```
 
 For development:
 
 ```bash
-uv pip install fastapi-data-access-factory[dev]
+uv pip install thedaf[dev]
 ```
 
 ## Quick Start

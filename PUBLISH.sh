@@ -4,7 +4,7 @@
 
 set -e
 
-PACKAGE_NAME="fastapi-data-access-factory"
+PACKAGE_NAME="thedaf"
 VERSION="0.1.0"
 DIST_DIR="dist"
 
