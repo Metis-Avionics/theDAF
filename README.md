@@ -144,13 +144,25 @@ GET /data/123?algorithm=fibonacci
 
 When you call `daf.query(info)`:
 
-1. **Authorization** – Check access if authorizer is configured
-2. **Cache Lookup** – Check if result is already cached. Cache keys are SHA-256 hashes of canonical JSON (resource_id, filters, algorithm, user_id). On cache hit, re-authorize with the cached data before returning.
-3. **Repository Lookup** (if cache miss) – Fetch from persistent storage
-4. **Filter Application** – Apply in-memory filters to the retrieved data
-5. **Algorithm Execution** (if specified) – Apply computation by algorithm name from registry
-6. **Cache Population** – Store result for future hits
-7. **Return Typed Result** – `QueryResult` with data, cache status, stats, and error classification
+1. **Validation** – Validate `resource_id` and inputs
+2. **Cache Lookup** – Check if result is already cached. Cache keys are `query:{resource_id}:{sha256_digest}` of canonical JSON (resource_id, filters, algorithm, user_id). On cache hit, re-authorize with the cached data before returning.
+3. **Repository Lookup** (if cache miss) – Fetch from persistent storage (single read)
+4. **Authorization** – Authorize with the retrieved data snapshot
+5. **Filter Application** – Apply in-memory filters to the retrieved data
+6. **Algorithm Execution** (if specified) – Apply computation by algorithm name from registry
+7. **Cache Population** – Store result for future hits
+8. **Return Typed Result** – `QueryResult` with data, cache status, stats
+
+For cache hits, steps 3-6 are skipped; the cached result is re-authorized and returned directly.
+
+### Authorization Boundary
+
+DataAccess performs authorization **after** reading from the repository on cache miss. The repository is treated as a trusted internal data source; the authorizer enforces **usage** policy, not **access** policy.
+
+This design choice means:
+- The repository is read exactly once per cache miss (single-read invariant).
+- The authorizer always receives the raw repository data, even on cache hit, to make consistent ownership decisions.
+- If your deployment requires authorization-before-read (e.g., for audited data sources or multi-tenant isolation at the storage layer), implement that check at the repository level.
 
 ### Data Contracts
 
@@ -505,31 +517,41 @@ Core domain errors are defined in `daf.core.errors`:
 - `AlgorithmError` – Algorithm execution failed
 - `AuthorizationError` – User not authorized
 
-Expected errors are returned as typed result envelopes with `error_type` preserved:
+Core operations raise typed exceptions for expected errors:
 
-- `QueryResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`
-- `MutationResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`, `"conflict"`
+- `query()` raises `NotFoundError`, `ValidationError`, `AuthorizationError`
+- `post()` raises `ValidationError`, `AuthorizationError`
+- `put()` raises `ValidationError`, `NotFoundError`, `AuthorizationError`
+- `delete()` raises `ValidationError`, `NotFoundError`, `AuthorizationError`
 
-Unexpected errors propagate as exceptions. The FastAPI adapter catches `DataAccessError` subclasses and maps them to HTTP 500 with a generic message.
+The FastAPI adapter catches specific exceptions and maps them to HTTP status codes:
 
-All FastAPI responses use HTTP 200 with a `QueryResult` or `MutationResult` envelope. Check `result.error_type` for errors:
-
-- `"authorization"` – User is not allowed to access the resource
-- `"not_found"` – Resource does not exist
-- `"validation"` – Input parameters are invalid
-- `"conflict"` – Concurrent modification detected during PUT or DELETE
+- `AuthorizationError` → HTTP 403 Forbidden
+- `NotFoundError` → HTTP 404 Not Found
+- `ValidationError` → HTTP 422 Unprocessable Entity (Pydantic)
+- `DataAccessError` → HTTP 500 Internal Server Error
 
 ```python
-result = await daf.query(info)
-if not result.success:
-    if result.error_type == "authorization":
-        log.warning("auth failure")
-    elif result.error_type == "not_found":
-        log.info("missing resource")
-    elif result.error_type == "validation":
-        log.warning("bad input")
-    else:
-        log.error("unexpected error", extra={"error": result.error})
+from daf.core.errors import AuthorizationError, NotFoundError, ValidationError
+
+try:
+    result = await daf.query(info)
+except NotFoundError:
+    log.info("missing resource")
+except ValidationError:
+    log.warning("bad input")
+except AuthorizationError:
+    log.warning("auth failure")
+```
+
+When using the FastAPI adapter, exceptions are automatically translated to HTTP responses:
+
+```python
+from fastapi import FastAPI
+from daf.adapters.fastapi import DataAccessRouter
+
+router = DataAccessRouter(daf, get_current_user=get_current_user)
+# GET /data/{id} returns 403/404/500 as appropriate
 ```
 
 ## Contributing

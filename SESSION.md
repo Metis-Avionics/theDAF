@@ -168,3 +168,61 @@ Each session entry should include:
 - All 9 issues from the plan (R1-R9) are implemented and validated
 - Added 8 new interaction tests covering security invariants and edge cases
 - Living docs (BUGS.md, SECURITY.md, CHANGELOG.md) updated to reflect fixes
+
+---
+
+## Session 003 - 2026-08-14
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Branch `fix/remaining-bugs-security` with R1-R9 fixes committed and pushed. PR #16 created for R1-R6 red-team composition fixes.
+
+**Actions Taken**:
+- Read red-team plan `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`
+- Implemented R1-R6 fixes in core, adapter, repositories, cache, protocols, and tests
+- Updated living docs: README.md, CHANGELOG.md, HANDOVER.md, SESSION.md
+- Pushed changes to remote branch
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/core/access.py | Modified | R1: removed envelope helpers, propagate exceptions; R2: single-read query auth; R3: prefix cache keys, delete_prefix; R5: deprecation warning in _user_id |
+| src/daf/adapters/fastapi.py | Modified | R1: map AuthorizationError→403, NotFoundError→404 in all routes |
+| src/daf/repositories/memory.py | Modified | R4: deep copy for dict values in get(); CAS equality for dicts |
+| src/daf/cache/memory.py | Modified | R4: deep copy for dict values in get() |
+| src/daf/core/protocols.py | Modified | R4/R5: docstrings for value isolation and user.id contract |
+| tests/integration/test_fastapi_adapter.py | Modified | Updated HTTP status assertions (403/404), error-type tests |
+| tests/integration/test_authorization.py | Modified | Updated to pytest.raises for auth/not-found errors |
+| tests/integration/test_data_access.py | Modified | Updated to pytest.raises for not-found errors |
+| tests/integration/test_security_invariants.py | Modified | Updated cache key helper, error tests, added mutable-value isolation tests, single-read query test |
+| README.md | Modified | Updated Query Execution Flow, Error Handling sections for exception-based errors |
+| CHANGELOG.md | Modified | Added R1-R6 fixes and new features |
+| HANDOVER.md | Modified | Updated project state, test count, PR link |
+
+### Project Status
+
+- **Branch**: `fix/remaining-bugs-security`
+- **Version**: 0.1.0 → 0.2.0 (pending release)
+- **Tests**: 105/105 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/16
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [x] Commit changes
+- [x] Push branch to origin
+- [x] Create PR on GitHub
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- All 6 issues from the red-team composition plan (R1-R6) are implemented and validated
+- 105 tests pass (up from 87 in previous session)
+- Living docs updated to reflect exception-based error handling and new security invariants

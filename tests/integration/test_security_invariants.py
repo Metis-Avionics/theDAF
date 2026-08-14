@@ -45,6 +45,18 @@ class FakeAuthorizer:
             raise AuthorizationError(f"Access denied to resource '{resource_id}'")
 
 
+class _StripOwnerIdAlgorithm:
+    """Algorithm that removes owner_id from dict data."""
+
+    async def execute(self, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if k != "owner_id"}
+        return data
+
+    async def get_stats(self) -> dict[str, Any]:
+        return {}
+
+
 def _expected_cache_key(
     resource_id: str,
     filters: dict[str, Any] | None,
@@ -603,6 +615,17 @@ class TestMutableValueIsolation:
         assert stored is not None
         assert stored["name"] == "John"
 
+        list_original = [1, 2, {"nested": "value"}]
+        await repo.save("list:1", list_original)
+        
+        list_fetched = await repo.get("list:1")
+        assert list_fetched is not None
+        list_fetched.append(3)
+        list_fetched[2]["nested"] = "mutated"
+        
+        stored_list = await repo.get("list:1")
+        assert stored_list == [1, 2, {"nested": "value"}]
+
     @pytest.mark.asyncio
     async def test_cache_returns_independent_copy(self) -> None:
         """Test that mutating cached dict does not affect cache state."""
@@ -618,6 +641,17 @@ class TestMutableValueIsolation:
         cached_again = await cache.get("query:123:abc")
         assert cached_again is not None
         assert cached_again["name"] == "John"
+
+        list_original = [1, 2, {"nested": "value"}]
+        await cache.set("list:1", list_original)
+        
+        list_fetched = await cache.get("list:1")
+        assert list_fetched is not None
+        list_fetched.append(3)
+        list_fetched[2]["nested"] = "mutated"
+        
+        cached_list_again = await cache.get("list:1")
+        assert cached_list_again == [1, 2, {"nested": "value"}]
 
 
 class TestUnknownAlgorithmValidation:
@@ -755,6 +789,86 @@ class TestCacheHitReauthorization:
         with pytest.raises(AuthorizationError):
             await daf.query(
                 QueryInfo(resource_id="123"), user=FakeUser("user-1")
+            )
+
+
+class TestCacheHitAuthorizationRawData:
+    """Test that the authorizer receives raw repository data on cache hit."""
+
+    @pytest.mark.asyncio
+    async def test_authorizer_receives_raw_data_on_cache_hit(self) -> None:
+        """Test that authorization on cache hit uses raw data, not cached result."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        received_data: list[Any] = []
+        
+        class SpyAuthorizer:
+            async def authorize(
+                self,
+                _operation: str,
+                _resource_id: str | None,
+                _user: Any,
+                data: Any = None,
+            ) -> None:
+                received_data.append(data)
+        
+        authorizer = SpyAuthorizer()
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result1 = await daf.query(
+            QueryInfo(resource_id="123"), user=FakeUser("user-1")
+        )
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert len(received_data) == 1
+        assert received_data[0] == {"name": "John", "owner_id": "user-1"}
+        
+        result2 = await daf.query(
+            QueryInfo(resource_id="123"), user=FakeUser("user-1")
+        )
+        assert result2.success is True
+        assert result2.cache_hit is True
+        assert len(received_data) == 2
+        assert received_data[1] == {"name": "John", "owner_id": "user-1"}
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_authorization_sees_raw_owner_id(
+        self,
+    ) -> None:
+        """Test that algorithm-stripped owner_id is still visible to
+        authorizer on cache hit."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        algo = _StripOwnerIdAlgorithm()
+        factory = DataAccessFactory(
+            repository=repo,
+            cache=cache,
+            algorithms={"strip_owner": algo},
+            authorizer=authorizer,
+        )
+        daf = factory.create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result1 = await daf.query(
+            QueryInfo(resource_id="123", algorithm="strip_owner"),
+            user=FakeUser("user-1"),
+        )
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert "owner_id" not in result1.data
+        
+        with pytest.raises(AuthorizationError):
+            await daf.query(
+                QueryInfo(resource_id="123", algorithm="strip_owner"),
+                user=FakeUser("user-2"),
             )
 
 

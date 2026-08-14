@@ -7,8 +7,10 @@ from typing import Any, Protocol
 class Repository[T](Protocol):
     """Abstract repository protocol for data access.
 
-    Implementations should return independent copies or snapshots.
-    Callers must not mutate returned values in-place.
+    Implementations own their stored values and return independent copies
+    or snapshots. Callers must not mutate values returned by ``get()``
+    in-place; ``save()`` and ``create()`` must not retain caller
+    references.
     """
 
     async def get(self, key: str) -> T | None:
@@ -49,8 +51,9 @@ class Repository[T](Protocol):
 class Cache(Protocol):
     """Abstract cache protocol.
 
-    Implementations should return independent copies.
-    Callers must not mutate cached values in-place.
+    Implementations own their cached values and return independent copies.
+    Callers must not mutate values returned by ``get()`` in-place;
+    ``set()`` must not retain caller references.
     """
 
     async def get(self, key: str) -> Any | None:

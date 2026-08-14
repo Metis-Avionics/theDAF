@@ -25,6 +25,13 @@ class DataAccess:
     
     Composes repository, cache, and algorithm components to execute
     queries and mutations with proper caching and algorithmic processing.
+
+    Security model: authorization is evaluated after data retrieval on
+    cache miss. The authorizer receives the raw repository data and
+    decides whether the caller may use it. The repository is treated as
+    a trusted internal data source; authorization enforces usage policy,
+    not access policy. This preserves the single-read invariant: the
+    repository is read exactly once per cache miss.
     """
 
     def __init__(
@@ -138,7 +145,14 @@ class DataAccess:
         return await self._execute_query(info, user)
 
     async def _execute_query(self, info: QueryInfo, user: Any) -> QueryResult:
-        """Execute the core query logic."""
+        """Execute the core query logic.
+
+        On cache miss, the raw repository value is retrieved first, then
+        authorization is checked against that value. This preserves the
+        single-read invariant. The cache stores both the raw data (for
+        re-authorization on cache hit) and the transformed result (for
+        returning to the caller).
+        """
         logger.debug(
             "execute_query",
             extra={
@@ -151,20 +165,36 @@ class DataAccess:
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
-            if self._authorizer is not None:
-                await self._check_authorization(
-                    "query", info.resource_id, user, data=cached
-                )
-            logger.debug("cache hit", extra={"key": cache_key})
-            return QueryResult(
-                success=True,
-                data=cached,
-                error=None,
-                error_type=None,
-                cache_hit=True,
-                algorithm_stats=None,
+            return await self._handle_cache_hit(
+                cache_key, info.resource_id, user, cached
             )
+        return await self._execute_cache_miss(cache_key, info, user)
 
+    async def _handle_cache_hit(
+        self,
+        cache_key: str,
+        resource_id: str,
+        user: Any,
+        cached: dict[str, Any],
+    ) -> QueryResult:
+        """Authorize and return a cached query result."""
+        raw_data = cached["raw"]
+        if self._authorizer is not None:
+            await self._check_authorization("query", resource_id, user, data=raw_data)
+        logger.debug("cache hit", extra={"key": cache_key})
+        return QueryResult(
+            success=True,
+            data=cached["transformed"],
+            error=None,
+            error_type=None,
+            cache_hit=True,
+            algorithm_stats=None,
+        )
+
+    async def _execute_cache_miss(
+        self, cache_key: str, info: QueryInfo, user: Any
+    ) -> QueryResult:
+        """Execute a full query on cache miss and populate the cache."""
         data = await self._repository.get(info.resource_id)
         if data is None:
             logger.info("repository miss", extra={"resource_id": info.resource_id})
@@ -172,23 +202,20 @@ class DataAccess:
                 f"Resource '{info.resource_id}' not found"
             )
 
+        raw_data = data
+
         if self._authorizer is not None:
-            await self._check_authorization("query", info.resource_id, user, data=data)
+            await self._check_authorization(
+                "query", info.resource_id, user, data=data
+            )
 
         data = self._apply_filters(data, info.filters)
 
         algorithm_stats = None
         if info.algorithm:
-            algorithm = self._algorithms.get(info.algorithm)
-            if algorithm is not None:
-                logger.debug("running algorithm", extra={"algorithm": info.algorithm})
-                algorithm_result = await algorithm.execute(data)
-                algorithm_stats = await algorithm.get_stats()
-                data = algorithm_result
-            else:
-                raise ValidationError(f"Unknown algorithm: {info.algorithm}")
+            data, algorithm_stats = await self._run_algorithm(data, info.algorithm)
 
-        await self._cache.set(cache_key, data)
+        await self._cache.set(cache_key, {"raw": raw_data, "transformed": data})
         logger.debug("cache set", extra={"key": cache_key})
 
         return QueryResult(
@@ -199,6 +226,18 @@ class DataAccess:
             cache_hit=False,
             algorithm_stats=algorithm_stats,
         )
+
+    async def _run_algorithm(
+        self, data: Any, algorithm_name: str
+    ) -> tuple[Any, dict[str, Any] | None]:
+        """Execute an algorithm by name and return (result, stats)."""
+        algorithm = self._algorithms.get(algorithm_name)
+        if algorithm is None:
+            raise ValidationError(f"Unknown algorithm: {algorithm_name}")
+        logger.debug("running algorithm", extra={"algorithm": algorithm_name})
+        result = await algorithm.execute(data)
+        stats = await algorithm.get_stats()
+        return result, stats
 
     async def post(self, info: PostInfo, user: Any = None) -> MutationResult:
         """Execute a create/post operation.
@@ -226,12 +265,6 @@ class DataAccess:
             extra={"resource_type": info.resource_type},
         )
         resource_id = await self._repository.create(info.data)
-
-        await self._cache.delete_prefix(f"query:{resource_id}:")
-        logger.debug(
-            "post cache invalidated",
-            extra={"resource_id": resource_id},
-        )
 
         return MutationResult(
             success=True,

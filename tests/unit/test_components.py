@@ -57,6 +57,51 @@ class TestMemoryRepository:
         saved = await repo.get(resource_id)
         assert saved == data
 
+    @pytest.mark.asyncio
+    async def test_get_returns_independent_copy_for_list(self) -> None:
+        """Test that get() returns an independent copy for list values."""
+        repo: MemoryRepository[list[Any]] = MemoryRepository()
+        original = [1, 2, {"nested": "value"}]
+        await repo.save("list:1", original)
+        
+        fetched = await repo.get("list:1")
+        assert fetched is not None
+        fetched.append(3)
+        fetched[2]["nested"] = "mutated"
+        
+        stored = await repo.get("list:1")
+        assert stored == [1, 2, {"nested": "value"}]
+
+    @pytest.mark.asyncio
+    async def test_save_does_not_retain_caller_reference(self) -> None:
+        """Test that save() does not retain the caller's reference."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        original = {"name": "John", "tags": ["a", "b"]}
+        await repo.save("user:1", original)
+        
+        original["name"] = "Jane"
+        original["tags"].append("c")
+        
+        stored = await repo.get("user:1")
+        assert stored is not None
+        assert stored["name"] == "John"
+        assert stored["tags"] == ["a", "b"]
+
+    @pytest.mark.asyncio
+    async def test_create_does_not_retain_caller_reference(self) -> None:
+        """Test that create() does not retain the caller's reference."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        original = {"name": "John", "tags": ["a", "b"]}
+        resource_id = await repo.create(original)
+        
+        original["name"] = "Jane"
+        original["tags"].append("c")
+        
+        stored = await repo.get(resource_id)
+        assert stored is not None
+        assert stored["name"] == "John"
+        assert stored["tags"] == ["a", "b"]
+
 
 class TestMemoryCache:
     """Test in-memory cache implementation."""
@@ -109,6 +154,36 @@ class TestMemoryCache:
         
         assert await cache.has("key:1") is True
         assert await cache.has("nonexistent") is False
+
+    @pytest.mark.asyncio
+    async def test_get_returns_independent_copy_for_list(self) -> None:
+        """Test that get() returns an independent copy for list values."""
+        cache = MemoryCache()
+        original = [1, 2, {"nested": "value"}]
+        await cache.set("list:1", original)
+        
+        fetched = await cache.get("list:1")
+        assert fetched is not None
+        fetched.append(3)
+        fetched[2]["nested"] = "mutated"
+        
+        cached_again = await cache.get("list:1")
+        assert cached_again == [1, 2, {"nested": "value"}]
+
+    @pytest.mark.asyncio
+    async def test_set_does_not_retain_caller_reference(self) -> None:
+        """Test that set() does not retain the caller's reference."""
+        cache = MemoryCache()
+        original = {"name": "John", "tags": ["a", "b"]}
+        await cache.set("key:1", original)
+        
+        original["name"] = "Jane"
+        original["tags"].append("c")
+        
+        cached = await cache.get("key:1")
+        assert cached is not None
+        assert cached["name"] == "John"
+        assert cached["tags"] == ["a", "b"]
 
 
 class TestFibonacciDP:

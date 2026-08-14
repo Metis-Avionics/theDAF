@@ -30,23 +30,27 @@ class MemoryRepository[T]:
             key: The key to retrieve.
 
         Returns:
-            The value if found, None otherwise.
+            An independent copy of the value if found, None otherwise.
+            Callers must not mutate the returned value in-place.
         """
         logger.debug("repository get", extra={"key": key})
         value = self._store.get(key)
-        if isinstance(value, dict):
+        if value is not None:
             return copy.deepcopy(value)
-        return value
+        return None
 
     async def save(self, key: str, value: T) -> None:
         """Save an item with the given key.
+
+        The implementation stores an independent copy; the caller's
+        reference is not retained.
 
         Args:
             key: The key to save under.
             value: The value to save.
         """
         logger.debug("repository save", extra={"key": key})
-        self._store[key] = value
+        self._store[key] = copy.deepcopy(value)
 
     async def delete(self, key: str) -> None:
         """Delete an item by key.
@@ -61,6 +65,9 @@ class MemoryRepository[T]:
     async def create(self, value: T) -> str:
         """Create a new item and return its generated resource ID.
 
+        The implementation stores an independent copy; the caller's
+        reference is not retained.
+
         Args:
             value: The value to store.
 
@@ -69,7 +76,7 @@ class MemoryRepository[T]:
         """
         logger.debug("repository create")
         resource_id = str(uuid.uuid4())
-        self._store[resource_id] = value
+        self._store[resource_id] = copy.deepcopy(value)
         return resource_id
 
     async def try_update(
