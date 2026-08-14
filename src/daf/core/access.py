@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import warnings
 from typing import Any
 
 from daf.contracts.query import (
@@ -13,7 +14,7 @@ from daf.contracts.query import (
     QueryInfo,
     QueryResult,
 )
-from daf.core.errors import AuthorizationError, NotFoundError, ValidationError
+from daf.core.errors import NotFoundError, ValidationError
 from daf.core.protocols import Algorithm, Authorizer, Cache, Repository
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,6 @@ class DataAccess:
         self._cache = cache
         self._algorithms = algorithms or {}
         self._authorizer = authorizer
-        self._cache_key_map: dict[str, set[str]] = {}
 
     async def _check_authorization(
         self,
@@ -62,7 +62,17 @@ class DataAccess:
         """Canonicalize user identity for cache keying."""
         if user is None:
             return "anonymous"
-        return getattr(user, "id", str(user))
+        user_id = getattr(user, "id", None)
+        if user_id is None:
+            warnings.warn(
+                "user object has no .id attribute; falling back to str(user). "
+                "This is deprecated and will be removed in a future version. "
+                "Pass a user object with a stable .id attribute.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return str(user)
+        return str(user_id)
 
     def get_components(
         self,
@@ -86,17 +96,7 @@ class DataAccess:
                 "Filters contain non-JSON-serializable values"
             ) from None
         digest = hashlib.sha256(canonical.encode()).hexdigest()
-        return f"query:{digest}"
-
-    async def _invalidate_cache_for_resource(self, resource_id: str) -> None:
-        """Invalidate all cached query results for a resource."""
-        keys = self._cache_key_map.pop(resource_id, set())
-        for key in keys:
-            await self._cache.delete(key)
-        logger.debug(
-            "cache invalidated",
-            extra={"resource_id": resource_id, "keys": len(keys)},
-        )
+        return f"query:{info.resource_id}:{digest}"
 
     def _apply_filters(self, data: Any, filters: dict[str, Any] | None) -> Any:
         """Apply in-memory filters to retrieved data."""
@@ -109,60 +109,6 @@ class DataAccess:
                 return {}
         return data
 
-    def _query_auth_error(self, info: QueryInfo, user: Any) -> QueryResult:
-        """Build unauthorized query result."""
-        logger.warning(
-            "query unauthorized",
-            extra={
-                "resource_id": info.resource_id,
-                "user": self._user_id(user),
-            },
-        )
-        return QueryResult(
-            success=False,
-            data=None,
-            error="Unauthorized",
-            error_type="authorization",
-            cache_hit=False,
-            algorithm_stats=None,
-        )
-
-    def _query_not_found_error(self, info: QueryInfo, user: Any) -> QueryResult:
-        """Build not-found query result."""
-        logger.info(
-            "query not found",
-            extra={
-                "resource_id": info.resource_id,
-                "user": self._user_id(user),
-            },
-        )
-        return QueryResult(
-            success=False,
-            data=None,
-            error="Not found",
-            error_type="not_found",
-            cache_hit=False,
-            algorithm_stats=None,
-        )
-
-    def _query_validation_error(self, info: QueryInfo, user: Any) -> QueryResult:
-        """Build validation error query result."""
-        logger.warning(
-            "query validation error",
-            extra={
-                "resource_id": info.resource_id,
-                "user": self._user_id(user),
-            },
-        )
-        return QueryResult(
-            success=False,
-            data=None,
-            error="Validation error",
-            error_type="validation",
-            cache_hit=False,
-            algorithm_stats=None,
-        )
-
     async def query(self, info: QueryInfo, user: Any = None) -> QueryResult:
         """Execute a query operation.
         
@@ -172,28 +118,24 @@ class DataAccess:
             
         Returns:
             QueryResult with data, cache_hit status, and optional algorithm stats.
+            
+        Raises:
+            AuthorizationError: If the user is not authorized.
+            NotFoundError: If the resource is not found.
+            ValidationError: If input validation fails.
         """
-        try:
-            if not info.resource_id or not isinstance(info.resource_id, str):
-                raise ValidationError("resource_id must be a non-empty string")
-            logger.debug(
-                "query start",
-                extra={
-                    "resource_id": info.resource_id,
-                    "filters": info.filters,
-                    "algorithm": info.algorithm,
-                    "user": self._user_id(user),
-                },
-            )
-            if self._authorizer is not None:
-                await self._check_authorization("query", info.resource_id, user)
-            return await self._execute_query(info, user)
-        except AuthorizationError:
-            return self._query_auth_error(info, user)
-        except NotFoundError:
-            return self._query_not_found_error(info, user)
-        except ValidationError:
-            return self._query_validation_error(info, user)
+        if not info.resource_id or not isinstance(info.resource_id, str):
+            raise ValidationError("resource_id must be a non-empty string")
+        logger.debug(
+            "query start",
+            extra={
+                "resource_id": info.resource_id,
+                "filters": info.filters,
+                "algorithm": info.algorithm,
+                "user": self._user_id(user),
+            },
+        )
+        return await self._execute_query(info, user)
 
     async def _execute_query(self, info: QueryInfo, user: Any) -> QueryResult:
         """Execute the core query logic."""
@@ -206,7 +148,6 @@ class DataAccess:
             },
         )
         cache_key = self._cache_key(info, user)
-        self._cache_key_map.setdefault(info.resource_id, set()).add(cache_key)
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
@@ -230,6 +171,9 @@ class DataAccess:
             raise NotFoundError(
                 f"Resource '{info.resource_id}' not found"
             )
+
+        if self._authorizer is not None:
+            await self._check_authorization("query", info.resource_id, user, data=data)
 
         data = self._apply_filters(data, info.filters)
 
@@ -256,34 +200,6 @@ class DataAccess:
             algorithm_stats=algorithm_stats,
         )
 
-    def _post_validation_error(self, info: PostInfo) -> MutationResult:
-        """Build validation error post result."""
-        logger.warning(
-            "post validation error",
-            extra={"resource_type": info.resource_type},
-        )
-        return MutationResult(
-            success=False,
-            resource_id=None,
-            data=None,
-            error="Validation error",
-            error_type="validation",
-        )
-
-    def _post_auth_error(self, user: Any) -> MutationResult:
-        """Build unauthorized post result."""
-        logger.warning(
-            "post unauthorized",
-            extra={"user": self._user_id(user)},
-        )
-        return MutationResult(
-            success=False,
-            resource_id=None,
-            data=None,
-            error="Unauthorized",
-            error_type="authorization",
-        )
-
     async def post(self, info: PostInfo, user: Any = None) -> MutationResult:
         """Execute a create/post operation.
         
@@ -293,18 +209,17 @@ class DataAccess:
             
         Returns:
             MutationResult with created resource details.
+            
+        Raises:
+            AuthorizationError: If the user is not authorized.
+            ValidationError: If input validation fails.
         """
-        try:
-            if not info.resource_type or not isinstance(info.resource_type, str):
-                raise ValidationError("resource_type must be a non-empty string")
-            if not isinstance(info.data, dict):
-                raise ValidationError("Post data must be a dict")
-            if self._authorizer is not None:
-                await self._check_authorization("post", None, user, data=info.data)
-        except ValidationError:
-            return self._post_validation_error(info)
-        except AuthorizationError:
-            return self._post_auth_error(user)
+        if not info.resource_type or not isinstance(info.resource_type, str):
+            raise ValidationError("resource_type must be a non-empty string")
+        if not isinstance(info.data, dict):
+            raise ValidationError("Post data must be a dict")
+        if self._authorizer is not None:
+            await self._check_authorization("post", None, user, data=info.data)
 
         logger.debug(
             "post create",
@@ -312,7 +227,7 @@ class DataAccess:
         )
         resource_id = await self._repository.create(info.data)
 
-        await self._invalidate_cache_for_resource(resource_id)
+        await self._cache.delete_prefix(f"query:{resource_id}:")
         logger.debug(
             "post cache invalidated",
             extra={"resource_id": resource_id},
@@ -324,57 +239,6 @@ class DataAccess:
             data={"id": resource_id, "resource_type": info.resource_type, **info.data},
             error=None,
             error_type=None,
-        )
-
-    def _mutation_validation_error(
-        self, resource_id: str | None, operation: str
-    ) -> MutationResult:
-        """Build validation error mutation result."""
-        logger.warning(
-            f"{operation} validation error",
-            extra={"resource_id": resource_id},
-        )
-        return MutationResult(
-            success=False,
-            resource_id=resource_id,
-            data=None,
-            error="Validation error",
-            error_type="validation",
-        )
-
-    def _mutation_not_found_error(
-        self, resource_id: str | None, operation: str
-    ) -> MutationResult:
-        """Build not-found mutation result."""
-        logger.info(
-            f"{operation} not found",
-            extra={"resource_id": resource_id},
-        )
-        return MutationResult(
-            success=False,
-            resource_id=resource_id,
-            data=None,
-            error="Not found",
-            error_type="not_found",
-        )
-
-    def _mutation_auth_error(
-        self, resource_id: str | None, user: Any, operation: str
-    ) -> MutationResult:
-        """Build unauthorized mutation result."""
-        logger.warning(
-            f"{operation} unauthorized",
-            extra={
-                "resource_id": resource_id,
-                "user": self._user_id(user),
-            },
-        )
-        return MutationResult(
-            success=False,
-            resource_id=resource_id,
-            data=None,
-            error="Unauthorized",
-            error_type="authorization",
         )
 
     async def _execute_put(self, info: PutInfo, user: Any) -> MutationResult:
@@ -408,7 +272,7 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        await self._invalidate_cache_for_resource(info.resource_id)
+        await self._cache.delete_prefix(f"query:{info.resource_id}:")
         logger.debug(
             "put cache invalidated",
             extra={"resource_id": info.resource_id},
@@ -431,21 +295,17 @@ class DataAccess:
             
         Returns:
             MutationResult with updated resource details.
+            
+        Raises:
+            AuthorizationError: If the user is not authorized.
+            NotFoundError: If the resource is not found.
+            ValidationError: If input validation fails.
         """
-        try:
-            if not info.resource_id or not isinstance(info.resource_id, str):
-                raise ValidationError("resource_id must be a non-empty string")
-            if not isinstance(info.data, dict):
-                raise ValidationError("Update data must be a dict")
-        except ValidationError:
-            return self._mutation_validation_error(info.resource_id, "put")
-
-        try:
-            return await self._execute_put(info, user)
-        except NotFoundError:
-            return self._mutation_not_found_error(info.resource_id, "put")
-        except AuthorizationError:
-            return self._mutation_auth_error(info.resource_id, user, "put")
+        if not info.resource_id or not isinstance(info.resource_id, str):
+            raise ValidationError("resource_id must be a non-empty string")
+        if not isinstance(info.data, dict):
+            raise ValidationError("Update data must be a dict")
+        return await self._execute_put(info, user)
 
     async def _execute_delete(self, info: DeleteInfo, user: Any) -> MutationResult:
         """Execute the core delete mutation logic."""
@@ -476,7 +336,7 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        await self._invalidate_cache_for_resource(info.resource_id)
+        await self._cache.delete_prefix(f"query:{info.resource_id}:")
         logger.debug(
             "delete cache invalidated",
             extra={"resource_id": info.resource_id},
@@ -499,16 +359,12 @@ class DataAccess:
             
         Returns:
             MutationResult indicating success or failure.
+            
+        Raises:
+            AuthorizationError: If the user is not authorized.
+            NotFoundError: If the resource is not found.
+            ValidationError: If input validation fails.
         """
-        try:
-            if not info.resource_id or not isinstance(info.resource_id, str):
-                raise ValidationError("resource_id must be a non-empty string")
-        except ValidationError:
-            return self._mutation_validation_error(info.resource_id, "delete")
-
-        try:
-            return await self._execute_delete(info, user)
-        except NotFoundError:
-            return self._mutation_not_found_error(info.resource_id, "delete")
-        except AuthorizationError:
-            return self._mutation_auth_error(info.resource_id, user, "delete")
+        if not info.resource_id or not isinstance(info.resource_id, str):
+            raise ValidationError("resource_id must be a non-empty string")
+        return await self._execute_delete(info, user)

@@ -26,7 +26,7 @@ from daf.contracts.query import (
     QueryResult,
 )
 from daf.core.access import DataAccess
-from daf.core.errors import AuthorizationError, DataAccessError
+from daf.core.errors import AuthorizationError, DataAccessError, NotFoundError
 from daf.core.protocols import Authorizer, Repository
 
 logger = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ class DataAccessRouter:
         self._setup_put_route()
         self._setup_delete_route()
 
-    def _setup_query_route(self) -> None:
+    def _setup_query_route(self) -> None:  # noqa: C901
         if self._router is None:
             raise RuntimeError("Router not initialized")
         @self._router.get("/{resource_id}", response_model=QueryResult)
@@ -174,6 +174,14 @@ class DataAccessRouter:
                     extra={"resource_id": resource_id},
                 )
                 return await self._daf.query(info, user=current_user)
+            except AuthorizationError:
+                raise HTTPException(
+                    status_code=403, detail="Forbidden"
+                ) from None
+            except NotFoundError:
+                raise HTTPException(
+                    status_code=404, detail="Not found"
+                ) from None
             except DataAccessError:
                 logger.error(
                     "query endpoint error",
@@ -194,6 +202,14 @@ class DataAccessRouter:
             try:
                 logger.debug("post endpoint")
                 return await self._daf.post(info, user=current_user)
+            except AuthorizationError:
+                raise HTTPException(
+                    status_code=403, detail="Forbidden"
+                ) from None
+            except NotFoundError:
+                raise HTTPException(
+                    status_code=404, detail="Not found"
+                ) from None
             except DataAccessError:
                 logger.error("post endpoint error")
                 raise HTTPException(
@@ -215,6 +231,14 @@ class DataAccessRouter:
                     extra={"resource_id": resource_id},
                 )
                 return await self._daf.put(info, user=current_user)
+            except AuthorizationError:
+                raise HTTPException(
+                    status_code=403, detail="Forbidden"
+                ) from None
+            except NotFoundError:
+                raise HTTPException(
+                    status_code=404, detail="Not found"
+                ) from None
             except DataAccessError:
                 logger.error(
                     "put endpoint error",
@@ -239,6 +263,14 @@ class DataAccessRouter:
                     extra={"resource_id": resource_id},
                 )
                 return await self._daf.delete(info, user=current_user)
+            except AuthorizationError:
+                raise HTTPException(
+                    status_code=403, detail="Forbidden"
+                ) from None
+            except NotFoundError:
+                raise HTTPException(
+                    status_code=404, detail="Not found"
+                ) from None
             except DataAccessError:
                 logger.error(
                     "delete endpoint error",

@@ -7,7 +7,7 @@ import pytest
 from daf.cache import MemoryCache
 from daf.contracts import DeleteInfo, PostInfo, PutInfo, QueryInfo
 from daf.core import DataAccessFactory
-from daf.core.errors import AuthorizationError
+from daf.core.errors import AuthorizationError, NotFoundError
 from daf.repositories import MemoryRepository
 
 SetupResult = tuple[MemoryRepository[dict[str, Any]], MemoryCache, Any]
@@ -84,11 +84,10 @@ class TestDataAccessAuthorization:
         repo, cache, daf = setup_daf_with_auth
         await repo.save("123", {"name": "John", "owner_id": "user-1"})
         
-        result = await daf.query(
-            QueryInfo(resource_id="123"), user=FakeUser("user-2")
-        )
-        assert result.success is False
-        assert result.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.query(
+                QueryInfo(resource_id="123"), user=FakeUser("user-2")
+            )
 
     @pytest.mark.asyncio
     async def test_unauthenticated_user_gets_403(
@@ -98,9 +97,8 @@ class TestDataAccessAuthorization:
         repo, cache, daf = setup_daf_with_auth
         await repo.save("123", {"name": "John", "owner_id": "user-1"})
         
-        result = await daf.query(QueryInfo(resource_id="123"), user=None)
-        assert result.success is False
-        assert result.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.query(QueryInfo(resource_id="123"), user=None)
 
     @pytest.mark.asyncio
     async def test_authorization_on_query_put_delete(
@@ -110,24 +108,21 @@ class TestDataAccessAuthorization:
         repo, cache, daf = setup_daf_with_auth
         await repo.save("123", {"name": "John", "owner_id": "user-1"})
         
-        query_result = await daf.query(
-            QueryInfo(resource_id="123"), user=FakeUser("user-2")
-        )
-        assert query_result.success is False
-        assert query_result.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.query(
+                QueryInfo(resource_id="123"), user=FakeUser("user-2")
+            )
         
-        put_result = await daf.put(
-            PutInfo(resource_id="123", data={"name": "Jane"}),
-            user=FakeUser("user-2"),
-        )
-        assert put_result.success is False
-        assert put_result.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.put(
+                PutInfo(resource_id="123", data={"name": "Jane"}),
+                user=FakeUser("user-2"),
+            )
         
-        delete_result = await daf.delete(
-            DeleteInfo(resource_id="123"), user=FakeUser("user-2")
-        )
-        assert delete_result.success is False
-        assert delete_result.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.delete(
+                DeleteInfo(resource_id="123"), user=FakeUser("user-2")
+            )
 
     @pytest.mark.asyncio
     async def test_post_skips_authorization(
@@ -149,26 +144,24 @@ class TestDataAccessAuthorization:
         """Test that NotFoundError takes precedence over AuthorizationError."""
         repo, cache, daf = setup_daf_with_auth
         
-        result = await daf.query(
-            QueryInfo(resource_id="nonexistent"),
-            user=FakeUser("user-1"),
-        )
-        assert result.success is False
-        assert result.error_type == "not_found"
+        with pytest.raises(NotFoundError):
+            await daf.query(
+                QueryInfo(resource_id="nonexistent"),
+                user=FakeUser("user-1"),
+            )
 
     @pytest.mark.asyncio
     async def test_nonexistent_resource_not_found_for_authenticated_user(
         self, setup_daf_with_auth: SetupResult
     ) -> None:
-        """Test non-existent resource returns not_found for any authed user."""
+        """Test non-existent resource raises NotFoundError for any authed user."""
         repo, cache, daf = setup_daf_with_auth
         
-        result = await daf.query(
-            QueryInfo(resource_id="nonexistent"),
-            user=FakeUser("user-1"),
-        )
-        assert result.success is False
-        assert result.error_type == "not_found"
+        with pytest.raises(NotFoundError):
+            await daf.query(
+                QueryInfo(resource_id="nonexistent"),
+                user=FakeUser("user-1"),
+            )
 
     @pytest.mark.asyncio
     async def test_authorized_user_can_put_and_delete(
@@ -222,12 +215,11 @@ class TestPostAuthorization:
         )
         daf: Any = factory.create()
         
-        result = await daf.post(
-            PostInfo(resource_type="user", data={"name": "Admin", "admin": True}),
-            user=FakeUser("user-1"),
-        )
-        assert result.success is False
-        assert result.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.post(
+                PostInfo(resource_type="user", data={"name": "Admin", "admin": True}),
+                user=FakeUser("user-1"),
+            )
 
     @pytest.mark.asyncio
     async def test_post_authorizer_receives_data(self) -> None:

@@ -1,5 +1,6 @@
 """Base repository implementations."""
 
+import copy
 import logging
 import threading
 import uuid
@@ -32,7 +33,10 @@ class MemoryRepository[T]:
             The value if found, None otherwise.
         """
         logger.debug("repository get", extra={"key": key})
-        return self._store.get(key)
+        value = self._store.get(key)
+        if isinstance(value, dict):
+            return copy.deepcopy(value)
+        return value
 
     async def save(self, key: str, value: T) -> None:
         """Save an item with the given key.
@@ -88,7 +92,11 @@ class MemoryRepository[T]:
         """
         with self._lock:
             current = self._store.get(key)
-            if current is not expected:
+            if current is not expected and not (
+                isinstance(current, dict)
+                and isinstance(expected, dict)
+                and current == expected
+            ):
                 return None
             new_value = update(current)
             self._store[key] = new_value
@@ -110,7 +118,11 @@ class MemoryRepository[T]:
         """
         with self._lock:
             current = self._store.get(key)
-            if current is not expected:
+            if current is not expected and not (
+                isinstance(current, dict)
+                and isinstance(expected, dict)
+                and current == expected
+            ):
                 return False
             del self._store[key]
             return True
