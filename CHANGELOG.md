@@ -28,6 +28,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/integration/test_authorization.py` for IDOR prevention scenarios
 - `TestAuthorization` class in `tests/integration/test_fastapi_adapter.py`
 - `TestAuthorizerProtocol` class in `tests/unit/test_components.py`
+- `pydantic.mypy` plugin configuration for mypy strict compliance
+- `py.typed` marker for PEP 561 typed package distribution
+- `tests/integration/test_security_invariants.py` for security and cache interaction tests
+- Structured logging (`logging.getLogger(__name__)`) to `DataAccess`, `DataAccessRouter`, `MemoryRepository`, and `MemoryCache`
+- `DataAccess.get_components()` public method to decouple adapter from private state
+- Cache-aware canonical key generation including `filters`, `algorithm`, and `user_id`
+- In-memory filter application in `_apply_filters`
+- Per-resource cache invalidation in `post()`, `put()`, and `delete()`
+- Input validation guards for `resource_id`, `data`, and `resource_type`
+- `resource_type` preservation in `MutationResult.data` for POST operations
+- GET query parameter support for `filters` (JSON) and `algorithm` in FastAPI adapter
+
+### Changed
+
+- `DataAccessRouter` now requires `get_current_user` at construction time; raises `ValueError` if missing
+- `DataAccess.query()` now validates `resource_id` before executing
+- `_apply_filters` returns `{}` when filters are present but data is not a dict
+- `_cache_key` raises `ValidationError` for non-JSON-serializable filters instead of crashing
+- FastAPI adapter authorizer skips existence check to prevent resource enumeration side-channel attacks
+- FastAPI PUT endpoint constructs new `PutInfo` instance instead of mutating validated model in-place
+- `MutationResult.data` now includes `resource_type` for POST operations
+
+### Fixed
+
+- Resource enumeration via authorizer existence check (R1)
+- GET endpoint hardcoded `filters=None, algorithm=None` (R2)
+- `_apply_filters` returning non-dict data when filters present (R3)
+- `_cache_key` crash on non-JSON-serializable filters (R4)
+- Missing input validation on query/post/put/delete (R5)
+- `post()` dropping `resource_type` from result (R6)
+- `DataAccessRouter` reaching into `DataAccess` private state (R7)
+- PUT endpoint mutating validated Pydantic model (R8)
+- No structured logging in core components (R9)
+
+### Security
+
+- Removed timing side channel in authorizer that allowed distinguishing missing vs forbidden resources
+- Added input validation to prevent malformed requests from reaching repository layer
+- Added structured logging for audit trail and debugging
 
 ## [0.1.0] - 2026-08-13
 
