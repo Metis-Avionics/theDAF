@@ -177,39 +177,42 @@ Each session entry should include:
 
 ### Turn 1 Summary
 
-**Initial State**: Branch `fix/remaining-bugs-security` with R1-R9 fixes committed and pushed. PR #16 created for R1-R6 red-team composition fixes.
+**Initial State**: PR #16 merged. Branch `fix/r7-r12-red-team-composition-fixes` created from main for R7-R12 red-team composition fixes.
 
 **Actions Taken**:
-- Read red-team plan `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`
-- Implemented R1-R6 fixes in core, adapter, repositories, cache, protocols, and tests
+- Read red-team plan `.kilo/plans/1786725060659-red-team-composition-fixes-r7-r12.md`
+- Implemented R7-R12 fixes in core, adapter, repositories, cache, protocols, and tests
+- Refactored `_execute_query` into `_handle_cache_hit`, `_execute_cache_miss`, and `_run_algorithm` to satisfy Power of Ten Rule 4
 - Updated living docs: README.md, CHANGELOG.md, HANDOVER.md, SESSION.md
-- Pushed changes to remote branch
+- Ran power_of_ten.py — all checks pass
+- Created branch `fix/r7-r12-red-team-composition-fixes`, committed, and pushed to GitHub
+- Created PR #17
 
 ### Files Modified/Created
 
 | File | Action | Description |
 |------|--------|-------------|
-| src/daf/core/access.py | Modified | R1: removed envelope helpers, propagate exceptions; R2: single-read query auth; R3: prefix cache keys, delete_prefix; R5: deprecation warning in _user_id |
-| src/daf/adapters/fastapi.py | Modified | R1: map AuthorizationError→403, NotFoundError→404 in all routes |
-| src/daf/repositories/memory.py | Modified | R4: deep copy for dict values in get(); CAS equality for dicts |
-| src/daf/cache/memory.py | Modified | R4: deep copy for dict values in get() |
-| src/daf/core/protocols.py | Modified | R4/R5: docstrings for value isolation and user.id contract |
-| tests/integration/test_fastapi_adapter.py | Modified | Updated HTTP status assertions (403/404), error-type tests |
-| tests/integration/test_authorization.py | Modified | Updated to pytest.raises for auth/not-found errors |
-| tests/integration/test_data_access.py | Modified | Updated to pytest.raises for not-found errors |
-| tests/integration/test_security_invariants.py | Modified | Updated cache key helper, error tests, added mutable-value isolation tests, single-read query test |
-| README.md | Modified | Updated Query Execution Flow, Error Handling sections for exception-based errors |
-| CHANGELOG.md | Modified | Added R1-R6 fixes and new features |
-| HANDOVER.md | Modified | Updated project state, test count, PR link |
+| src/daf/repositories/memory.py | Modified | R7: deepcopy all non-None values in get(); save() and create() deepcopy stored value |
+| src/daf/cache/memory.py | Modified | R7: deepcopy all non-None values in get(); set() deepcopy stored value |
+| src/daf/core/access.py | Modified | R8: document auth-after-read model; R9: cache entry stores raw+transformed; R10: remove no-op delete_prefix from post(); refactored _execute_query |
+| src/daf/core/protocols.py | Modified | R7: update Repository/Cache docstrings for ownership contract |
+| src/daf/adapters/fastapi.py | Modified | R11: extract _handle_daf_error helper; remove # noqa: C901 |
+| tests/unit/test_components.py | Modified | R7: add 5 list/copy isolation tests for repo and cache |
+| tests/integration/test_security_invariants.py | Modified | R7: add list sub-tests; R9: add 2 cache-hit authorization raw-data tests |
+| README.md | Modified | R8: add Authorization Boundary section |
+| CHANGELOG.md | Modified | Add R7-R12 fixes and new features |
+| HANDOVER.md | Modified | Update project state, test count, PR link |
+| SESSION.md | Modified | Add this session entry |
 
 ### Project Status
 
-- **Branch**: `fix/remaining-bugs-security`
-- **Version**: 0.1.0 → 0.2.0 (pending release)
-- **Tests**: 105/105 passing
+- **Branch**: `fix/r7-r12-red-team-composition-fixes`
+- **Version**: 0.2.0 (pending release)
+- **Tests**: 112/112 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
-- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/16
+- **Power of Ten**: All checks pass
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17
 
 ### Pending Work
 
@@ -223,6 +226,9 @@ Each session entry should include:
 
 ### Notes
 
-- All 6 issues from the red-team composition plan (R1-R6) are implemented and validated
-- 105 tests pass (up from 87 in previous session)
-- Living docs updated to reflect exception-based error handling and new security invariants
+- All 12 issues from the red-team composition plan (R1-R12) are implemented and validated
+- 112 tests pass (up from 105 in previous session)
+- Living docs updated to reflect R7-R12 fixes
+- Power of Ten checks pass after refactoring _execute_query
+
+---

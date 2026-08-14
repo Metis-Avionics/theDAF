@@ -11,7 +11,7 @@ The project is in **feature-complete** state with all planned bugs and security 
 - **Branch**: `fix/remaining-bugs-security` (pushed to origin)
 - **Commits**: 4 (initial + 3 feature commits)
 - **Uncommitted Work**: R7-R12 fixes staged and ready to commit
-- **PR Status**: #16 open for review (R1-R12 red-team composition fixes)
+- **PR Status**: #17 open for review (R7-R12 red-team composition fixes)
 
 ### Quality Status
 
@@ -115,4 +115,4 @@ The following gate files are maintained and updated after every turn:
 
 - **Repository**: https://github.com/RAliane-REBORN/theDAF
 - **Issues**: https://github.com/RAliane-REBORN/theDAF/issues
-- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/16
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17
