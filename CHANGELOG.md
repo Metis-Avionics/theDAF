@@ -80,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README Authorization Boundary documents existence-disclosure and masking layer option
 - README Architecture section documents write-through-DAF consistency boundary
 - Cache entries extend to `{"raw": ..., "transformed": ..., "generation": N}` for temporal invalidation
+- Per-resource generation counters scoped in shared cache via reserved `_daf_gen:{namespace}` keys
+- Cache key format uses `query:{sha256(resource_id)}:{digest}` to prevent delimiter-collision attacks
+- Invalidation prefixes use hashed namespace so `a:b` and `a:b:c` are structurally isolated
+- `_execute_cache_miss` deepcopies repository data before algorithm execution to prevent auth-snapshot poisoning
+- `post()` advances per-resource generation for newly created resources
 
 ### Fixed
 
@@ -118,6 +123,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stale cache resurrection after mutation via concurrent query repopulation race (R24)
 - Deepcopy-able value constraint undocumented for Repository/Cache/Memory implementations (R25)
 - Algorithm immutability contract undocumented; in-place mutation can corrupt raw auth data (R26)
+- Generation counter local to DataAccess instance; stale cache resurrection across instances sharing cache (R19b)
+- Cache invalidation prefix collides when resource_id contains `:` delimiter (R3b)
+- Algorithm input and raw_data share reference; in-place mutation poisons authorization snapshot (R21b)
+- Global generation counter advances on any mutation, invalidating unrelated resource caches (R19c)
 
 ### Security
 
@@ -137,7 +146,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Existence-disclosure behavior documented as intentional security model property
 - Write-through-DAF consistency boundary documented; direct repository writes bypass invalidation
 - Generation counter prevents stale cache resurrection after mutations
+- Per-resource generation scoped in shared cache prevents cross-instance stale resurrection
 - Algorithm immutability contract documented; algorithms must not mutate their input snapshot
+- Cache key namespace hashing prevents delimiter-collision attacks on invalidation prefixes
+- Deep copy of repository data before algorithm execution prevents auth-snapshot poisoning
 
 ## [Unreleased]
 

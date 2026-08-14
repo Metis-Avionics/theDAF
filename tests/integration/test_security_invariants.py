@@ -70,7 +70,8 @@ def _expected_cache_key(
         "user_id": user_id,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return f"query:{resource_id}:{hashlib.sha256(canonical.encode()).hexdigest()}"
+    namespace = hashlib.sha256(resource_id.encode()).hexdigest()
+    return f"query:{namespace}:{hashlib.sha256(canonical.encode()).hexdigest()}"
 
 
 class TestAuthorizationCacheIsolation:
@@ -247,28 +248,29 @@ class TestCacheKeyCanonicalization:
         assert user2_no_filter in keys
 
     @pytest.mark.asyncio
-    async def test_cache_key_no_delimiter_collision(self) -> None:
-        """Test that resource_id containing ':' produces distinct keys."""
+    async def test_invalidation_prefix_is_namespace_isolated(self) -> None:
+        """Test that invalidating resource 'a:b' does not invalidate cache
+        entries for resource 'a:b:c'."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
-        
-        await repo.save("a:b", {"name": "John"})
-        await repo.save("a:b:c", {"name": "Jane"})
-        
+        user = FakeUser("user-1")
         daf = DataAccessFactory(repository=repo, cache=cache).create()
         
-        await daf.query(QueryInfo(resource_id="a:b"), user=FakeUser("user-1"))
-        await daf.query(QueryInfo(resource_id="a:b:c"), user=FakeUser("user-1"))
+        await repo.save("a:b", {"name": "Resource A"})
+        await repo.save("a:b:c", {"name": "Resource B"})
         
-        keys = list(cache._cache.keys())
-        assert len(keys) == 2
+        await daf.query(QueryInfo(resource_id="a:b"), user=user)
+        await daf.query(QueryInfo(resource_id="a:b:c"), user=user)
         
-        key_ab = _expected_cache_key("a:b", {}, None, "user-1")
-        key_abc = _expected_cache_key("a:b:c", {}, None, "user-1")
+        await daf.put(
+            PutInfo(resource_id="a:b", data={"name": "Resource A updated"}),
+            user=user,
+        )
         
-        assert key_ab in keys
-        assert key_abc in keys
-        assert key_ab != key_abc
+        result_b_after = await daf.query(QueryInfo(resource_id="a:b:c"), user=user)
+        assert result_b_after.success is True
+        assert result_b_after.cache_hit is True
+        assert result_b_after.data == {"name": "Resource B"}
 
 
 class TestErrorTypePreservation:
@@ -997,3 +999,148 @@ class TestStaleCacheResurrection:
             "status": "active",
             "owner_id": "user-1",
         }
+
+
+class TestStaleCacheResurrectionAcrossInstances:
+    """Test that stale cache entries are not served across DataAccess instances."""
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_not_resurrected_across_data_access_instances(
+        self,
+    ) -> None:
+        """Test that instance A's stale cache miss is rejected after instance B
+        mutates the resource and advances the generation counter."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+
+        instance_a = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        instance_b = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        user = FakeUser("user-1")
+
+        result1 = await instance_a.query(QueryInfo(resource_id="123"), user=user)
+        assert result1.success is True
+        assert result1.cache_hit is False
+
+        await instance_b.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=user,
+        )
+
+        result2 = await instance_a.query(QueryInfo(resource_id="123"), user=user)
+        assert result2.success is True
+        assert result2.cache_hit is False
+        assert result2.data == {
+            "name": "Jane",
+            "owner_id": "user-1",
+        }
+
+
+class TestResourceScopedGenerationIsolation:
+    """Test that generation counters are scoped per resource."""
+
+    @pytest.mark.asyncio
+    async def test_resource_scoped_generation_does_not_invalidate_unrelated(
+        self,
+    ) -> None:
+        """Test that mutating resource '456' does not invalidate cache entries
+        for resource '123'."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "Resource 123"})
+        await repo.save("456", {"name": "Resource 456"})
+
+        await daf.query(QueryInfo(resource_id="123"))
+        assert (await daf.query(QueryInfo(resource_id="123"))).cache_hit is True
+
+        await daf.put(
+            PutInfo(resource_id="456", data={"name": "Resource 456 updated"})
+        )
+
+        result = await daf.query(QueryInfo(resource_id="123"))
+        assert result.success is True
+        assert result.cache_hit is True
+        assert result.data == {"name": "Resource 123"}
+
+
+class TestAlgorithmMutationDoesNotPoisonRawData:
+    """Test that algorithm in-place mutation does not poison cached raw data."""
+
+    @pytest.mark.asyncio
+    async def test_algorithm_mutation_does_not_poison_raw_data(self) -> None:
+        """Test that the 'raw' field stored in the cache is an independent deep
+        copy and is not modified by an algorithm's in-place mutation."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+
+        original_data = {"name": "John", "status": "active", "owner_id": "user-1"}
+
+        class MutatingAlgorithm:
+            async def execute(self, data: Any) -> Any:
+                if isinstance(data, dict):
+                    data["name"] = "Mutated"
+                return data
+
+            async def get_stats(self) -> dict[str, Any]:
+                return {}
+
+        daf = DataAccessFactory(
+            repository=repo,
+            cache=cache,
+            algorithms={"mutating": MutatingAlgorithm()},
+        ).create()
+
+        await repo.save("123", original_data)
+
+        result = await daf.query(
+            QueryInfo(resource_id="123", algorithm="mutating")
+        )
+        assert result.success is True
+        assert result.data == {
+            "name": "Mutated",
+            "status": "active",
+            "owner_id": "user-1",
+        }
+
+        cache_key = _expected_cache_key("123", {}, "mutating", "anonymous")
+        cached_entry = cache._cache.get(cache_key)
+        assert cached_entry is not None
+        assert cached_entry["raw"] == original_data
+        assert cached_entry["raw"]["name"] == "John"
+
+
+class TestCacheEntryStoresGeneration:
+    """Test that cache entries carry a generation field for invalidation."""
+
+    @pytest.mark.asyncio
+    async def test_cache_entry_contains_generation_field(self) -> None:
+        """Test that a cache entry stored on miss includes the current
+        resource-scoped generation counter."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "John"})
+
+        result = await daf.query(QueryInfo(resource_id="123"))
+        assert result.success is True
+        assert result.cache_hit is False
+
+        cache_key = _expected_cache_key("123", {}, None, "anonymous")
+        entry = cache._cache.get(cache_key)
+        assert entry is not None
+        assert "generation" in entry
+        assert entry["generation"] == 0
+
+        await daf.put(PutInfo(resource_id="123", data={"name": "Jane"}))
+
+        entry_after = cache._cache.get(cache_key)
+        assert entry_after is None

@@ -292,3 +292,58 @@ Each session entry should include:
 - Generation counter ensures temporal cache correctness across mutations
 
 ---
+
+## Session 005 - 2026-08-14
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `ab70618` on branch `fix/r7-r12-red-team-composition-fixes` (PR #17) passes 115 tests. Fresh red-team pass identified four interaction-level findings: R19b, R3b, R21b, R19c.
+
+**Actions Taken**:
+- Read plan `.kilo/plans/1786727806749-red-team-r19b-r3b-r21b.md`
+- Implemented R19b/R3b/R21b/R19c fixes: per-resource cache-backed generation, hashed namespace for cache keys/invalidation prefixes, defensive deepcopy before algorithm execution
+- Added 4 new tests: `test_invalidation_prefix_is_namespace_isolated`, `test_stale_cache_not_resurrected_across_data_access_instances`, `test_resource_scoped_generation_does_not_invalidate_unrelated`, `test_algorithm_mutation_does_not_poison_raw_data`, `test_cache_entry_contains_generation_field`
+- Updated `_expected_cache_key` helper and repurposed delimiter-collision test
+- Updated living docs: CHANGELOG.md, HANDOVER.md, SESSION.md
+- Ran full validation: 119 tests passing, mypy --strict clean, ruff clean, Power of Ten clean
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/core/access.py | Modified | R19b/R19c: `_resource_namespace`, `_current_generation`, `_advance_generation`; R3b: hashed cache keys and invalidation prefixes; R21b: `raw_data = copy.deepcopy(data)`; removed `self._generation` |
+| tests/integration/test_security_invariants.py | Modified | Updated `_expected_cache_key`; renamed collision test to namespace-isolation test; added 4 new tests |
+| CHANGELOG.md | Modified | Added R19b/R3b/R21b/R19c entries under Fixed and Security |
+| HANDOVER.md | Modified | Updated test count to 119, added new findings |
+| SESSION.md | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `fix/r7-r12-red-team-composition-fixes`
+- **Version**: 0.2.0 (pending release)
+- **Tests**: 119/119 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Power of Ten**: All checks pass
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes
+- [ ] Push branch to origin (updates PR #17)
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- All 4 interaction-level findings from the red-team plan are implemented and validated
+- 119 tests pass (up from 115)
+- Generation is now per-resource and lives in the shared cache, eliminating cross-instance stale resurrection
+- Cache keys and invalidation prefixes are hashed, eliminating delimiter-collision attacks
+- Algorithm mutations cannot poison the authorization snapshot
+
+---

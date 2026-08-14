@@ -5,6 +5,7 @@ DataAccess to trigger cache invalidation. Direct writes to the underlying
 repository bypass invalidation entirely and may leave stale cache entries.
 """
 
+import copy
 import hashlib
 import json
 import logging
@@ -63,7 +64,6 @@ class DataAccess:
         self._cache = cache
         self._algorithms = algorithms or {}
         self._authorizer = authorizer
-        self._generation: int = 0
 
     async def _check_authorization(
         self,
@@ -98,6 +98,26 @@ class DataAccess:
         """Get the components used by this DataAccess instance."""
         return self._repository, self._cache, self._algorithms
 
+    def _resource_namespace(self, resource_id: str) -> str:
+        """Return a fixed-width namespace for a resource_id.
+
+        Uses SHA-256 to produce a collision-resistant, structurally
+        unambiguous prefix regardless of resource_id contents.
+        """
+        return hashlib.sha256(resource_id.encode()).hexdigest()
+
+    async def _current_generation(self, resource_id: str) -> int:
+        """Read the current generation counter for a resource from the cache."""
+        namespace = self._resource_namespace(resource_id)
+        value = await self._cache.get(f"_daf_gen:{namespace}")
+        return value if isinstance(value, int) else 0
+
+    async def _advance_generation(self, resource_id: str) -> None:
+        """Increment the generation counter for a resource in the cache."""
+        namespace = self._resource_namespace(resource_id)
+        current = await self._current_generation(resource_id)
+        await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+
     def _cache_key(self, info: QueryInfo, user: Any) -> str:
         """Build cache key from full query semantics."""
         user_id = self._user_id(user)
@@ -114,7 +134,8 @@ class DataAccess:
                 "Filters contain non-JSON-serializable values"
             ) from None
         digest = hashlib.sha256(canonical.encode()).hexdigest()
-        return f"query:{info.resource_id}:{digest}"
+        namespace = self._resource_namespace(info.resource_id)
+        return f"query:{namespace}:{digest}"
 
     def _apply_filters(self, data: Any, filters: dict[str, Any] | None) -> Any:
         """Apply in-memory filters to retrieved data."""
@@ -175,10 +196,12 @@ class DataAccess:
         cache_key = self._cache_key(info, user)
 
         cached = await self._cache.get(cache_key)
-        if cached is not None and cached.get("generation") == self._generation:
-            return await self._handle_cache_hit(
-                cache_key, info.resource_id, user, cached
-            )
+        if cached is not None:
+            current_gen = await self._current_generation(info.resource_id)
+            if cached.get("generation") == current_gen:
+                return await self._handle_cache_hit(
+                    cache_key, info.resource_id, user, cached
+                )
         return await self._execute_cache_miss(cache_key, info, user)
 
     async def _handle_cache_hit(
@@ -206,12 +229,12 @@ class DataAccess:
         self, cache_key: str, info: QueryInfo, user: Any
     ) -> QueryResult:
         """Execute a full query on cache miss and populate the cache."""
-        current_generation = self._generation
+        current_generation = await self._current_generation(info.resource_id)
         data = await self._repository.get(info.resource_id)
         if data is None:
             logger.info("repository miss", extra={"resource_id": info.resource_id})
             raise NotFoundError(f"Resource '{info.resource_id}' not found")
-        raw_data = data
+        raw_data = copy.deepcopy(data)
         if self._authorizer is not None:
             await self._check_authorization(
                 "query", info.resource_id, user, data=data
@@ -273,7 +296,7 @@ class DataAccess:
         )
         resource_id = await self._repository.create(info.data)
 
-        self._generation += 1
+        await self._advance_generation(resource_id)
 
         return MutationResult(
             success=True,
@@ -314,8 +337,9 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        await self._cache.delete_prefix(f"query:{info.resource_id}:")
-        self._generation += 1
+        namespace = self._resource_namespace(info.resource_id)
+        await self._cache.delete_prefix(f"query:{namespace}:")
+        await self._advance_generation(info.resource_id)
         logger.debug(
             "put cache invalidated",
             extra={"resource_id": info.resource_id},
@@ -379,8 +403,9 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        await self._cache.delete_prefix(f"query:{info.resource_id}:")
-        self._generation += 1
+        namespace = self._resource_namespace(info.resource_id)
+        await self._cache.delete_prefix(f"query:{namespace}:")
+        await self._advance_generation(info.resource_id)
         logger.debug(
             "delete cache invalidated",
             extra={"resource_id": info.resource_id},

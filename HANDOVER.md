@@ -9,15 +9,15 @@ The project is in **feature-complete** state with all planned bugs and security 
 ### Repository Status
 
 - **Branch**: `fix/r7-r12-red-team-composition-fixes` (pushed to origin)
-- **Commits**: 2 ahead of main (R7-R12 fixes), plus uncommitted R13-R21 changes
-- **Uncommitted Work**: R13-R21 red-team composition fixes staged and ready to commit
-- **PR Status**: #17 open for review (R7-R21 red-team composition fixes)
+- **Commits**: 2 ahead of main (R7-R12 + R13-R21 fixes), plus uncommitted R19b/R3b/R21b/R19c changes
+- **Uncommitted Work**: R19b/R3b/R21b/R19c red-team refinements staged and ready to commit
+- **PR Status**: #17 open for review (R7-R21 + R19b/R3b/R21b/R19c red-team composition fixes)
 
 ### Quality Status
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 115/115 passing |
+| Tests (pytest) | ✅ 119/119 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
@@ -45,8 +45,12 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`,
 - **R17**: Deferred — `UserIdentity` protocol replacement is out of scope
 - **R18**: Deferred — default POST authorization policy is a product decision; permissive default retained
 - **R19**: `DataAccess` generation counter prevents stale cache resurrection; cache entries carry `generation`; stale entries rejected on cache hit
+- **R19b**: Generation moved to shared cache with per-resource scoping; prevents stale resurrection across DataAccess instances
+- **R19c**: Generation is per-resource, not global; mutating resource A does not invalidate resource B's cache
 - **R20**: `Repository`/`Cache` protocols and `MemoryRepository`/`MemoryCache` docstrings document deepcopy-able value constraint
 - **R21**: `Algorithm` protocol documents immutability contract; `_execute_cache_miss` comment documents snapshot semantics; test added
+- **R21b**: `_execute_cache_miss` deepcopies repository data before algorithm execution; prevents in-place algorithm mutation from poisoning auth snapshot
+- **R3b**: Cache key and invalidation prefix use `sha256(resource_id)` namespace; prevents delimiter-collision attacks when resource_id contains `:`
 
 ### Key Facts
 
@@ -57,7 +61,7 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`,
 - **Author**: Rayan Aliane
 - **Core Dependency**: `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 115/115 passing
+- **Test Count**: 119/119 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 
