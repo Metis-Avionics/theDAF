@@ -1,10 +1,21 @@
 """Cache implementations."""
 
+from __future__ import annotations
+
+import builtins
 import copy
 import logging
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
+
+
+class _TrieNode:
+    __slots__ = ("children", "keys")
+
+    def __init__(self) -> None:
+        self.children: dict[str, _TrieNode] = {}
+        self.keys: set[str] = set()
 
 
 class MemoryCache:
@@ -17,6 +28,7 @@ class MemoryCache:
     def __init__(self) -> None:
         """Initialize the in-memory cache."""
         self._cache: dict[str, Any] = {}
+        self._trie = _TrieNode()
 
     async def get(self, key: str) -> Any | None:
         """Retrieve a value from cache.
@@ -46,6 +58,7 @@ class MemoryCache:
         """
         logger.debug("cache set", extra={"key": key})
         self._cache[key] = copy.deepcopy(value)
+        self._trie_insert(key)
 
     async def delete(self, key: str) -> None:
         """Delete a value from cache.
@@ -55,6 +68,7 @@ class MemoryCache:
         """
         logger.debug("cache delete", extra={"key": key})
         if key in self._cache:
+            self._trie_delete(key)
             del self._cache[key]
 
     async def delete_prefix(self, prefix: str) -> None:
@@ -65,6 +79,7 @@ class MemoryCache:
         """
         logger.debug("cache delete_prefix", extra={"prefix": prefix})
         for key in self._delete_prefix_impl(prefix):
+            self._trie_delete(key)
             del self._cache[key]
 
     async def shake(self, prefix: str) -> int:
@@ -83,24 +98,49 @@ class MemoryCache:
         logger.debug("cache shake", extra={"prefix": prefix})
         keys_to_delete = self._delete_prefix_impl(prefix)
         for key in keys_to_delete:
+            self._trie_delete(key)
             del self._cache[key]
         return len(keys_to_delete)
 
-    def _delete_prefix_impl(self, prefix: str) -> list[str]:
+    def _delete_prefix_impl(self, prefix: str) -> builtins.set[str]:
         """Collect keys matching the given prefix for removal.
         
         Args:
             prefix: The key prefix to match.
             
         Returns:
-            List of keys to delete.
+            Set of keys to delete.
         """
-        return [key for key in self._cache if key.startswith(prefix)]
+        return self._trie_collect(prefix)
+
+    def _trie_insert(self, key: str) -> None:
+        node = self._trie
+        for ch in key:
+            node.children.setdefault(ch, _TrieNode())
+            node = node.children[ch]
+            node.keys.add(key)
+
+    def _trie_delete(self, key: str) -> None:
+        node: _TrieNode | None = self._trie
+        for ch in key:
+            node = node.children.get(ch) if node is not None else None
+            if node is None:
+                return
+            node.keys.discard(key)
+
+    def _trie_collect(self, prefix: str) -> builtins.set[str]:
+        node: _TrieNode | None = self._trie
+        for ch in prefix:
+            node = node.children.get(ch) if node is not None else None
+            if node is None:
+                return builtins.set()
+        return builtins.set(cast(_TrieNode, node).keys)
 
     async def clear(self) -> None:
         """Clear all values from cache."""
         logger.debug("cache clear")
         self._cache.clear()
+        self._trie = _TrieNode()
 
     async def has(self, key: str) -> bool:
         """Check if a key exists in cache.

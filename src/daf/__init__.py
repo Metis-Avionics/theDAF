@@ -1,17 +1,25 @@
 """FastAPI Data Access Factory (DAF) - A typed data-access abstraction layer."""
 
-from daf.core.access import DataAccess
+# daf is a curated public subset of daf.core. When adding a new
+# public name, update both this file and daf/core/__init__.py.
+
+from daf.core.access import DataAccess  # noqa: F401
 from daf.core.errors import (
-    AuthorizationError,
-    DataAccessError,
-    NotFoundError,
-    RepositoryError,
-    ValidationError,
+    AuthorizationError,  # noqa: F401
+    DataAccessError,  # noqa: F401
+    NotFoundError,  # noqa: F401
+    RepositoryError,  # noqa: F401
+    ValidationError,  # noqa: F401
 )
-from daf.core.factory import DataAccessFactory
+from daf.core.factory import DataAccessFactory  # noqa: F401
+
+
+def _public(*names: str) -> list[str]:
+    return list(names)
+
 
 __version__ = "0.1.0"
-__all__ = [
+__all__ = _public(
     "DataAccess",
     "DataAccessFactory",
     "DataAccessError",
@@ -19,4 +27,4 @@ __all__ = [
     "ValidationError",
     "RepositoryError",
     "AuthorizationError",
-]
+)

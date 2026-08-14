@@ -1,7 +1,12 @@
 """Algorithm implementations."""
 
-from daf.algorithms.dynamic_programming import FibonacciDP
+from daf.algorithms.dynamic_programming import FibonacciDP  # noqa: F401
 
-__all__ = [
+
+def _public(*names: str) -> list[str]:
+    return list(names)
+
+
+__all__ = _public(
     "FibonacciDP",
-]
+)

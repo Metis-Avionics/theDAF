@@ -85,6 +85,7 @@ class DataAccess:
         self._authorizer = authorizer
         self._generation_locks: dict[str, asyncio.Lock] = {}
         self._generation_locks_lock = asyncio.Lock()
+        self._namespace_cache: dict[str, str] = {}
 
     async def _check_authorization(
         self,
@@ -139,7 +140,11 @@ class DataAccess:
         Uses SHA-256 to produce a collision-resistant, structurally
         unambiguous prefix regardless of resource_id contents.
         """
-        return hashlib.sha256(resource_id.encode()).hexdigest()
+        if resource_id not in self._namespace_cache:
+            self._namespace_cache[resource_id] = hashlib.sha256(
+                resource_id.encode()
+            ).hexdigest()
+        return self._namespace_cache[resource_id]
 
     async def _current_generation(self, resource_id: str) -> int:
         """Read the current generation counter for a resource from the cache."""

@@ -465,4 +465,63 @@ Each session entry should include:
 
 ## Session 008 - 2026-08-14
 
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `eeb0852` on branch `main` (PR #17 merged) passes 121 tests. Uncommitted barrel-overlap and optimization work in working tree.
+
+**Actions Taken**:
+- Read plan `.kilo/plans/1786733196653-barrel-overlap-plan.md`
+- Implemented `_public` helper across all 7 barrel `__init__.py` files
+- Added `tests/unit/test_barrels.py` with subset and import-invariant assertions
+- Added namespace cache to `DataAccess._resource_namespace` for SHA-256 reuse
+- Added prefix trie (`_TrieNode`) to `MemoryCache` for O(prefix_len) prefix collection
+- Updated living docs: CHANGELOG.md, HANDOVER.md, SESSION.md
+- Ran full validation: 136 tests passing, mypy --strict clean, ruff clean, Power of Ten clean
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/__init__.py | Modified | Added `_public` helper, design-intent comment, `# noqa: F401` on imports |
+| src/daf/core/__init__.py | Modified | Added `_public` helper, `# noqa: F401` on imports |
+| src/daf/adapters/__init__.py | Modified | Added `_public` helper |
+| src/daf/algorithms/__init__.py | Modified | Added `_public` helper, `# noqa: F401` on import |
+| src/daf/cache/__init__.py | Modified | Added `_public` helper, `# noqa: F401` on import |
+| src/daf/contracts/__init__.py | Modified | Added `_public` helper, `# noqa: F401` on imports |
+| src/daf/repositories/__init__.py | Modified | Added `_public` helper, `# noqa: F401` on import |
+| src/daf/core/access.py | Modified | Added `_namespace_cache` dict; `_resource_namespace` caches SHA-256 results |
+| src/daf/cache/memory.py | Modified | Added `_TrieNode` prefix trie; `_trie_insert`/`_trie_delete`/`_trie_collect`; `_delete_prefix_impl` uses trie |
+| tests/unit/test_barrels.py | Created | Barrel-consistency tests: subset invariant + import invariant |
+| tests/unit/test_components.py | Modified | Added 5 trie tests + 2 namespace-cache tests |
+| CHANGELOG.md | Modified | Added barrel-overlap and optimization entries |
+| HANDOVER.md | Modified | Updated project state |
+| SESSION.md | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `main`
+- **Version**: 0.2.0
+- **Tests**: 136/136 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Power of Ten**: All checks pass
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch and open PR
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- All 7 barrel `__init__.py` files now use the `_public` helper for mechanical consistency
+- `tests/unit/test_barrels.py` guards the `daf` ⊂ `daf.core` subset invariant
+- Namespace cache makes repeated `_resource_namespace` calls O(1) after first hash
+- Prefix trie makes `delete_prefix`/`shake` O(prefix_len + matches) instead of O(N)
+- `_delete_prefix_impl` return type changed from `list[str]` to `set[str]`
+
 ---

@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `graphifyy>=0.9.42` runtime dependency for graph extraction and multigraph diagnostics
 - GitHub Actions `graphify` CI job running `graphify extract` and `graphify diagnose multigraph --json`
 - `graphify-out/` and `graph.json` in `.gitignore`
+- `_public(*names)` helper added to all 7 barrel `__init__.py` files for mechanical consistency
+- `tests/unit/test_barrels.py` with subset and import-invariant assertions
+- `DataAccess._namespace_cache` for cached SHA-256 namespace hashing
+- `MemoryCache._TrieNode` prefix trie for O(prefix_len) prefix collection
 
 ### Changed
 
@@ -99,6 +103,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mutation invalidation uses atomic `_superedge_invalidate` instead of two-step `delete_prefix + _advance_generation`
 - `_advance_generation` read-modify-write moved inside `_superedge_invalidate` under per-resource lock to prevent lost increments when generation key is absent
 - 6 new tests: `shake` unit tests (4) and `_superedge_invalidate` integration tests (2); 127 tests total
+- All 7 barrel `__init__.py` files use `_public` helper instead of raw `__all__ = [...]`
+- `daf/__init__.py` documents design intent: curated public subset of `daf.core`
+- `_resource_namespace` caches SHA-256 hashes for repeated calls
+- `MemoryCache` uses prefix trie for O(prefix_len) prefix collection
+- 9 new tests: 5 trie tests, 2 namespace-cache tests, 2 barrel-consistency tests; 136 tests total
 
 ### Fixed
 

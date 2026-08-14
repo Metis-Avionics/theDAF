@@ -230,6 +230,81 @@ class TestMemoryCache:
         assert removed == 0
         assert await cache.get("a:1") == "v1"
 
+    @pytest.mark.asyncio
+    async def test_trie_delete_prefix_matches_all_keys(self) -> None:
+        """Test that delete_prefix removes all keys with the given prefix."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:a:2", "v2")
+        await cache.set("ns:a:3", "v3")
+        await cache.set("ns:b:1", "v4")
+        await cache.set("other:x", "v5")
+
+        await cache.delete_prefix("ns:a:")
+
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:a:2") is None
+        assert await cache.get("ns:a:3") is None
+        assert await cache.get("ns:b:1") == "v4"
+        assert await cache.get("other:x") == "v5"
+
+    @pytest.mark.asyncio
+    async def test_trie_delete_prefix_matches_subset(self) -> None:
+        """Test that delete_prefix removes only keys matching the prefix."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("p:x", "v2")
+        await cache.set("p:y", "v3")
+
+        await cache.delete_prefix("p:")
+
+        assert await cache.get("ns:a:1") == "v1"
+        assert await cache.get("p:x") is None
+        assert await cache.get("p:y") is None
+
+    @pytest.mark.asyncio
+    async def test_trie_delete_removes_key_from_index(self) -> None:
+        """Test that delete removes the key from the trie index."""
+        cache = MemoryCache()
+        await cache.set("key:1", "v1")
+        await cache.set("key:2", "v2")
+
+        await cache.delete("key:1")
+
+        assert await cache.get("key:1") is None
+        assert await cache.get("key:2") == "v2"
+
+        removed = await cache.shake("key:")
+        assert removed == 1
+
+    @pytest.mark.asyncio
+    async def test_trie_clear_resets_index(self) -> None:
+        """Test that clear resets the trie index."""
+        cache = MemoryCache()
+        await cache.set("a:1", "v1")
+        await cache.set("b:2", "v2")
+
+        await cache.clear()
+
+        assert await cache.get("a:1") is None
+        assert await cache.get("b:2") is None
+
+        removed = await cache.shake("a:")
+        assert removed == 0
+
+    @pytest.mark.asyncio
+    async def test_trie_set_existing_key_is_idempotent(self) -> None:
+        """Test that setting an existing key is idempotent."""
+        cache = MemoryCache()
+        await cache.set("key:1", "v1")
+        await cache.set("key:1", "v2")
+
+        result = await cache.get("key:1")
+        assert result == "v2"
+
+        removed = await cache.shake("key:")
+        assert removed == 1
+
 
 class TestFibonacciDP:
     """Test Fibonacci dynamic programming algorithm."""
@@ -339,3 +414,50 @@ class TestAuthorizerProtocol:
         # Should raise for forbidden resource
         with pytest.raises(AuthorizationError):
             await authorizer.authorize("query", "forbidden", "user-1")
+
+
+class TestDataAccessNamespaceCache:
+    """Test _resource_namespace caching behavior."""
+
+    @pytest.mark.asyncio
+    async def test_namespace_cache_returns_same_namespace_for_same_resource_id(
+        self,
+    ) -> None:
+        """Test that _resource_namespace returns the same value for the
+        same resource_id."""
+        import hashlib
+
+        from daf.core.access import DataAccess
+        from daf.repositories import MemoryRepository
+
+        repo = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccess(repository=repo, cache=cache)
+
+        ns1 = daf._resource_namespace("res-1")
+        ns2 = daf._resource_namespace("res-1")
+
+        assert ns1 == ns2
+        assert ns1 == hashlib.sha256(b"res-1").hexdigest()
+
+    @pytest.mark.asyncio
+    async def test_namespace_cache_returns_different_namespaces_for_different_ids(
+        self,
+    ) -> None:
+        """Test that _resource_namespace returns different values for
+        different resource_ids."""
+        import hashlib
+
+        from daf.core.access import DataAccess
+        from daf.repositories import MemoryRepository
+
+        repo = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccess(repository=repo, cache=cache)
+
+        ns1 = daf._resource_namespace("res-1")
+        ns2 = daf._resource_namespace("res-2")
+
+        assert ns1 != ns2
+        assert ns1 == hashlib.sha256(b"res-1").hexdigest()
+        assert ns2 == hashlib.sha256(b"res-2").hexdigest()
