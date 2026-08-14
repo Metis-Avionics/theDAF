@@ -116,12 +116,13 @@ class DataAccessRouter:
                     return
                 if data is None:
                     data = await repository.get(resource_id)
-                if data is not None and isinstance(data, dict):
-                    owner_id = data.get("owner_id")
-                    if owner_id != user.id:
-                        raise AuthorizationError(
-                            f"Access denied to resource '{resource_id}'"
-                        )
+                if not isinstance(data, dict):
+                    raise AuthorizationError("Cannot establish ownership for resource")
+                owner_id = data.get("owner_id")
+                if owner_id != user.id:
+                    raise AuthorizationError(
+                        f"Access denied to resource '{resource_id}'"
+                    )
 
         return _Authorizer()
 

@@ -337,7 +337,7 @@ class TestAuthorization:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is False
-        assert data["error_type"] == "not_found"
+        assert data["error_type"] == "authorization"
 
     @pytest.mark.asyncio
     async def test_authorized_user_can_put_own_resource(

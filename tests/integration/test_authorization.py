@@ -192,6 +192,133 @@ class TestDataAccessAuthorization:
         assert delete_result.success is True
 
 
+class TestPostAuthorization:
+    """Test POST authorization with data inspection."""
+
+    @pytest.mark.asyncio
+    async def test_post_authorizer_rejects_creation(self) -> None:
+        """Test that authorizer can reject POST creation based on data content."""
+        
+        class RejectAdminPosts:
+            async def authorize(
+                self,
+                operation: str,
+                _resource_id: str | None,
+                _user: Any,
+                data: Any = None,
+            ) -> None:
+                if (
+                    operation == "post"
+                    and data is not None
+                    and isinstance(data, dict)
+                    and "admin" in data
+                ):
+                    raise AuthorizationError("Cannot create admin users via POST")
+        
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        factory = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=RejectAdminPosts()
+        )
+        daf: Any = factory.create()
+        
+        result = await daf.post(
+            PostInfo(resource_type="user", data={"name": "Admin", "admin": True}),
+            user=FakeUser("user-1"),
+        )
+        assert result.success is False
+        assert result.error_type == "authorization"
+
+    @pytest.mark.asyncio
+    async def test_post_authorizer_receives_data(self) -> None:
+        """Test that POST authorize() is called with the proposed data."""
+        received_calls: list[Any] = []
+
+        class SpyAuthorizer:
+            async def authorize(
+                self,
+                operation: str,
+                resource_id: str | None,
+                user: Any,
+                data: Any = None,
+            ) -> None:
+                received_calls.append((operation, resource_id, user, data))
+
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        factory = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=SpyAuthorizer()
+        )
+        daf: Any = factory.create()
+        
+        post_data = {"name": "John"}
+        await daf.post(
+            PostInfo(resource_type="user", data=post_data),
+            user=FakeUser("user-1"),
+        )
+        
+        assert len(received_calls) == 1
+        op, rid, usr, data = received_calls[0]
+        assert op == "post"
+        assert rid is None
+        assert data == post_data
+
+
+class TestConcurrentModificationDetection:
+    """Test CAS detection of concurrent modifications."""
+
+    @pytest.mark.asyncio
+    async def test_put_detects_concurrent_modification(self) -> None:
+        """Test that PUT fails when concurrent modification is detected."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        async def failing_try_update(_key: str, expected: Any, update: Any) -> Any:  # noqa: ARG001
+            return None
+        
+        repo.try_update = failing_try_update  # type: ignore
+        
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        factory = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        )
+        daf: Any = factory.create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result = await daf.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=FakeUser("user-1"),
+        )
+        assert result.success is False
+        assert result.error_type == "conflict"
+
+    @pytest.mark.asyncio
+    async def test_delete_detects_concurrent_modification(self) -> None:
+        """Test that DELETE fails when concurrent modification is detected."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        async def failing_try_delete(_key: str, expected: Any) -> bool:  # noqa: ARG001
+            return False
+        
+        repo.try_delete = failing_try_delete  # type: ignore
+        
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        factory = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        )
+        daf: Any = factory.create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result = await daf.delete(
+            DeleteInfo(resource_id="123"), user=FakeUser("user-1")
+        )
+        assert result.success is False
+        assert result.error_type == "conflict"
+
+
 class TestDataAccessAuthorizationBackwardCompatibility:
     """Test that DataAccess works without authorization (backward compatibility)."""
 

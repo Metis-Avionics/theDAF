@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Input validation guards for `resource_id`, `data`, and `resource_type`
 - `resource_type` preservation in `MutationResult.data` for POST operations
 - GET query parameter support for `filters` (JSON) and `algorithm` in FastAPI adapter
+- `Repository.try_update` and `Repository.try_delete` CAS primitives
+- `MemoryRepository.try_update` and `try_delete` with coarse lock and identity comparison
+- SHA-256 canonical JSON cache keys to prevent delimiter-collision attacks
+- Re-authorization on cache hit before returning cached data
+- POST authorizer receives proposed creation `data` for pre-persistence policy checks
+- Fail-closed authorization: non-dict resource data is denied access
+- `conflict` error_type for CAS failures in PUT and DELETE
 
 ### Changed
 
@@ -49,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FastAPI adapter authorizer skips existence check to prevent resource enumeration side-channel attacks
 - FastAPI PUT endpoint constructs new `PutInfo` instance instead of mutating validated model in-place
 - `MutationResult.data` now includes `resource_type` for POST operations
+- Cache invalidation uses tracked key map instead of prefix string matching
+- PUT and DELETE perform single repository read for auth and mutation (atomic auth+read)
+- Cache keys are now opaque SHA-256 hashes instead of colon-delimited strings
 
 ### Fixed
 
@@ -61,12 +71,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DataAccessRouter` reaching into `DataAccess` private state (R7)
 - PUT endpoint mutating validated Pydantic model (R8)
 - No structured logging in core components (R9)
+- POST ownership bypass due to `None` resource_id short-circuit (R11)
+- TOCTOU race between authorization and mutation in PUT/DELETE (R12)
+- Cache-key collision via delimiter injection (R13)
+- Stale authorization grants on cache hits (R14)
 
 ### Security
 
 - Removed timing side channel in authorizer that allowed distinguishing missing vs forbidden resources
 - Added input validation to prevent malformed requests from reaching repository layer
 - Added structured logging for audit trail and debugging
+- Fail-closed authorization rejects non-dict resources instead of silently granting access
+- POST creation payloads are inspectable by authorizer before persistence
+- Cached query results are re-authorized on every hit to prevent revoked-access bypass
+- CAS mutations prevent lost-update races between auth and persistence
 
 ## [0.1.0] - 2026-08-13
 

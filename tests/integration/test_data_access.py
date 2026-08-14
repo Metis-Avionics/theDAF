@@ -226,13 +226,12 @@ class TestDataAccessMutations:
         await repo.save("123", {"name": "John"})
         await daf.query(QueryInfo(resource_id="123"))
         
-        cached = await cache.get("query:123:{}::anonymous")
-        assert cached is not None
+        keys_before = set(cache._cache.keys())
+        assert len(keys_before) == 1
         
         await daf.put(PutInfo(resource_id="123", data={"name": "Jane"}))
         
-        cached = await cache.get("query:123:{}::anonymous")
-        assert cached is None
+        assert not any(key in cache._cache for key in keys_before)
 
 
 class TestDataAccessSubstitution:
@@ -256,6 +255,14 @@ class TestDataAccessSubstitution:
             
             async def create(self, _value: Any) -> str:
                 return "generated-id"
+            
+            async def try_update(
+                self, _key: str, _expected: Any, update: Any
+            ) -> Any:
+                return update(_expected)
+            
+            async def try_delete(self, _key: str, _expected: Any) -> bool:
+                return True
         
         fake_repo = FakeRepository()
         cache = MemoryCache()

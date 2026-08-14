@@ -52,11 +52,15 @@ class Repository(Protocol[T]):
     async def save(self, key: str, value: T) -> None: ...
     async def delete(self, key: str) -> None: ...
     async def create(self, value: T) -> str: ...
+    async def try_update(self, key: str, expected: T, update: Callable[[T], T]) -> T | None: ...
+    async def try_delete(self, key: str, expected: T) -> bool: ...
 ```
+
+`try_update` and `try_delete` provide compare-and-swap (CAS) semantics: the mutation only succeeds if the stored value still matches the `expected` value observed during authorization. This closes the TOCTOU window between auth and mutation.
 
 #### 2. **Cache** – Result Reuse
 
-Stores frequently accessed data to reduce repository lookups.
+Stores frequently accessed data to reduce repository lookups. Cache keys are canonicalized using SHA-256 over JSON-serialized query semantics (resource_id, filters, algorithm, user_id), ensuring no delimiter-collision attacks.
 
 ```python
 class Cache(Protocol):
@@ -67,7 +71,27 @@ class Cache(Protocol):
     async def clear(self) -> None: ...
 ```
 
-#### 3. **Algorithm** – Computation
+#### 3. **Authorizer** – Access Control
+
+Optional pluggable authorization layer. The authorizer receives the operation, resource ID, user, and resource data so it can make ownership decisions without additional repository lookups.
+
+```python
+class Authorizer(Protocol):
+    async def authorize(
+        self,
+        operation: str,
+        resource_id: str | None,
+        user: Any,
+        data: Any = None,
+    ) -> None: ...
+```
+
+Security invariants:
+- **Fail-closed:** If resource data is not a dict (or cannot be retrieved), authorization is denied.
+- **POST data inspection:** `post()` passes the proposed creation payload to the authorizer, enabling policy enforcement before persistence.
+- **Re-authorization on cache hit:** Cached results are re-authorized before return, preventing stale grants from bypassing revoked access.
+
+#### 4. **Algorithm** – Computation
 
 Encapsulates algorithmic behavior (DP, ML inference, etc.) separate from data access.
 
@@ -77,7 +101,7 @@ class Algorithm(Protocol):
     async def get_stats(self) -> dict[str, Any]: ...
 ```
 
-#### 4. **DataAccess** – Orchestration
+#### 5. **DataAccess** – Orchestration
 
 Composes repository, cache, and algorithm into a cohesive data access layer.
 
@@ -89,7 +113,7 @@ class DataAccess:
     async def delete(self, info: DeleteInfo) -> MutationResult: ...
 ```
 
-#### 5. **DataAccessFactory** – Composition
+#### 6. **DataAccessFactory** – Composition
 
 Responsible for constructing a configured `DataAccess` instance with its dependencies.
 
@@ -102,7 +126,7 @@ factory = DataAccessFactory(
 daf = factory.create()
 ```
 
-#### 6. **FastAPI Adapter** – HTTP Bridge
+#### 7. **FastAPI Adapter** – HTTP Bridge
 
 Translates HTTP requests into `DataAccess` operations. Endpoint-level rate limiting lives **only here**.
 
@@ -121,7 +145,7 @@ GET /data/123?algorithm=fibonacci
 When you call `daf.query(info)`:
 
 1. **Authorization** – Check access if authorizer is configured
-2. **Cache Lookup** – Check if result is already cached (key includes resource_id, filters, algorithm, and user)
+2. **Cache Lookup** – Check if result is already cached. Cache keys are SHA-256 hashes of canonical JSON (resource_id, filters, algorithm, user_id). On cache hit, re-authorize with the cached data before returning.
 3. **Repository Lookup** (if cache miss) – Fetch from persistent storage
 4. **Filter Application** – Apply in-memory filters to the retrieved data
 5. **Algorithm Execution** (if specified) – Apply computation by algorithm name from registry
@@ -451,7 +475,7 @@ class RedisCache:
 
 ## Limitations
 
-1. **In-memory repository** – No persistence across restarts
+1. **In-memory repository** – No persistence across restarts. `try_update`/`try_delete` use a coarse lock and identity comparison (`is`) for CAS detection; this is best-effort only. Real transactional backends should implement true atomic CAS.
 2. **Basic cache** – No TTL or eviction policy
 3. **Fibonacci algorithm** – Demonstration only (use `math.fib()` in production)
 4. **Single-layer rate limiting** – FastAPI adapter only
@@ -484,7 +508,7 @@ Core domain errors are defined in `daf.core.errors`:
 Expected errors are returned as typed result envelopes with `error_type` preserved:
 
 - `QueryResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`
-- `MutationResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`
+- `MutationResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`, `"conflict"`
 
 Unexpected errors propagate as exceptions. The FastAPI adapter catches `DataAccessError` subclasses and maps them to HTTP 500 with a generic message.
 
@@ -493,6 +517,7 @@ All FastAPI responses use HTTP 200 with a `QueryResult` or `MutationResult` enve
 - `"authorization"` – User is not allowed to access the resource
 - `"not_found"` – Resource does not exist
 - `"validation"` – Input parameters are invalid
+- `"conflict"` – Concurrent modification detected during PUT or DELETE
 
 ```python
 result = await daf.query(info)
@@ -530,7 +555,9 @@ MIT License. See LICENSE for details.
 | **Result Reuse** | `Cache` abstraction |
 | **Computation** | `Algorithm` abstraction |
 | **Composition** | `DataAccessFactory` |
+| **Authorization** | `Authorizer` protocol (fail-closed, re-auth on cache hit) |
 | **Validation** | Pydantic contracts at boundary |
+| **CAS Semantics** | `Repository.try_update` / `try_delete` for mutation safety |
 
 **Result:** A reusable, testable, framework-independent data access layer.
 Data Access Factory Open SOurce Python contribution

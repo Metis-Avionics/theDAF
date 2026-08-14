@@ -1,5 +1,6 @@
 """Data access orchestration layer."""
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -44,6 +45,7 @@ class DataAccess:
         self._cache = cache
         self._algorithms = algorithms or {}
         self._authorizer = authorizer
+        self._cache_key_map: dict[str, set[str]] = {}
 
     async def _check_authorization(
         self,
@@ -71,14 +73,30 @@ class DataAccess:
     def _cache_key(self, info: QueryInfo, user: Any) -> str:
         """Build cache key from full query semantics."""
         user_id = self._user_id(user)
+        payload = {
+            "resource_id": info.resource_id,
+            "filters": info.filters or {},
+            "algorithm": info.algorithm or "",
+            "user_id": user_id,
+        }
         try:
-            filters_json = json.dumps(info.filters or {}, sort_keys=True)
+            canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         except (TypeError, ValueError):
             raise ValidationError(
                 "Filters contain non-JSON-serializable values"
             ) from None
-        algorithm = info.algorithm or ""
-        return f"query:{info.resource_id}:{filters_json}:{algorithm}:{user_id}"
+        digest = hashlib.sha256(canonical.encode()).hexdigest()
+        return f"query:{digest}"
+
+    async def _invalidate_cache_for_resource(self, resource_id: str) -> None:
+        """Invalidate all cached query results for a resource."""
+        keys = self._cache_key_map.pop(resource_id, set())
+        for key in keys:
+            await self._cache.delete(key)
+        logger.debug(
+            "cache invalidated",
+            extra={"resource_id": resource_id, "keys": len(keys)},
+        )
 
     def _apply_filters(self, data: Any, filters: dict[str, Any] | None) -> Any:
         """Apply in-memory filters to retrieved data."""
@@ -176,9 +194,14 @@ class DataAccess:
             },
         )
         cache_key = self._cache_key(info, user)
+        self._cache_key_map.setdefault(info.resource_id, set()).add(cache_key)
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
+            if self._authorizer is not None:
+                await self._check_authorization(
+                    "query", info.resource_id, user, data=cached
+                )
             logger.debug("cache hit", extra={"key": cache_key})
             return QueryResult(
                 success=True,
@@ -237,7 +260,7 @@ class DataAccess:
             if not isinstance(info.data, dict):
                 raise ValidationError("Post data must be a dict")
             if self._authorizer is not None:
-                await self._check_authorization("post", None, user)
+                await self._check_authorization("post", None, user, data=info.data)
         except ValidationError:
             logger.warning(
                 "post validation error",
@@ -269,7 +292,7 @@ class DataAccess:
         )
         resource_id = await self._repository.create(info.data)
 
-        await self._cache.delete_prefix(f"query:{resource_id}:")
+        await self._invalidate_cache_for_resource(resource_id)
         logger.debug(
             "post cache invalidated",
             extra={"resource_id": resource_id},
@@ -323,30 +346,25 @@ class DataAccess:
                 )
 
             if self._authorizer is not None:
-                try:
-                    await self._check_authorization(
-                        "put", info.resource_id, user, data=existing
-                    )
-                except AuthorizationError:
-                    logger.warning(
-                        "put unauthorized",
-                        extra={
-                            "resource_id": info.resource_id,
-                            "user": self._user_id(user),
-                        },
-                    )
-                    return MutationResult(
-                        success=False,
-                        resource_id=info.resource_id,
-                        data=None,
-                        error="Unauthorized",
-                        error_type="authorization",
-                    )
+                await self._check_authorization(
+                    "put", info.resource_id, user, data=existing
+                )
 
-            updated = {**existing, **info.data}
-            await self._repository.save(info.resource_id, updated)
+            result = await self._repository.try_update(
+                info.resource_id,
+                expected=existing,
+                update=lambda e: {**e, **info.data},
+            )
+            if result is None:
+                return MutationResult(
+                    success=False,
+                    resource_id=info.resource_id,
+                    data=None,
+                    error="Conflict",
+                    error_type="conflict",
+                )
 
-            await self._cache.delete_prefix(f"query:{info.resource_id}:")
+            await self._invalidate_cache_for_resource(info.resource_id)
             logger.debug(
                 "put cache invalidated",
                 extra={"resource_id": info.resource_id},
@@ -355,7 +373,7 @@ class DataAccess:
             return MutationResult(
                 success=True,
                 resource_id=info.resource_id,
-                data=updated,
+                data=result,
                 error=None,
                 error_type=None,
             )
@@ -371,6 +389,21 @@ class DataAccess:
                 data=None,
                 error="Not found",
                 error_type="not_found",
+            )
+        except AuthorizationError:
+            logger.warning(
+                "put unauthorized",
+                extra={
+                    "resource_id": info.resource_id,
+                    "user": self._user_id(user),
+                },
+            )
+            return MutationResult(
+                success=False,
+                resource_id=info.resource_id,
+                data=None,
+                error="Unauthorized",
+                error_type="authorization",
             )
 
     async def delete(self, info: DeleteInfo, user: Any = None) -> MutationResult:
@@ -411,29 +444,23 @@ class DataAccess:
                 )
 
             if self._authorizer is not None:
-                try:
-                    await self._check_authorization(
-                        "delete", info.resource_id, user, data=existing
-                    )
-                except AuthorizationError:
-                    logger.warning(
-                        "delete unauthorized",
-                        extra={
-                            "resource_id": info.resource_id,
-                            "user": self._user_id(user),
-                        },
-                    )
-                    return MutationResult(
-                        success=False,
-                        resource_id=info.resource_id,
-                        data=None,
-                        error="Unauthorized",
-                        error_type="authorization",
-                    )
+                await self._check_authorization(
+                    "delete", info.resource_id, user, data=existing
+                )
 
-            await self._repository.delete(info.resource_id)
+            deleted = await self._repository.try_delete(
+                info.resource_id, expected=existing
+            )
+            if not deleted:
+                return MutationResult(
+                    success=False,
+                    resource_id=info.resource_id,
+                    data=None,
+                    error="Conflict",
+                    error_type="conflict",
+                )
 
-            await self._cache.delete_prefix(f"query:{info.resource_id}:")
+            await self._invalidate_cache_for_resource(info.resource_id)
             logger.debug(
                 "delete cache invalidated",
                 extra={"resource_id": info.resource_id},
@@ -458,4 +485,19 @@ class DataAccess:
                 data=None,
                 error="Not found",
                 error_type="not_found",
+            )
+        except AuthorizationError:
+            logger.warning(
+                "delete unauthorized",
+                extra={
+                    "resource_id": info.resource_id,
+                    "user": self._user_id(user),
+                },
+            )
+            return MutationResult(
+                success=False,
+                resource_id=info.resource_id,
+                data=None,
+                error="Unauthorized",
+                error_type="authorization",
             )
