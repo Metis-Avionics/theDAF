@@ -347,3 +347,56 @@ Each session entry should include:
 - Algorithm mutations cannot poison the authorization snapshot
 
 ---
+
+## Session 006 - 2026-08-14
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `093ba67` on branch `fix/r7-r12-red-team-composition-fixes` (PR #17) passes 119 tests. Red-team assessment identified two medium-severity concurrency concerns: non-atomic `_advance_generation` and untested query/mutation interleaving.
+
+**Actions Taken**:
+- Read plan `.kilo/plans/1786729023035-concurrency-hardening.md`
+- Implemented per-resource `asyncio.Lock` serialization for `_advance_generation` within the same process
+- Added concurrency model section to `DataAccess` docstring
+- Added `_generation_lock` helper with lazy lock creation protected by `_generation_locks_lock`
+- Updated `_current_generation` and `_advance_generation` to acquire per-resource lock; `_advance_generation` inlines RMW to avoid double-lock churn
+- Added 2 new tests: `TestStaleQueryAfterMutation.test_stale_cache_write_after_mutation_is_rejected` and `TestConcurrentMutationGeneration.test_concurrent_mutations_generation_is_monotonic`
+- Ran full validation: 121 tests passing, mypy --strict clean, ruff clean, Power of Ten clean
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/core/access.py | Modified | Added `import asyncio`, concurrency model docstring, `_generation_locks`/`_generation_locks_lock`, `_generation_lock` helper, locked `_current_generation`/`_advance_generation` |
+| tests/integration/test_security_invariants.py | Modified | Added `TestStaleQueryAfterMutation` and `TestConcurrentMutationGeneration` classes |
+| .kilo/plans/1786729023035-concurrency-hardening.md | Created | Concurrency hardening plan |
+
+### Project Status
+
+- **Branch**: `fix/r7-r12-red-team-composition-fixes`
+- **Version**: 0.2.0 (pending release)
+- **Tests**: 121/121 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Power of Ten**: All checks pass
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes
+- [ ] Push branch to origin (updates PR #17)
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- Both medium-severity concurrency findings from the red-team assessment are addressed
+- 121 tests pass (up from 119)
+- Per-resource `asyncio.Lock` eliminates read-modify-write races for concurrent mutations within the same process
+- Cross-process atomic generation remains best-effort; stale entries are always rejected by generation comparison
+
+---

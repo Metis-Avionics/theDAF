@@ -949,6 +949,78 @@ class TestConcurrentModificationDetection:
         assert result.error_type == "conflict"
 
 
+class TestStaleQueryAfterMutation:
+    """Test that a query completing after a mutation does not serve stale data."""
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_write_after_mutation_is_rejected(self) -> None:
+        """Simulate: query misses -> mutation advances gen and clears cache ->
+        stale query writes old entry -> next query sees generation mismatch
+        and returns fresh data."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        user = FakeUser("user-1")
+
+        result1 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert result1.data["name"] == "John"
+
+        await daf.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=user,
+        )
+
+        cache_key = _expected_cache_key("123", {}, None, "user-1")
+        cache._cache[cache_key] = {
+            "raw": {"name": "John", "owner_id": "user-1"},
+            "transformed": {"name": "John", "owner_id": "user-1"},
+            "generation": 0,
+        }
+
+        result2 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result2.success is True
+        assert result2.cache_hit is False
+        assert result2.data["name"] == "Jane"
+
+
+class TestConcurrentMutationGeneration:
+    """Test generation advancement under concurrent mutations."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_mutations_generation_is_monotonic(self) -> None:
+        """Two concurrent mutations on the same resource both advance generation.
+        Final generation must be at least initial + 2 (no lost increments
+        within the same process due to per-resource lock serialization)."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        user = FakeUser("user-1")
+
+        await daf.query(QueryInfo(resource_id="123"), user=user)
+
+        async def mutate(name: str) -> None:
+            await daf.put(
+                PutInfo(resource_id="123", data={"name": name}),
+                user=user,
+            )
+
+        await asyncio.gather(
+            mutate("Jane"),
+            mutate("Jack"),
+        )
+
+        namespace = hashlib.sha256(b"123").hexdigest()
+        final_gen = await cache.get(f"_daf_gen:{namespace}")
+        assert final_gen is not None and isinstance(final_gen, int)
+        assert final_gen >= 2
+
+
 class TestStaleCacheResurrection:
     """Test that stale cache entries are never served after a mutation."""
 

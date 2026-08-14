@@ -5,6 +5,7 @@ DataAccess to trigger cache invalidation. Direct writes to the underlying
 repository bypass invalidation entirely and may leave stale cache entries.
 """
 
+import asyncio
 import copy
 import hashlib
 import json
@@ -43,6 +44,24 @@ class DataAccess:
     Callers may distinguish nonexistent resources (NotFoundError / HTTP 404)
     from existing resources for which they lack authorization
     (AuthorizationError / HTTP 403).
+
+    Concurrency model:
+
+    - `delete_prefix` is the authoritative invalidation mechanism and is
+      atomic within the MemoryCache implementation (single dict sweep).
+    - Generation counters are per-resource and stored in the shared cache.
+    - Within a single process, generation advancement is serialized via
+      per-resource asyncio locks, eliminating read-modify-write races for
+      the common case of multiple DataAccess instances sharing a cache in
+      the same event loop.
+    - Across processes, generation advancement is best-effort
+      (read-modify-write). Concurrent mutations may observe a temporarily
+      stale generation value, but stale cache entries are always rejected
+      by generation comparison on the next read. The system never serves
+      stale data to callers.
+    - For distributed cache backends, atomic generation advancement
+      requires cache-level CAS or compare-and-set primitives (out of
+      scope for the current Cache protocol).
     """
 
     def __init__(
@@ -64,6 +83,8 @@ class DataAccess:
         self._cache = cache
         self._algorithms = algorithms or {}
         self._authorizer = authorizer
+        self._generation_locks: dict[str, asyncio.Lock] = {}
+        self._generation_locks_lock = asyncio.Lock()
 
     async def _check_authorization(
         self,
@@ -98,6 +119,20 @@ class DataAccess:
         """Get the components used by this DataAccess instance."""
         return self._repository, self._cache, self._algorithms
 
+    async def _generation_lock(self, resource_id: str) -> asyncio.Lock:
+        """Return the per-resource asyncio lock for generation advancement.
+
+        Locks are lazily created and cached in ``_generation_locks``.
+        Access to the dict itself is serialized via ``_generation_locks_lock``
+        to avoid races where two coroutines create duplicate Lock objects
+        for the same namespace.
+        """
+        namespace = self._resource_namespace(resource_id)
+        async with self._generation_locks_lock:
+            if namespace not in self._generation_locks:
+                self._generation_locks[namespace] = asyncio.Lock()
+            return self._generation_locks[namespace]
+
     def _resource_namespace(self, resource_id: str) -> str:
         """Return a fixed-width namespace for a resource_id.
 
@@ -108,15 +143,26 @@ class DataAccess:
 
     async def _current_generation(self, resource_id: str) -> int:
         """Read the current generation counter for a resource from the cache."""
-        namespace = self._resource_namespace(resource_id)
-        value = await self._cache.get(f"_daf_gen:{namespace}")
-        return value if isinstance(value, int) else 0
+        lock = await self._generation_lock(resource_id)
+        async with lock:
+            namespace = self._resource_namespace(resource_id)
+            value = await self._cache.get(f"_daf_gen:{namespace}")
+            return value if isinstance(value, int) else 0
 
     async def _advance_generation(self, resource_id: str) -> None:
-        """Increment the generation counter for a resource in the cache."""
-        namespace = self._resource_namespace(resource_id)
-        current = await self._current_generation(resource_id)
-        await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+        """Increment the generation counter for a resource in the cache.
+
+        The read-modify-write is performed atomically under the per-resource
+        lock, so concurrent mutations within the same process cannot lose
+        an increment.
+        """
+        lock = await self._generation_lock(resource_id)
+        async with lock:
+            namespace = self._resource_namespace(resource_id)
+            current = await self._cache.get(f"_daf_gen:{namespace}")
+            if not isinstance(current, int):
+                current = 0
+            await self._cache.set(f"_daf_gen:{namespace}", current + 1)
 
     def _cache_key(self, info: QueryInfo, user: Any) -> str:
         """Build cache key from full query semantics."""

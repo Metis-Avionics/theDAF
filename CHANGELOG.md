@@ -81,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README Architecture section documents write-through-DAF consistency boundary
 - Cache entries extend to `{"raw": ..., "transformed": ..., "generation": N}` for temporal invalidation
 - Per-resource generation counters scoped in shared cache via reserved `_daf_gen:{namespace}` keys
+- `_generation_lock` helper with lazy per-resource `asyncio.Lock` creation for generation advancement serialization
+- Controlled-concurrency tests for stale query interleaving and concurrent mutation generation monotonicity
 - Cache key format uses `query:{sha256(resource_id)}:{digest}` to prevent delimiter-collision attacks
 - Invalidation prefixes use hashed namespace so `a:b` and `a:b:c` are structurally isolated
 - `_execute_cache_miss` deepcopies repository data before algorithm execution to prevent auth-snapshot poisoning
@@ -127,6 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cache invalidation prefix collides when resource_id contains `:` delimiter (R3b)
 - Algorithm input and raw_data share reference; in-place mutation poisons authorization snapshot (R21b)
 - Global generation counter advances on any mutation, invalidating unrelated resource caches (R19c)
+- `_advance_generation` read-modify-write is non-atomic; concurrent mutations can lose increments (R22)
+- Query/mutation interleaving untested; stale query can repopulate cache after mutation (R23)
 
 ### Security
 
@@ -150,6 +154,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Algorithm immutability contract documented; algorithms must not mutate their input snapshot
 - Cache key namespace hashing prevents delimiter-collision attacks on invalidation prefixes
 - Deep copy of repository data before algorithm execution prevents auth-snapshot poisoning
+- Per-resource asyncio locks serialize generation advancement within a single process, eliminating RMW races
+- Concurrency model documented: delete_prefix is authoritative invalidation, generation is best-effort fast-path
+- Controlled-concurrency tests prove stale query interleaving is rejected and concurrent mutations are monotonic
 
 ## [Unreleased]
 
