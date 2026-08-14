@@ -2,6 +2,8 @@
 
 A production-quality Python package that implements a reusable **data-access abstraction layer** with an optional **FastAPI integration**. The architecture cleanly separates data access logic from HTTP transport, enabling the core abstraction to be used in any context (HTTP, MCP, workers, tests, etc.).
 
+> ⚠️ **Red-team assessment available:** see [BUGS.md](./BUGS.md) and [SECURITY.md](./SECURITY.md).
+
 ## Why DAF?
 
 ### The Problem
@@ -49,7 +51,7 @@ class Repository(Protocol[T]):
     async def get(self, key: str) -> T | None: ...
     async def save(self, key: str, value: T) -> None: ...
     async def delete(self, key: str) -> None: ...
-    async def list_all(self) -> dict[str, T]: ...
+    async def create(self, value: T) -> str: ...
 ```
 
 #### 2. **Cache** – Result Reuse
@@ -94,7 +96,7 @@ Responsible for constructing a configured `DataAccess` instance with its depende
 factory = DataAccessFactory(
     repository=my_repo,
     cache=my_cache,
-    algorithm=my_algorithm,
+    algorithms={"fibonacci": FibonacciDP(), "custom": MyAlgorithm()},
 )
 daf = factory.create()
 ```
@@ -103,22 +105,27 @@ daf = factory.create()
 
 Translates HTTP requests into `DataAccess` operations. Endpoint-level rate limiting lives **only here**.
 
-```python
-@router.get("/data/{resource_id}")
-@limiter.limit("30/minute")
-async def query_endpoint(resource_id: str) -> QueryResult:
-    return await daf.query(QueryInfo(resource_id=resource_id))
+The FastAPI adapter automatically reads `filters` and `algorithm` from query parameters:
+
+```bash
+# Query with filters
+GET /data/123?filters={"status":"active"}
+
+# Query with algorithm
+GET /data/123?algorithm=fibonacci
 ```
 
 ### Query Execution Flow
 
 When you call `daf.query(info)`:
 
-1. **Cache Lookup** – Check if result is already cached
-2. **Repository Lookup** (if cache miss) – Fetch from persistent storage
-3. **Algorithm Execution** (if specified) – Apply computation
-4. **Cache Population** – Store result for future hits
-5. **Return Typed Result** – `QueryResult` with data, cache status, and stats
+1. **Authorization** – Check access if authorizer is configured
+2. **Cache Lookup** – Check if result is already cached (key includes resource_id, filters, algorithm, and user)
+3. **Repository Lookup** (if cache miss) – Fetch from persistent storage
+4. **Filter Application** – Apply in-memory filters to the retrieved data
+5. **Algorithm Execution** (if specified) – Apply computation by algorithm name from registry
+6. **Cache Population** – Store result for future hits
+7. **Return Typed Result** – `QueryResult` with data, cache status, stats, and error classification
 
 ### Data Contracts
 
@@ -208,9 +215,11 @@ daf = factory.create()
 
 # Create FastAPI app
 app = FastAPI()
-router_builder = DataAccessRouter(daf)
+router_builder = DataAccessRouter(
+    daf,
+    get_current_user=get_current_user,  # REQUIRED
+)
 app.include_router(router_builder.get_router())
-app.state.limiter = limiter
 
 # Run with: uvicorn main:app --reload
 ```
@@ -227,14 +236,14 @@ Endpoints available:
 ```python
 from daf.algorithms import FibonacciDP
 
-# Create DAF with algorithm
+# Create DAF with algorithm registry
 repo = MemoryRepository()
 cache = MemoryCache()
 algo = FibonacciDP()
 factory = DataAccessFactory(
     repository=repo,
     cache=cache,
-    algorithm=algo,
+    algorithms={"fibonacci": algo},
 )
 daf = factory.create()
 
@@ -469,17 +478,24 @@ Core domain errors are defined in `daf.core.errors`:
 - `RepositoryError` – Repository operation failed
 - `CacheError` – Cache operation failed
 - `AlgorithmError` – Algorithm execution failed
+- `AuthorizationError` – User not authorized
 
-Errors do not leak HTTP exceptions. The FastAPI adapter translates domain errors into appropriate HTTP responses.
+Expected errors are returned as typed result envelopes with `error_type` preserved:
+
+- `QueryResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`
+- `MutationResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`
+
+Unexpected errors propagate as exceptions. The FastAPI adapter catches `DataAccessError` subclasses and maps them to HTTP 500 with a generic message.
 
 ```python
-try:
-    result = await daf.query(info)
-    if not result.success:
-        return {"error": result.error}  # User-safe error message
-except DataAccessError as e:
-    # Log, translate to HTTP status
-    raise HTTPException(status_code=500, detail=str(e))
+result = await daf.query(info)
+if not result.success:
+    if result.error_type == "authorization":
+        raise HTTPException(status_code=403)
+    elif result.error_type == "not_found":
+        raise HTTPException(status_code=404)
+    else:
+        raise HTTPException(status_code=400, detail=result.error)
 ```
 
 ## Contributing

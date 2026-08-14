@@ -1,5 +1,7 @@
 """Integration tests for DataAccess and DataAccessFactory."""
 
+from typing import Any
+
 import pytest
 
 from daf.algorithms import FibonacciDP
@@ -15,7 +17,7 @@ class TestDataAccessFactory:
     @pytest.mark.asyncio
     async def test_factory_creation(self) -> None:
         """Test that factory creates DataAccess instances."""
-        repo = MemoryRepository()
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         factory = DataAccessFactory(repository=repo, cache=cache)
         
@@ -26,13 +28,13 @@ class TestDataAccessFactory:
     @pytest.mark.asyncio
     async def test_factory_with_algorithm(self) -> None:
         """Test factory with algorithm."""
-        repo = MemoryRepository()
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         algo = FibonacciDP()
         factory = DataAccessFactory(
             repository=repo,
             cache=cache,
-            algorithm=algo,
+            algorithms={"fibonacci": algo},
         )
         
         daf = factory.create()
@@ -43,16 +45,20 @@ class TestDataAccessQuery:
     """Test DataAccess query operations."""
 
     @pytest.fixture
-    def setup_daf(self):
+    def setup_daf(
+        self,
+    ) -> tuple[MemoryRepository[Any], MemoryCache, Any]:
         """Set up a DataAccess instance with test data."""
-        repo = MemoryRepository()
+        repo: MemoryRepository[Any] = MemoryRepository()
         cache = MemoryCache()
         factory = DataAccessFactory(repository=repo, cache=cache)
         daf = factory.create()
         return repo, cache, daf
 
     @pytest.mark.asyncio
-    async def test_query_cache_miss_then_hit(self, setup_daf) -> None:
+    async def test_query_cache_miss_then_hit(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test query: cache miss, repository hit, then cache hit."""
         repo, cache, daf = setup_daf
         
@@ -73,7 +79,9 @@ class TestDataAccessQuery:
         assert result2.data == test_data
 
     @pytest.mark.asyncio
-    async def test_query_not_found(self, setup_daf) -> None:
+    async def test_query_not_found(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test query for non-existent resource."""
         repo, cache, daf = setup_daf
         
@@ -83,29 +91,28 @@ class TestDataAccessQuery:
         assert "not found" in result.error.lower()
 
     @pytest.mark.asyncio
-    async def test_query_with_algorithm(self, setup_daf) -> None:
+    async def test_query_with_algorithm(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test query with algorithm execution."""
         repo, cache, daf_orig = setup_daf
         
-        # Create DAF with algorithm
         algo = FibonacciDP()
         factory = DataAccessFactory(
             repository=repo,
             cache=cache,
-            algorithm=algo,
+            algorithms={"fibonacci": algo},
         )
         daf = factory.create()
         
-        # Save test data
         await repo.save("fib_input", 10)
         
-        # Query with algorithm
         result = await daf.query(
             QueryInfo(resource_id="fib_input", algorithm="fibonacci")
         )
         
         assert result.success is True
-        assert result.data == 55  # fib(10) = 55
+        assert result.data == 55
         assert result.algorithm_stats is not None
         assert "iterations" in result.algorithm_stats
 
@@ -114,16 +121,20 @@ class TestDataAccessMutations:
     """Test DataAccess mutation operations."""
 
     @pytest.fixture
-    def setup_daf(self):
+    def setup_daf(
+        self,
+    ) -> tuple[MemoryRepository[Any], MemoryCache, Any]:
         """Set up a DataAccess instance."""
-        repo = MemoryRepository()
+        repo: MemoryRepository[Any] = MemoryRepository()
         cache = MemoryCache()
         factory = DataAccessFactory(repository=repo, cache=cache)
         daf = factory.create()
         return repo, cache, daf
 
     @pytest.mark.asyncio
-    async def test_post_create_resource(self, setup_daf) -> None:
+    async def test_post_create_resource(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test POST creates a new resource."""
         repo, cache, daf = setup_daf
         
@@ -139,7 +150,9 @@ class TestDataAccessMutations:
         assert result.data["name"] == "John"
 
     @pytest.mark.asyncio
-    async def test_put_update_resource(self, setup_daf) -> None:
+    async def test_put_update_resource(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test PUT updates an existing resource."""
         repo, cache, daf = setup_daf
         
@@ -159,7 +172,9 @@ class TestDataAccessMutations:
         assert result.data["age"] == 30  # Original field preserved
 
     @pytest.mark.asyncio
-    async def test_put_not_found(self, setup_daf) -> None:
+    async def test_put_not_found(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test PUT on non-existent resource fails."""
         repo, cache, daf = setup_daf
         
@@ -171,7 +186,9 @@ class TestDataAccessMutations:
         assert "not found" in result.error.lower()
 
     @pytest.mark.asyncio
-    async def test_delete_resource(self, setup_daf) -> None:
+    async def test_delete_resource(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test DELETE removes a resource."""
         repo, cache, daf = setup_daf
         
@@ -188,7 +205,9 @@ class TestDataAccessMutations:
         assert remaining is None
 
     @pytest.mark.asyncio
-    async def test_delete_not_found(self, setup_daf) -> None:
+    async def test_delete_not_found(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test DELETE on non-existent resource fails."""
         repo, cache, daf = setup_daf
         
@@ -198,23 +217,21 @@ class TestDataAccessMutations:
         assert "not found" in result.error.lower()
 
     @pytest.mark.asyncio
-    async def test_mutations_invalidate_cache(self, setup_daf) -> None:
+    async def test_mutations_invalidate_cache(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
         """Test that mutations invalidate relevant cache entries."""
         repo, cache, daf = setup_daf
         
-        # Create and cache a resource
         await repo.save("123", {"name": "John"})
         await daf.query(QueryInfo(resource_id="123"))
         
-        # Verify it's cached
-        cached = await cache.get("query:123")
+        cached = await cache.get("query:123:{}::anonymous")
         assert cached is not None
         
-        # Update it
         await daf.put(PutInfo(resource_id="123", data={"name": "Jane"}))
         
-        # Cache should be invalidated
-        cached = await cache.get("query:123")
+        cached = await cache.get("query:123:{}::anonymous")
         assert cached is None
 
 
@@ -225,28 +242,26 @@ class TestDataAccessSubstitution:
     async def test_fake_repository_substitution(self) -> None:
         """Test that a fake repository can be substituted."""
         
-        # Create a fake repository implementation
         class FakeRepository:
-            async def get(self, key: str):
+            async def get(self, key: str) -> Any:
                 if key == "test":
                     return {"fake": True}
                 return None
             
-            async def save(self, key: str, value):
+            async def save(self, key: str, value: Any) -> None:
                 pass
             
-            async def delete(self, key: str):
+            async def delete(self, key: str) -> None:
                 pass
             
-            async def list_all(self):
-                return {"test": {"fake": True}}
+            async def create(self, _value: Any) -> str:
+                return "generated-id"
         
         fake_repo = FakeRepository()
         cache = MemoryCache()
         factory = DataAccessFactory(repository=fake_repo, cache=cache)
         daf = factory.create()
         
-        # Query should use the fake repository
         result = await daf.query(QueryInfo(resource_id="test"))
         
         assert result.success is True

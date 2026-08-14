@@ -1,5 +1,10 @@
 """Base repository implementations."""
 
+import logging
+import uuid
+
+logger = logging.getLogger(__name__)
+
 
 class MemoryRepository[T]:
     """In-memory repository implementation."""
@@ -17,6 +22,7 @@ class MemoryRepository[T]:
         Returns:
             The value if found, None otherwise.
         """
+        logger.debug("repository get: key=%s", key)
         return self._store.get(key)
 
     async def save(self, key: str, value: T) -> None:
@@ -26,6 +32,7 @@ class MemoryRepository[T]:
             key: The key to save under.
             value: The value to save.
         """
+        logger.debug("repository save: key=%s", key)
         self._store[key] = value
 
     async def delete(self, key: str) -> None:
@@ -34,13 +41,20 @@ class MemoryRepository[T]:
         Args:
             key: The key to delete.
         """
+        logger.debug("repository delete: key=%s", key)
         if key in self._store:
             del self._store[key]
 
-    async def list_all(self) -> dict[str, T]:
-        """List all items in the repository.
+    async def create(self, value: T) -> str:
+        """Create a new item and return its generated resource ID.
         
+        Args:
+            value: The value to store.
+            
         Returns:
-            A copy of all items in the repository.
+            The generated resource ID.
         """
-        return dict(self._store)
+        logger.debug("repository create")
+        resource_id = str(uuid.uuid4())
+        self._store[resource_id] = value
+        return resource_id

@@ -18,8 +18,8 @@ class Repository[T](Protocol):
         """Delete an item by key."""
         ...
 
-    async def list_all(self) -> dict[str, T]:
-        """List all items in the repository."""
+    async def create(self, value: T) -> str:
+        """Create a new item and return its generated resource ID."""
         ...
 
 

@@ -19,7 +19,7 @@ class DataAccessFactory:
         self,
         repository: Repository[Any],
         cache: Cache,
-        algorithm: Algorithm | None = None,
+        algorithms: dict[str, Algorithm] | None = None,
         authorizer: Authorizer | None = None,
     ) -> None:
         """Initialize the factory with dependencies.
@@ -27,12 +27,12 @@ class DataAccessFactory:
         Args:
             repository: The repository implementation to use.
             cache: The cache implementation to use.
-            algorithm: Optional algorithm implementation.
+            algorithms: Optional registry mapping algorithm names to implementations.
             authorizer: Optional authorizer for access control.
         """
         self._repository = repository
         self._cache = cache
-        self._algorithm = algorithm
+        self._algorithms = algorithms
         self._authorizer = authorizer
 
     def create(self) -> DataAccess:
@@ -45,6 +45,6 @@ class DataAccessFactory:
         return DataAccess(
             repository=self._repository,
             cache=self._cache,
-            algorithm=self._algorithm,
+            algorithms=self._algorithms,
             authorizer=self._authorizer,
         )
