@@ -1,5 +1,6 @@
 """Integration tests for DataAccess and DataAccessFactory."""
 
+import copy
 from typing import Any
 
 import pytest
@@ -268,3 +269,58 @@ class TestDataAccessSubstitution:
         
         assert result.success is True
         assert result.data["fake"] is True
+
+
+class TestAlgorithmImmutabilityContract:
+    """Test that algorithms must not mutate their input."""
+
+    @pytest.mark.asyncio
+    async def test_algorithm_must_not_mutate_input(self) -> None:
+        """Test that the raw data passed to the authorizer is unaffected
+        even if an algorithm attempts in-place mutation."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+
+        original_data = {"name": "John", "status": "active"}
+
+        class MutatingAlgorithm:
+            async def execute(self, data: Any) -> Any:
+                if isinstance(data, dict):
+                    data["name"] = "Mutated"
+                return data
+
+            async def get_stats(self) -> dict[str, Any]:
+                return {}
+
+        authorizer_calls: list[Any] = []
+
+        class SpyAuthorizer:
+            async def authorize(
+                self,
+                _operation: str,
+                _resource_id: str | None,
+                _user: Any,
+                data: Any = None,
+            ) -> None:
+                authorizer_calls.append(
+                    copy.deepcopy(data) if isinstance(data, dict) else data
+                )
+
+        factory = DataAccessFactory(
+            repository=repo,
+            cache=cache,
+            algorithms={"mutating": MutatingAlgorithm()},
+            authorizer=SpyAuthorizer(),
+        )
+        daf = factory.create()
+
+        await repo.save("123", original_data)
+
+        result = await daf.query(
+            QueryInfo(resource_id="123", algorithm="mutating")
+        )
+        assert result.success is True
+        assert result.data == {"name": "Mutated", "status": "active"}
+
+        assert len(authorizer_calls) == 1
+        assert authorizer_calls[0] == original_data

@@ -71,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_execute_query` authorizer receives raw repository data on both cache-miss and cache-hit paths
 - `post()` no-op `delete_prefix` removed (no prior query cache entries exist for a new resource)
 - FastAPI adapter error translation consolidated into single `_handle_daf_error` method
+- `MemoryRepository.try_update()` returns an independent deep copy of the updated value
+- `MemoryRepository` and `MemoryCache` document deepcopy-able value constraint
+- `Repository` and `Cache` protocols document deepcopy-able value constraint
+- `Algorithm` protocol documents immutability contract (execute() must not mutate input)
+- `DataAccess` module docstring documents write-through-DAF consistency boundary
+- `DataAccess.__init__` docstring documents existence-disclosure behavior (404 vs 403)
+- README Authorization Boundary documents existence-disclosure and masking layer option
+- README Architecture section documents write-through-DAF consistency boundary
+- Cache entries extend to `{"raw": ..., "transformed": ..., "generation": N}` for temporal invalidation
 
 ### Fixed
 
@@ -103,6 +112,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Authorizer receives transformed/post-algorithm data on cache hit instead of raw repository data (R18)
 - No-op `delete_prefix` in `post()` after creating new resource (R19)
 - FastAPI route handlers duplicate error translation logic (R20)
+- `try_update()` returns direct reference to new value, allowing caller mutation of stored state (R21)
+- Existence-disclosure behavior (403 vs 404) undocumented as intentional security model (R22)
+- Direct repository writes bypass DAF cache invalidation (R23)
+- Stale cache resurrection after mutation via concurrent query repopulation race (R24)
+- Deepcopy-able value constraint undocumented for Repository/Cache/Memory implementations (R25)
+- Algorithm immutability contract undocumented; in-place mutation can corrupt raw auth data (R26)
 
 ### Security
 
@@ -118,6 +133,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - user.id contract documented; str(user) fallback emits DeprecationWarning
 - Prefix-based cache invalidation prevents stale entries across filter/algorithm projections
 - Authorizer always receives raw repository data, ensuring consistent ownership decisions regardless of cache state
+- `try_update()` returns independent deep copy, formalizing mutation-return ownership boundary
+- Existence-disclosure behavior documented as intentional security model property
+- Write-through-DAF consistency boundary documented; direct repository writes bypass invalidation
+- Generation counter prevents stale cache resurrection after mutations
+- Algorithm immutability contract documented; algorithms must not mutate their input snapshot
 
 ## [Unreleased]
 

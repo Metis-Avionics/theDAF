@@ -11,6 +11,12 @@ class Repository[T](Protocol):
     or snapshots. Callers must not mutate values returned by ``get()``
     in-place; ``save()`` and ``create()`` must not retain caller
     references.
+
+    Values must support ``copy.deepcopy()``. The reference implementation
+    uses ``copy.deepcopy()`` at all ownership boundaries.
+
+    ``try_update()`` returns an owned snapshot of the new value on success;
+    mutations to the returned value do not affect the stored state.
     """
 
     async def get(self, key: str) -> T | None:
@@ -54,6 +60,9 @@ class Cache(Protocol):
     Implementations own their cached values and return independent copies.
     Callers must not mutate values returned by ``get()`` in-place;
     ``set()`` must not retain caller references.
+
+    Values must support ``copy.deepcopy()``. The reference implementation
+    uses ``copy.deepcopy()`` at all ownership boundaries.
     """
 
     async def get(self, key: str) -> Any | None:
@@ -78,7 +87,13 @@ class Cache(Protocol):
 
 
 class Algorithm(Protocol):
-    """Abstract algorithm protocol."""
+    """Abstract algorithm protocol.
+
+    ``execute()`` must not mutate its input. It receives a snapshot and
+    returns a new value. In-place mutation breaks the authorization-raw-data
+    invariant: the raw data passed to the authorizer would be affected by
+    algorithm side-effects.
+    """
 
     async def execute(self, input_data: Any) -> Any:
         """Execute the algorithm with the given input."""

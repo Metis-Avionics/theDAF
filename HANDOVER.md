@@ -4,27 +4,27 @@
 
 ### Current State
 
-The project is in **feature-complete** state with all planned bugs and security issues resolved. The branch `fix/r7-r12-red-team-composition-fixes` is pushed to origin and PR #17 is open for review. PR #16 (R1-R6) is already merged into `main`.
+The project is in **feature-complete** state with all planned bugs and security issues resolved. The branch `fix/r7-r12-red-team-composition-fixes` contains R7-R12 fixes (PR #17) and R13-R21 fixes (pending PR update). PR #17 is open for review. PR #16 (R1-R6) is already merged into `main`.
 
 ### Repository Status
 
 - **Branch**: `fix/r7-r12-red-team-composition-fixes` (pushed to origin)
-- **Commits**: 2 ahead of main (R7-R12 fixes)
-- **Uncommitted Work**: None
-- **PR Status**: #17 open for review (R7-R12 red-team composition fixes)
+- **Commits**: 2 ahead of main (R7-R12 fixes), plus uncommitted R13-R21 changes
+- **Uncommitted Work**: R13-R21 red-team composition fixes staged and ready to commit
+- **PR Status**: #17 open for review (R7-R21 red-team composition fixes)
 
 ### Quality Status
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 112/112 passing |
+| Tests (pytest) | ✅ 115/115 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md` and `.kilo/plans/1786725060659-red-team-composition-fixes-r7-r12.md` have been addressed:
+All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`, `.kilo/plans/1786725060659-red-team-composition-fixes-r7-r12.md`, and `.kilo/plans/1786725334556-red-team-composition-fixes-r13-r21.md` have been addressed:
 
 - **R1**: Core raises AuthorizationError/NotFoundError; FastAPI maps to 403/404
 - **R2**: Single repository read per query with atomic auth+read ordering
@@ -38,6 +38,15 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md` 
 - **R10**: No-op delete_prefix removed from post() for newly created resources
 - **R11**: FastAPI error translation consolidated into _handle_daf_error helper
 - **R12**: CI discrepancy resolved — local CI green
+- **R13**: `try_update()` returns independent deep copy; `MemoryRepository` class docstring documents deepcopy-able constraint
+- **R14**: Existence-disclosure behavior (404 vs 403) documented as intentional security model property in `DataAccess`, README, and FastAPI adapter
+- **R15**: Deferred — authorization-policy versioning requires persistent/distributed cache design
+- **R16**: Write-through-DAF consistency boundary documented; direct repository writes bypass invalidation
+- **R17**: Deferred — `UserIdentity` protocol replacement is out of scope
+- **R18**: Deferred — default POST authorization policy is a product decision; permissive default retained
+- **R19**: `DataAccess` generation counter prevents stale cache resurrection; cache entries carry `generation`; stale entries rejected on cache hit
+- **R20**: `Repository`/`Cache` protocols and `MemoryRepository`/`MemoryCache` docstrings document deepcopy-able value constraint
+- **R21**: `Algorithm` protocol documents immutability contract; `_execute_cache_miss` comment documents snapshot semantics; test added
 
 ### Key Facts
 
@@ -48,7 +57,7 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md` 
 - **Author**: Rayan Aliane
 - **Core Dependency**: `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 112/112 passing
+- **Test Count**: 115/115 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 

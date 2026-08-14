@@ -627,6 +627,28 @@ class TestMutableValueIsolation:
         assert stored_list == [1, 2, {"nested": "value"}]
 
     @pytest.mark.asyncio
+    async def test_try_update_returns_independent_copy(self) -> None:
+        """Test that try_update returns a deep copy; mutating it does not
+        affect stored state."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+
+        current = await repo.get("123")
+        assert current is not None
+
+        returned = await repo.try_update(
+            "123",
+            expected=current,
+            update=lambda e: {**e, "name": "Jane"},
+        )
+        assert returned is not None
+        returned["name"] = "Mutated"
+
+        stored = await repo.get("123")
+        assert stored is not None
+        assert stored["name"] == "Jane"
+
+    @pytest.mark.asyncio
     async def test_cache_returns_independent_copy(self) -> None:
         """Test that mutating cached dict does not affect cache state."""
         cache = MemoryCache()
@@ -923,3 +945,55 @@ class TestConcurrentModificationDetection:
         )
         assert result.success is False
         assert result.error_type == "conflict"
+
+
+class TestStaleCacheResurrection:
+    """Test that stale cache entries are never served after a mutation."""
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_not_resurrected_after_mutation(self) -> None:
+        """Test that a stale cache entry with an old generation is treated
+        as a miss after a mutation increments the generation counter."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+
+        await repo.save(
+            "123",
+            {"name": "John", "status": "active", "owner_id": "user-1"},
+        )
+        user = FakeUser("user-1")
+
+        result1 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert result1.data == {
+            "name": "John",
+            "status": "active",
+            "owner_id": "user-1",
+        }
+
+        await daf.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=user,
+        )
+
+        cache_key = _expected_cache_key("123", {}, None, "user-1")
+        stale_entry = {
+            "raw": {"name": "John", "status": "active", "owner_id": "user-1"},
+            "transformed": {"name": "John", "status": "active"},
+            "generation": 0,
+        }
+        cache._cache[cache_key] = stale_entry
+
+        result2 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result2.success is True
+        assert result2.cache_hit is False
+        assert result2.data == {
+            "name": "Jane",
+            "status": "active",
+            "owner_id": "user-1",
+        }

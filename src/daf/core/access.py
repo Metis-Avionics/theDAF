@@ -1,4 +1,9 @@
-"""Data access orchestration layer."""
+"""Data access orchestration layer.
+
+Write-through-DAF consistency model: all mutations must flow through
+DataAccess to trigger cache invalidation. Direct writes to the underlying
+repository bypass invalidation entirely and may leave stale cache entries.
+"""
 
 import hashlib
 import json
@@ -32,6 +37,11 @@ class DataAccess:
     a trusted internal data source; authorization enforces usage policy,
     not access policy. This preserves the single-read invariant: the
     repository is read exactly once per cache miss.
+
+    This security model does not provide resource-existence confidentiality.
+    Callers may distinguish nonexistent resources (NotFoundError / HTTP 404)
+    from existing resources for which they lack authorization
+    (AuthorizationError / HTTP 403).
     """
 
     def __init__(
@@ -53,6 +63,7 @@ class DataAccess:
         self._cache = cache
         self._algorithms = algorithms or {}
         self._authorizer = authorizer
+        self._generation: int = 0
 
     async def _check_authorization(
         self,
@@ -164,7 +175,7 @@ class DataAccess:
         cache_key = self._cache_key(info, user)
 
         cached = await self._cache.get(cache_key)
-        if cached is not None:
+        if cached is not None and cached.get("generation") == self._generation:
             return await self._handle_cache_hit(
                 cache_key, info.resource_id, user, cached
             )
@@ -195,29 +206,25 @@ class DataAccess:
         self, cache_key: str, info: QueryInfo, user: Any
     ) -> QueryResult:
         """Execute a full query on cache miss and populate the cache."""
+        current_generation = self._generation
         data = await self._repository.get(info.resource_id)
         if data is None:
             logger.info("repository miss", extra={"resource_id": info.resource_id})
-            raise NotFoundError(
-                f"Resource '{info.resource_id}' not found"
-            )
-
+            raise NotFoundError(f"Resource '{info.resource_id}' not found")
         raw_data = data
-
         if self._authorizer is not None:
             await self._check_authorization(
                 "query", info.resource_id, user, data=data
             )
-
         data = self._apply_filters(data, info.filters)
-
         algorithm_stats = None
         if info.algorithm:
             data, algorithm_stats = await self._run_algorithm(data, info.algorithm)
-
-        await self._cache.set(cache_key, {"raw": raw_data, "transformed": data})
+        await self._cache.set(
+            cache_key,
+            {"raw": raw_data, "transformed": data, "generation": current_generation},
+        )
         logger.debug("cache set", extra={"key": cache_key})
-
         return QueryResult(
             success=True,
             data=data,
@@ -266,6 +273,8 @@ class DataAccess:
         )
         resource_id = await self._repository.create(info.data)
 
+        self._generation += 1
+
         return MutationResult(
             success=True,
             resource_id=resource_id,
@@ -306,6 +315,7 @@ class DataAccess:
             )
 
         await self._cache.delete_prefix(f"query:{info.resource_id}:")
+        self._generation += 1
         logger.debug(
             "put cache invalidated",
             extra={"resource_id": info.resource_id},
@@ -370,6 +380,7 @@ class DataAccess:
             )
 
         await self._cache.delete_prefix(f"query:{info.resource_id}:")
+        self._generation += 1
         logger.debug(
             "delete cache invalidated",
             extra={"resource_id": info.resource_id},

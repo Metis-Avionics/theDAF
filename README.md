@@ -113,6 +113,8 @@ class DataAccess:
     async def delete(self, info: DeleteInfo) -> MutationResult: ...
 ```
 
+**Consistency boundary:** DAF cache invalidation is triggered only by mutations through `DataAccess`. Direct writes to the underlying repository bypass cache invalidation. For correctness, all mutations must flow through `DataAccess`, or the caller must manually invalidate affected cache entries.
+
 #### 6. **DataAccessFactory** – Composition
 
 Responsible for constructing a configured `DataAccess` instance with its dependencies.
@@ -163,6 +165,8 @@ This design choice means:
 - The repository is read exactly once per cache miss (single-read invariant).
 - The authorizer always receives the raw repository data, even on cache hit, to make consistent ownership decisions.
 - If your deployment requires authorization-before-read (e.g., for audited data sources or multi-tenant isolation at the storage layer), implement that check at the repository level.
+
+**Resource existence is not concealed.** The default security model maps NotFoundError to 404 and AuthorizationError to 403. This allows callers to infer resource existence. If existence confidentiality is required, implement a masking layer at the adapter level.
 
 ### Data Contracts
 

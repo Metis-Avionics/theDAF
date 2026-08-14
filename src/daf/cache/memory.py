@@ -8,7 +8,11 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryCache:
-    """In-memory cache implementation."""
+    """In-memory cache implementation.
+
+    Values must support ``copy.deepcopy()``. Non-deepcopy-able values
+    (e.g. open file handles, locks) are not supported.
+    """
 
     def __init__(self) -> None:
         """Initialize the in-memory cache."""

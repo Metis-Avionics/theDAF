@@ -5,6 +5,11 @@ DataAccess layer. It translates HTTP requests into DataAccess
 operations and applies endpoint-level rate limiting.
 
 Note: FastAPI is optional. Core DataAccess does not depend on this.
+
+Security note: The adapter maps AuthorizationError to HTTP 403 and
+NotFoundError to HTTP 404. This means callers can distinguish
+forbidden resources from nonexistent ones. Existence confidentiality
+requires a masking layer at the adapter level.
 """
 
 import json

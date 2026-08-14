@@ -233,3 +233,62 @@ Each session entry should include:
 - Power of Ten checks pass after refactoring _execute_query
 
 ---
+
+## Session 004 - 2026-08-14
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Branch `fix/r7-r12-red-team-composition-fixes` contains committed R7-R12 fixes (PR #17). Uncommitted R13-R21 red-team composition fixes are staged in working tree.
+
+**Actions Taken**:
+- Read plan `.kilo/plans/1786725334556-red-team-composition-fixes-r13-r21.md`
+- Implemented R13-R21 fixes: mutation-return ownership, existence-disclosure docs, write-through-DAF consistency docs, generation counter for temporal cache correctness, deepcopy-able value constraints, algorithm immutability contract
+- Added 3 new tests: `test_try_update_returns_independent_copy`, `test_stale_cache_not_resurrected_after_mutation`, `test_algorithm_must_not_mutate_input`
+- Updated living docs: CHANGELOG.md, HANDOVER.md, SESSION.md
+- Ran full validation: 115 tests passing, mypy --strict clean, ruff clean, Power of Ten clean
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/repositories/memory.py | Modified | R13: `try_update()` returns `copy.deepcopy(new_value)`; R20: class docstring deepcopy-able constraint |
+| src/daf/core/protocols.py | Modified | R13: `Repository` docstring owned snapshot; R20: `Repository`/`Cache` deepcopy-able docstrings; R21: `Algorithm` immutability contract |
+| src/daf/core/access.py | Modified | R14: existence-disclosure docstring; R16: module docstring write-through-DAF note; R19: generation counter, cache entry shape, hit/miss updates; R21: snapshot comment |
+| src/daf/adapters/fastapi.py | Modified | R14: module docstring existence-disclosure note |
+| src/daf/cache/memory.py | Modified | R20: class docstring deepcopy-able constraint |
+| tests/integration/test_security_invariants.py | Modified | R13: `test_try_update_returns_independent_copy`; R19: `test_stale_cache_not_resurrected_after_mutation` |
+| tests/integration/test_data_access.py | Modified | R21: `test_algorithm_must_not_mutate_input` |
+| README.md | Modified | R14: Authorization Boundary existence-disclosure; R16: write-through-DAF consistency boundary |
+| CHANGELOG.md | Modified | Added R13-R21 fixes and security documentation |
+| HANDOVER.md | Modified | Updated project state, test count, issue list |
+| SESSION.md | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `fix/r7-r12-red-team-composition-fixes`
+- **Version**: 0.2.0 (pending release)
+- **Tests**: 115/115 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Power of Ten**: All checks pass
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes
+- [ ] Push branch to origin (updates PR #17)
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- All 9 issues from the R13-R21 plan are implemented and validated
+- 115 tests pass (up from 112)
+- Living docs updated to reflect R13-R21 fixes
+- Generation counter ensures temporal cache correctness across mutations
+
+---

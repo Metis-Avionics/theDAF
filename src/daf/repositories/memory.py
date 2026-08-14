@@ -16,6 +16,9 @@ class MemoryRepository[T]:
     (``is``) to detect concurrent modification. This is a best-effort
     implementation suitable for testing only; real transactional backends
     should implement these primitives with proper atomicity guarantees.
+
+    Values must support ``copy.deepcopy()``. Non-deepcopy-able values
+    (e.g. open file handles, locks) are not supported.
     """
 
     def __init__(self) -> None:
@@ -107,7 +110,7 @@ class MemoryRepository[T]:
                 return None
             new_value = update(current)
             self._store[key] = new_value
-            return new_value
+            return copy.deepcopy(new_value)
 
     async def try_delete(self, key: str, expected: T) -> bool:
         """Conditionally delete if current value equals expected.
