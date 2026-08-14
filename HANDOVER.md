@@ -56,7 +56,7 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`,
 - **R21b**: `_execute_cache_miss` deepcopies repository data before algorithm execution; prevents in-place algorithm mutation from poisoning auth snapshot
 - **Superedge collapse**: `_superedge_invalidate()` atomically deletes query keys, generation key, calls `shake()`, and writes back `current + 1` under the per-resource lock — eliminates the two-step `delete_prefix + _advance_generation` pattern in `put()` and `delete()`
 - **AST tree shaking**: `MemoryCache.shake(prefix) -> int` removes all keys under a prefix and returns the removal count; added to `Cache` protocol; enables proactive stale-branch pruning after mutations
-- **graphifyy CI**: `graphifyy>=0.9.42` added as a runtime dependency; new `graphify` CI job runs `graphify extract` and `graphify diagnose multigraph --json` after build; `graphify-out/` and `graph.json` ignored in `.gitignore`
+- **graphifyy CI**: `graphifyy>=0.9.42` added as a runtime dependency; new `graphify` CI job runs `graphify extract` and `graphify diagnose multigraph --json` after build; `directed_same_endpoint_collapsed_edges` threshold enforced at 30 (baseline 26); `graphify-out/` and `graph.json` ignored in `.gitignore`
 
 ### Key Facts
 

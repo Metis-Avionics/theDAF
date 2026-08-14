@@ -459,5 +459,10 @@ Each session entry should include:
 - `_superedge_invalidate` reads generation under lock before deletion, preventing lost increments when the gen key is absent
 - `shake` is O(N) over the entire `MemoryCache`; documented as bounded in-memory only
 - graphifyy version is pinned to avoid graph-shape drift across releases
+- First graphify baseline: 696 nodes, 1761 edges, 26 same-endpoint collapsed groups; CI threshold set to 30
+
+---
+
+## Session 008 - 2026-08-14
 
 ---

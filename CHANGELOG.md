@@ -172,6 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Superedge collapse reads generation under lock before deletion, preventing lost increments and ensuring atomic invalidation
 - AST tree shaking enables proactive stale-branch pruning via `shake()` on cache backends that support prefix traversal
 - graphifyy multigraph diagnostics in CI detect same-endpoint edge-collapse risk in dependency graph
+- CI enforces `directed_same_endpoint_collapsed_edges` threshold at 30 (first-run baseline 26); diagnose output written to `graphify-out/diagnose.json`
 
 ## [0.1.0] - 2026-08-13
 
