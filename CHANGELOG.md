@@ -63,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/unit/test_barrels.py` with subset and import-invariant assertions
 - `DataAccess._namespace_cache` for cached SHA-256 namespace hashing
 - `MemoryCache._TrieNode` prefix trie for O(prefix_len) prefix collection
+- `scripts/graphify_report.py` automates graphify extract → diagnose → tree → callflow pipeline
+- `scripts/graphify_affected.py` maps changed files to impacted test files using graphify `affected`
+- CI graphify job uploads `diagnose.json`, `GRAPH_TREE.html`, and `theDAF-callflow.html` as artifacts
 
 ### Changed
 

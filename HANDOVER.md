@@ -26,11 +26,12 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, and prior red-team plans have been addressed:
 
-- **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files (`daf`, `daf.core`, `adapters`, `algorithms`, `cache`, `contracts`, `repositories`)
-- **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant and import invariant
+- **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files
+- **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant
 - **Namespace cache**: `DataAccess._namespace_cache` caches SHA-256 hashes for repeated `_resource_namespace` calls
 - **Prefix trie**: `MemoryCache._TrieNode` enables O(prefix_len) prefix collection for `delete_prefix` and `shake`
 - **R1-R26, R19b, R19c, R3b, R21b, R22, R23, R24, R25, R26, superedge collapse, AST tree shaking, graphifyy CI**: All implemented and merged in PR #17
+- **Architecture docs**: `scripts/graphify_report.py` and `scripts/graphify_affected.py` automate graphify suite; CI uploads `GRAPH_TREE.html` and `theDAF-callflow.html` artifacts
 
 ### Key Facts
 
@@ -44,6 +45,7 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 - **Test Count**: 136/136 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
+- **Architecture Docs**: `graphify-out/GRAPH_TREE.html`, `graphify-out/theDAF-callflow.html`
 
 ### Project Structure
 
@@ -83,6 +85,10 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 │       ├── test_authorization.py  # 15 tests
 │       ├── test_fastapi_adapter.py  # 18 tests
 │       └── test_security_invariants.py  # 30 tests
+├── scripts/
+│   ├── power_of_ten.py         # NASA/JPL Power of Ten AST checker
+│   ├── graphify_report.py      # graphify extract+diagnose+tree+callflow pipeline
+│   └── graphify_affected.py    # impacted-test analysis for CI optimization
 ├── pyproject.toml               # Build config, metadata, tool configs
 ├── README.md                    # Package documentation
 ├── SECURITY.md                  # Security policy
@@ -109,6 +115,8 @@ The following gate files are maintained and updated after every turn:
 - `BUGS.md` - Known bugs and security findings
 - `HANDOVER.md` - This handover document
 - `SESSION.md` - Session tracking
+- `scripts/graphify_report.py` - One-command graphify architecture report
+- `scripts/graphify_affected.py` - Impacted-test analysis for CI
 
 ### Contact
 
