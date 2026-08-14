@@ -5,12 +5,17 @@ DataAccess layer. It translates HTTP requests into DataAccess
 operations and applies endpoint-level rate limiting.
 
 Note: FastAPI is optional. Core DataAccess does not depend on this.
+
+Security note: The adapter maps AuthorizationError to HTTP 403 and
+NotFoundError to HTTP 404. This means callers can distinguish
+forbidden resources from nonexistent ones. Existence confidentiality
+requires a masking layer at the adapter level.
 """
 
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from typing import Any, NoReturn, TypeVar
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
@@ -126,6 +131,24 @@ class DataAccessRouter:
 
         return _Authorizer()
 
+    def _handle_daf_error(
+        self, error: DataAccessError, context: dict[str, Any]
+    ) -> "NoReturn":
+        """Translate a DataAccessError into an HTTPException.
+
+        Args:
+            error: The error raised by the DataAccess layer.
+            context: Extra context to attach to log output.
+        """
+        if isinstance(error, AuthorizationError):
+            raise HTTPException(status_code=403, detail="Forbidden") from None
+        if isinstance(error, NotFoundError):
+            raise HTTPException(status_code=404, detail="Not found") from None
+        logger.error("data access error", extra=context)
+        raise HTTPException(
+            status_code=500, detail="Internal server error"
+        ) from None
+
     def _setup_routes(self) -> None:
         """Set up all data access routes."""
         self._setup_query_route()
@@ -133,7 +156,7 @@ class DataAccessRouter:
         self._setup_put_route()
         self._setup_delete_route()
 
-    def _setup_query_route(self) -> None:  # noqa: C901
+    def _setup_query_route(self) -> None:
         if self._router is None:
             raise RuntimeError("Router not initialized")
         @self._router.get("/{resource_id}", response_model=QueryResult)
@@ -174,22 +197,9 @@ class DataAccessRouter:
                     extra={"resource_id": resource_id},
                 )
                 return await self._daf.query(info, user=current_user)
-            except AuthorizationError:
-                raise HTTPException(
-                    status_code=403, detail="Forbidden"
-                ) from None
-            except NotFoundError:
-                raise HTTPException(
-                    status_code=404, detail="Not found"
-                ) from None
-            except DataAccessError:
-                logger.error(
-                    "query endpoint error",
-                    extra={"resource_id": resource_id},
-                )
-                raise HTTPException(
-                    status_code=500, detail="Internal server error"
-                ) from None
+            except DataAccessError as e:
+                self._handle_daf_error(e, {"resource_id": resource_id})
+                raise RuntimeError("unreachable") from None
 
     def _setup_post_route(self) -> None:
         @self._router.post("", response_model=MutationResult)
@@ -202,19 +212,9 @@ class DataAccessRouter:
             try:
                 logger.debug("post endpoint")
                 return await self._daf.post(info, user=current_user)
-            except AuthorizationError:
-                raise HTTPException(
-                    status_code=403, detail="Forbidden"
-                ) from None
-            except NotFoundError:
-                raise HTTPException(
-                    status_code=404, detail="Not found"
-                ) from None
-            except DataAccessError:
-                logger.error("post endpoint error")
-                raise HTTPException(
-                    status_code=500, detail="Internal server error"
-                ) from None
+            except DataAccessError as e:
+                self._handle_daf_error(e, {"operation": "post"})
+                raise RuntimeError("unreachable") from None
 
     def _setup_put_route(self) -> None:
         @self._router.put("/{resource_id}", response_model=MutationResult)
@@ -231,22 +231,9 @@ class DataAccessRouter:
                     extra={"resource_id": resource_id},
                 )
                 return await self._daf.put(info, user=current_user)
-            except AuthorizationError:
-                raise HTTPException(
-                    status_code=403, detail="Forbidden"
-                ) from None
-            except NotFoundError:
-                raise HTTPException(
-                    status_code=404, detail="Not found"
-                ) from None
-            except DataAccessError:
-                logger.error(
-                    "put endpoint error",
-                    extra={"resource_id": resource_id},
-                )
-                raise HTTPException(
-                    status_code=500, detail="Internal server error"
-                ) from None
+            except DataAccessError as e:
+                self._handle_daf_error(e, {"resource_id": resource_id})
+                raise RuntimeError("unreachable") from None
 
     def _setup_delete_route(self) -> None:
         @self._router.delete("/{resource_id}", response_model=MutationResult)
@@ -263,22 +250,9 @@ class DataAccessRouter:
                     extra={"resource_id": resource_id},
                 )
                 return await self._daf.delete(info, user=current_user)
-            except AuthorizationError:
-                raise HTTPException(
-                    status_code=403, detail="Forbidden"
-                ) from None
-            except NotFoundError:
-                raise HTTPException(
-                    status_code=404, detail="Not found"
-                ) from None
-            except DataAccessError:
-                logger.error(
-                    "delete endpoint error",
-                    extra={"resource_id": resource_id},
-                )
-                raise HTTPException(
-                    status_code=500, detail="Internal server error"
-                ) from None
+            except DataAccessError as e:
+                self._handle_daf_error(e, {"resource_id": resource_id})
+                raise RuntimeError("unreachable") from None
 
     def get_router(self) -> APIRouter:
         """Get the configured router for inclusion in FastAPI app.

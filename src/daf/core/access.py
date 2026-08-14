@@ -1,5 +1,12 @@
-"""Data access orchestration layer."""
+"""Data access orchestration layer.
 
+Write-through-DAF consistency model: all mutations must flow through
+DataAccess to trigger cache invalidation. Direct writes to the underlying
+repository bypass invalidation entirely and may leave stale cache entries.
+"""
+
+import asyncio
+import copy
 import hashlib
 import json
 import logging
@@ -25,6 +32,36 @@ class DataAccess:
     
     Composes repository, cache, and algorithm components to execute
     queries and mutations with proper caching and algorithmic processing.
+
+    Security model: authorization is evaluated after data retrieval on
+    cache miss. The authorizer receives the raw repository data and
+    decides whether the caller may use it. The repository is treated as
+    a trusted internal data source; authorization enforces usage policy,
+    not access policy. This preserves the single-read invariant: the
+    repository is read exactly once per cache miss.
+
+    This security model does not provide resource-existence confidentiality.
+    Callers may distinguish nonexistent resources (NotFoundError / HTTP 404)
+    from existing resources for which they lack authorization
+    (AuthorizationError / HTTP 403).
+
+    Concurrency model:
+
+    - `delete_prefix` is the authoritative invalidation mechanism and is
+      atomic within the MemoryCache implementation (single dict sweep).
+    - Generation counters are per-resource and stored in the shared cache.
+    - Within a single process, generation advancement is serialized via
+      per-resource asyncio locks, eliminating read-modify-write races for
+      the common case of multiple DataAccess instances sharing a cache in
+      the same event loop.
+    - Across processes, generation advancement is best-effort
+      (read-modify-write). Concurrent mutations may observe a temporarily
+      stale generation value, but stale cache entries are always rejected
+      by generation comparison on the next read. The system never serves
+      stale data to callers.
+    - For distributed cache backends, atomic generation advancement
+      requires cache-level CAS or compare-and-set primitives (out of
+      scope for the current Cache protocol).
     """
 
     def __init__(
@@ -46,6 +83,8 @@ class DataAccess:
         self._cache = cache
         self._algorithms = algorithms or {}
         self._authorizer = authorizer
+        self._generation_locks: dict[str, asyncio.Lock] = {}
+        self._generation_locks_lock = asyncio.Lock()
 
     async def _check_authorization(
         self,
@@ -80,6 +119,51 @@ class DataAccess:
         """Get the components used by this DataAccess instance."""
         return self._repository, self._cache, self._algorithms
 
+    async def _generation_lock(self, resource_id: str) -> asyncio.Lock:
+        """Return the per-resource asyncio lock for generation advancement.
+
+        Locks are lazily created and cached in ``_generation_locks``.
+        Access to the dict itself is serialized via ``_generation_locks_lock``
+        to avoid races where two coroutines create duplicate Lock objects
+        for the same namespace.
+        """
+        namespace = self._resource_namespace(resource_id)
+        async with self._generation_locks_lock:
+            if namespace not in self._generation_locks:
+                self._generation_locks[namespace] = asyncio.Lock()
+            return self._generation_locks[namespace]
+
+    def _resource_namespace(self, resource_id: str) -> str:
+        """Return a fixed-width namespace for a resource_id.
+
+        Uses SHA-256 to produce a collision-resistant, structurally
+        unambiguous prefix regardless of resource_id contents.
+        """
+        return hashlib.sha256(resource_id.encode()).hexdigest()
+
+    async def _current_generation(self, resource_id: str) -> int:
+        """Read the current generation counter for a resource from the cache."""
+        lock = await self._generation_lock(resource_id)
+        async with lock:
+            namespace = self._resource_namespace(resource_id)
+            value = await self._cache.get(f"_daf_gen:{namespace}")
+            return value if isinstance(value, int) else 0
+
+    async def _advance_generation(self, resource_id: str) -> None:
+        """Increment the generation counter for a resource in the cache.
+
+        The read-modify-write is performed atomically under the per-resource
+        lock, so concurrent mutations within the same process cannot lose
+        an increment.
+        """
+        lock = await self._generation_lock(resource_id)
+        async with lock:
+            namespace = self._resource_namespace(resource_id)
+            current = await self._cache.get(f"_daf_gen:{namespace}")
+            if not isinstance(current, int):
+                current = 0
+            await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+
     def _cache_key(self, info: QueryInfo, user: Any) -> str:
         """Build cache key from full query semantics."""
         user_id = self._user_id(user)
@@ -96,7 +180,8 @@ class DataAccess:
                 "Filters contain non-JSON-serializable values"
             ) from None
         digest = hashlib.sha256(canonical.encode()).hexdigest()
-        return f"query:{info.resource_id}:{digest}"
+        namespace = self._resource_namespace(info.resource_id)
+        return f"query:{namespace}:{digest}"
 
     def _apply_filters(self, data: Any, filters: dict[str, Any] | None) -> Any:
         """Apply in-memory filters to retrieved data."""
@@ -138,7 +223,14 @@ class DataAccess:
         return await self._execute_query(info, user)
 
     async def _execute_query(self, info: QueryInfo, user: Any) -> QueryResult:
-        """Execute the core query logic."""
+        """Execute the core query logic.
+
+        On cache miss, the raw repository value is retrieved first, then
+        authorization is checked against that value. This preserves the
+        single-read invariant. The cache stores both the raw data (for
+        re-authorization on cache hit) and the transformed result (for
+        returning to the caller).
+        """
         logger.debug(
             "execute_query",
             extra={
@@ -151,46 +243,57 @@ class DataAccess:
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
-            if self._authorizer is not None:
-                await self._check_authorization(
-                    "query", info.resource_id, user, data=cached
+            current_gen = await self._current_generation(info.resource_id)
+            if cached.get("generation") == current_gen:
+                return await self._handle_cache_hit(
+                    cache_key, info.resource_id, user, cached
                 )
-            logger.debug("cache hit", extra={"key": cache_key})
-            return QueryResult(
-                success=True,
-                data=cached,
-                error=None,
-                error_type=None,
-                cache_hit=True,
-                algorithm_stats=None,
-            )
+        return await self._execute_cache_miss(cache_key, info, user)
 
+    async def _handle_cache_hit(
+        self,
+        cache_key: str,
+        resource_id: str,
+        user: Any,
+        cached: dict[str, Any],
+    ) -> QueryResult:
+        """Authorize and return a cached query result."""
+        raw_data = cached["raw"]
+        if self._authorizer is not None:
+            await self._check_authorization("query", resource_id, user, data=raw_data)
+        logger.debug("cache hit", extra={"key": cache_key})
+        return QueryResult(
+            success=True,
+            data=cached["transformed"],
+            error=None,
+            error_type=None,
+            cache_hit=True,
+            algorithm_stats=None,
+        )
+
+    async def _execute_cache_miss(
+        self, cache_key: str, info: QueryInfo, user: Any
+    ) -> QueryResult:
+        """Execute a full query on cache miss and populate the cache."""
+        current_generation = await self._current_generation(info.resource_id)
         data = await self._repository.get(info.resource_id)
         if data is None:
             logger.info("repository miss", extra={"resource_id": info.resource_id})
-            raise NotFoundError(
-                f"Resource '{info.resource_id}' not found"
-            )
-
+            raise NotFoundError(f"Resource '{info.resource_id}' not found")
+        raw_data = copy.deepcopy(data)
         if self._authorizer is not None:
-            await self._check_authorization("query", info.resource_id, user, data=data)
-
+            await self._check_authorization(
+                "query", info.resource_id, user, data=data
+            )
         data = self._apply_filters(data, info.filters)
-
         algorithm_stats = None
         if info.algorithm:
-            algorithm = self._algorithms.get(info.algorithm)
-            if algorithm is not None:
-                logger.debug("running algorithm", extra={"algorithm": info.algorithm})
-                algorithm_result = await algorithm.execute(data)
-                algorithm_stats = await algorithm.get_stats()
-                data = algorithm_result
-            else:
-                raise ValidationError(f"Unknown algorithm: {info.algorithm}")
-
-        await self._cache.set(cache_key, data)
+            data, algorithm_stats = await self._run_algorithm(data, info.algorithm)
+        await self._cache.set(
+            cache_key,
+            {"raw": raw_data, "transformed": data, "generation": current_generation},
+        )
         logger.debug("cache set", extra={"key": cache_key})
-
         return QueryResult(
             success=True,
             data=data,
@@ -199,6 +302,18 @@ class DataAccess:
             cache_hit=False,
             algorithm_stats=algorithm_stats,
         )
+
+    async def _run_algorithm(
+        self, data: Any, algorithm_name: str
+    ) -> tuple[Any, dict[str, Any] | None]:
+        """Execute an algorithm by name and return (result, stats)."""
+        algorithm = self._algorithms.get(algorithm_name)
+        if algorithm is None:
+            raise ValidationError(f"Unknown algorithm: {algorithm_name}")
+        logger.debug("running algorithm", extra={"algorithm": algorithm_name})
+        result = await algorithm.execute(data)
+        stats = await algorithm.get_stats()
+        return result, stats
 
     async def post(self, info: PostInfo, user: Any = None) -> MutationResult:
         """Execute a create/post operation.
@@ -227,11 +342,7 @@ class DataAccess:
         )
         resource_id = await self._repository.create(info.data)
 
-        await self._cache.delete_prefix(f"query:{resource_id}:")
-        logger.debug(
-            "post cache invalidated",
-            extra={"resource_id": resource_id},
-        )
+        await self._advance_generation(resource_id)
 
         return MutationResult(
             success=True,
@@ -272,7 +383,9 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        await self._cache.delete_prefix(f"query:{info.resource_id}:")
+        namespace = self._resource_namespace(info.resource_id)
+        await self._cache.delete_prefix(f"query:{namespace}:")
+        await self._advance_generation(info.resource_id)
         logger.debug(
             "put cache invalidated",
             extra={"resource_id": info.resource_id},
@@ -336,7 +449,9 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        await self._cache.delete_prefix(f"query:{info.resource_id}:")
+        namespace = self._resource_namespace(info.resource_id)
+        await self._cache.delete_prefix(f"query:{namespace}:")
+        await self._advance_generation(info.resource_id)
         logger.debug(
             "delete cache invalidated",
             extra={"resource_id": info.resource_id},

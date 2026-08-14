@@ -4,37 +4,56 @@
 
 ### Current State
 
-The project is in **feature-complete** state with all planned bugs and security issues resolved. A feature branch `fix/remaining-bugs-security` has been pushed to GitHub and is ready for PR creation and review.
+The project is in **feature-complete** state with all planned bugs and security issues resolved. The branch `fix/r7-r12-red-team-composition-fixes` contains R7-R12 fixes (PR #17) and R13-R21 fixes (pending PR update). PR #17 is open for review. PR #16 (R1-R6) is already merged into `main`.
 
 ### Repository Status
 
-- **Branch**: `fix/remaining-bugs-security` (pushed to origin)
-- **Commits**: 2 (initial + 1 feature commit)
-- **Uncommitted Work**: None
-- **PR Status**: Not yet created (branch pushed, ready for PR)
+- **Branch**: `fix/r7-r12-red-team-composition-fixes` (pushed to origin)
+- **Commits**: 2 ahead of main (R7-R12 + R13-R21 fixes), plus uncommitted concurrency-hardening changes
+- **Uncommitted Work**: Concurrency hardening (per-resource generation locks, stale-query test, concurrent-mutation test)
+- **PR Status**: #17 open for review (R7-R21 + concurrency hardening)
 
 ### Quality Status
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 87/87 passing |
+| Tests (pytest) | ✅ 121/121 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786694904837-remaining-bugs-security.md` have been addressed:
+All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`, `.kilo/plans/1786725060659-red-team-composition-fixes-r7-r12.md`, and `.kilo/plans/1786725334556-red-team-composition-fixes-r13-r21.md` have been addressed:
 
-- **R1**: Removed resource existence check from FastAPI authorizer to prevent enumeration attacks
-- **R2**: Wired `filters` and `algorithm` query parameters to GET endpoint
-- **R3**: Fixed `_apply_filters` to return `{}` when filters present but data is not a dict
-- **R4**: Hardened `_cache_key` to handle non-JSON-serializable filters with `ValidationError`
-- **R5**: Added input validation guards for `resource_id`, `data`, and `resource_type`
-- **R6**: Included `resource_type` in POST `MutationResult.data`
-- **R7**: Added `get_components()` to decouple adapter from private state
-- **R8**: Avoided in-place mutation of validated `PutInfo` in PUT endpoint
-- **R9**: Added structured logging to all core components
+- **R1**: Core raises AuthorizationError/NotFoundError; FastAPI maps to 403/404
+- **R2**: Single repository read per query with atomic auth+read ordering
+- **R3**: Prefix-based cache keys with resource_id scope and delete_prefix invalidation
+- **R4**: MemoryRepository/MemoryCache return deep copies for dict values
+- **R5**: Deprecation warning for str(user) fallback in _user_id
+- **R6**: POST authorizer receives data=info.data with resource_id=None (documented)
+- **R7**: MemoryRepository/MemoryCache deepcopy all non-None values at get/set/save/create boundaries
+- **R8**: Authorization-after-read model documented as security model decision in access.py and README.md
+- **R9**: Cache entry stores {"raw": ..., "transformed": ...}; authorizer always receives raw data
+- **R10**: No-op delete_prefix removed from post() for newly created resources
+- **R11**: FastAPI error translation consolidated into _handle_daf_error helper
+- **R12**: CI discrepancy resolved — local CI green
+- **R13**: `try_update()` returns independent deep copy; `MemoryRepository` class docstring documents deepcopy-able constraint
+- **R14**: Existence-disclosure behavior (404 vs 403) documented as intentional security model property in `DataAccess`, README, and FastAPI adapter
+- **R15**: Deferred — authorization-policy versioning requires persistent/distributed cache design
+- **R16**: Write-through-DAF consistency boundary documented; direct repository writes bypass invalidation
+- **R17**: Deferred — `UserIdentity` protocol replacement is out of scope
+- **R18**: Deferred — default POST authorization policy is a product decision; permissive default retained
+- **R19**: `DataAccess` generation counter prevents stale cache resurrection; cache entries carry `generation`; stale entries rejected on cache hit
+- **R19b**: Generation moved to shared cache with per-resource scoping; prevents stale resurrection across DataAccess instances
+- **R19c**: Generation is per-resource, not global; mutating resource A does not invalidate resource B's cache
+- **R22**: Per-resource asyncio.Lock serializes _advance_generation within the same process; eliminates read-modify-write race for concurrent mutations sharing a cache
+- **R23**: Concurrency model documented in DataAccess docstring; delete_prefix is authoritative invalidation, generation is best-effort fast-path
+- **R24**: New tests prove stale query interleaving is rejected and concurrent mutations advance generation monotonically
+- **R20**: `Repository`/`Cache` protocols and `MemoryRepository`/`MemoryCache` docstrings document deepcopy-able value constraint
+- **R21**: `Algorithm` protocol documents immutability contract; `_execute_cache_miss` comment documents snapshot semantics; test added
+- **R21b**: `_execute_cache_miss` deepcopies repository data before algorithm execution; prevents in-place algorithm mutation from poisoning auth snapshot
+- **R3b**: Cache key and invalidation prefix use `sha256(resource_id)` namespace; prevents delimiter-collision attacks when resource_id contains `:`
 
 ### Key Facts
 
@@ -45,7 +64,7 @@ All issues from `.kilo/plans/1786694904837-remaining-bugs-security.md` have been
 - **Author**: Rayan Aliane
 - **Core Dependency**: `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 87/87 passing
+- **Test Count**: 121/121 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 
@@ -74,12 +93,12 @@ All issues from `.kilo/plans/1786694904837-remaining-bugs-security.md` have been
 ├── tests/
 │   ├── unit/
 │   │   ├── test_contracts.py    # 14 tests
-│   │   └── test_components.py   # 14 tests
+│   │   └── test_components.py   # 19 tests
 │   └── integration/
 │       ├── test_data_access.py  # 14 tests
-│       ├── test_authorization.py  # 13 tests
-│       ├── test_fastapi_adapter.py  # 14 tests
-│       └── test_security_invariants.py  # 18 tests
+│       ├── test_authorization.py  # 15 tests
+│       ├── test_fastapi_adapter.py  # 18 tests
+│       └── test_security_invariants.py  # 30 tests
 ├── pyproject.toml               # Build config, metadata, tool configs
 ├── README.md                    # Package documentation
 ├── SECURITY.md                  # Security policy
@@ -92,11 +111,10 @@ All issues from `.kilo/plans/1786694904837-remaining-bugs-security.md` have been
 
 ### Next Steps
 
-1. Create PR on GitHub from `fix/remaining-bugs-security` to `main`
-2. Review PR
-3. Merge PR after approval
-4. Tag release `v0.2.0`
-5. Publish to PyPI
+1. Review PR #17
+2. Merge PR after approval
+3. Tag release `v0.2.0`
+4. Publish to PyPI
 
 ### Gate Files
 
@@ -113,3 +131,4 @@ The following gate files are maintained and updated after every turn:
 
 - **Repository**: https://github.com/RAliane-REBORN/theDAF
 - **Issues**: https://github.com/RAliane-REBORN/theDAF/issues
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17

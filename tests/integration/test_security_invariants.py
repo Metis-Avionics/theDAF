@@ -45,6 +45,18 @@ class FakeAuthorizer:
             raise AuthorizationError(f"Access denied to resource '{resource_id}'")
 
 
+class _StripOwnerIdAlgorithm:
+    """Algorithm that removes owner_id from dict data."""
+
+    async def execute(self, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if k != "owner_id"}
+        return data
+
+    async def get_stats(self) -> dict[str, Any]:
+        return {}
+
+
 def _expected_cache_key(
     resource_id: str,
     filters: dict[str, Any] | None,
@@ -58,7 +70,8 @@ def _expected_cache_key(
         "user_id": user_id,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return f"query:{resource_id}:{hashlib.sha256(canonical.encode()).hexdigest()}"
+    namespace = hashlib.sha256(resource_id.encode()).hexdigest()
+    return f"query:{namespace}:{hashlib.sha256(canonical.encode()).hexdigest()}"
 
 
 class TestAuthorizationCacheIsolation:
@@ -235,28 +248,29 @@ class TestCacheKeyCanonicalization:
         assert user2_no_filter in keys
 
     @pytest.mark.asyncio
-    async def test_cache_key_no_delimiter_collision(self) -> None:
-        """Test that resource_id containing ':' produces distinct keys."""
+    async def test_invalidation_prefix_is_namespace_isolated(self) -> None:
+        """Test that invalidating resource 'a:b' does not invalidate cache
+        entries for resource 'a:b:c'."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
-        
-        await repo.save("a:b", {"name": "John"})
-        await repo.save("a:b:c", {"name": "Jane"})
-        
+        user = FakeUser("user-1")
         daf = DataAccessFactory(repository=repo, cache=cache).create()
         
-        await daf.query(QueryInfo(resource_id="a:b"), user=FakeUser("user-1"))
-        await daf.query(QueryInfo(resource_id="a:b:c"), user=FakeUser("user-1"))
+        await repo.save("a:b", {"name": "Resource A"})
+        await repo.save("a:b:c", {"name": "Resource B"})
         
-        keys = list(cache._cache.keys())
-        assert len(keys) == 2
+        await daf.query(QueryInfo(resource_id="a:b"), user=user)
+        await daf.query(QueryInfo(resource_id="a:b:c"), user=user)
         
-        key_ab = _expected_cache_key("a:b", {}, None, "user-1")
-        key_abc = _expected_cache_key("a:b:c", {}, None, "user-1")
+        await daf.put(
+            PutInfo(resource_id="a:b", data={"name": "Resource A updated"}),
+            user=user,
+        )
         
-        assert key_ab in keys
-        assert key_abc in keys
-        assert key_ab != key_abc
+        result_b_after = await daf.query(QueryInfo(resource_id="a:b:c"), user=user)
+        assert result_b_after.success is True
+        assert result_b_after.cache_hit is True
+        assert result_b_after.data == {"name": "Resource B"}
 
 
 class TestErrorTypePreservation:
@@ -603,6 +617,39 @@ class TestMutableValueIsolation:
         assert stored is not None
         assert stored["name"] == "John"
 
+        list_original = [1, 2, {"nested": "value"}]
+        await repo.save("list:1", list_original)
+        
+        list_fetched = await repo.get("list:1")
+        assert list_fetched is not None
+        list_fetched.append(3)
+        list_fetched[2]["nested"] = "mutated"
+        
+        stored_list = await repo.get("list:1")
+        assert stored_list == [1, 2, {"nested": "value"}]
+
+    @pytest.mark.asyncio
+    async def test_try_update_returns_independent_copy(self) -> None:
+        """Test that try_update returns a deep copy; mutating it does not
+        affect stored state."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+
+        current = await repo.get("123")
+        assert current is not None
+
+        returned = await repo.try_update(
+            "123",
+            expected=current,
+            update=lambda e: {**e, "name": "Jane"},
+        )
+        assert returned is not None
+        returned["name"] = "Mutated"
+
+        stored = await repo.get("123")
+        assert stored is not None
+        assert stored["name"] == "Jane"
+
     @pytest.mark.asyncio
     async def test_cache_returns_independent_copy(self) -> None:
         """Test that mutating cached dict does not affect cache state."""
@@ -618,6 +665,17 @@ class TestMutableValueIsolation:
         cached_again = await cache.get("query:123:abc")
         assert cached_again is not None
         assert cached_again["name"] == "John"
+
+        list_original = [1, 2, {"nested": "value"}]
+        await cache.set("list:1", list_original)
+        
+        list_fetched = await cache.get("list:1")
+        assert list_fetched is not None
+        list_fetched.append(3)
+        list_fetched[2]["nested"] = "mutated"
+        
+        cached_list_again = await cache.get("list:1")
+        assert cached_list_again == [1, 2, {"nested": "value"}]
 
 
 class TestUnknownAlgorithmValidation:
@@ -758,6 +816,86 @@ class TestCacheHitReauthorization:
             )
 
 
+class TestCacheHitAuthorizationRawData:
+    """Test that the authorizer receives raw repository data on cache hit."""
+
+    @pytest.mark.asyncio
+    async def test_authorizer_receives_raw_data_on_cache_hit(self) -> None:
+        """Test that authorization on cache hit uses raw data, not cached result."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        received_data: list[Any] = []
+        
+        class SpyAuthorizer:
+            async def authorize(
+                self,
+                _operation: str,
+                _resource_id: str | None,
+                _user: Any,
+                data: Any = None,
+            ) -> None:
+                received_data.append(data)
+        
+        authorizer = SpyAuthorizer()
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result1 = await daf.query(
+            QueryInfo(resource_id="123"), user=FakeUser("user-1")
+        )
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert len(received_data) == 1
+        assert received_data[0] == {"name": "John", "owner_id": "user-1"}
+        
+        result2 = await daf.query(
+            QueryInfo(resource_id="123"), user=FakeUser("user-1")
+        )
+        assert result2.success is True
+        assert result2.cache_hit is True
+        assert len(received_data) == 2
+        assert received_data[1] == {"name": "John", "owner_id": "user-1"}
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_authorization_sees_raw_owner_id(
+        self,
+    ) -> None:
+        """Test that algorithm-stripped owner_id is still visible to
+        authorizer on cache hit."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        algo = _StripOwnerIdAlgorithm()
+        factory = DataAccessFactory(
+            repository=repo,
+            cache=cache,
+            algorithms={"strip_owner": algo},
+            authorizer=authorizer,
+        )
+        daf = factory.create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result1 = await daf.query(
+            QueryInfo(resource_id="123", algorithm="strip_owner"),
+            user=FakeUser("user-1"),
+        )
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert "owner_id" not in result1.data
+        
+        with pytest.raises(AuthorizationError):
+            await daf.query(
+                QueryInfo(resource_id="123", algorithm="strip_owner"),
+                user=FakeUser("user-2"),
+            )
+
+
 class TestConcurrentModificationDetection:
     """Test CAS detection of concurrent modifications."""
 
@@ -809,3 +947,272 @@ class TestConcurrentModificationDetection:
         )
         assert result.success is False
         assert result.error_type == "conflict"
+
+
+class TestStaleQueryAfterMutation:
+    """Test that a query completing after a mutation does not serve stale data."""
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_write_after_mutation_is_rejected(self) -> None:
+        """Simulate: query misses -> mutation advances gen and clears cache ->
+        stale query writes old entry -> next query sees generation mismatch
+        and returns fresh data."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        user = FakeUser("user-1")
+
+        result1 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert result1.data["name"] == "John"
+
+        await daf.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=user,
+        )
+
+        cache_key = _expected_cache_key("123", {}, None, "user-1")
+        cache._cache[cache_key] = {
+            "raw": {"name": "John", "owner_id": "user-1"},
+            "transformed": {"name": "John", "owner_id": "user-1"},
+            "generation": 0,
+        }
+
+        result2 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result2.success is True
+        assert result2.cache_hit is False
+        assert result2.data["name"] == "Jane"
+
+
+class TestConcurrentMutationGeneration:
+    """Test generation advancement under concurrent mutations."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_mutations_generation_is_monotonic(self) -> None:
+        """Two concurrent mutations on the same resource both advance generation.
+        Final generation must be at least initial + 2 (no lost increments
+        within the same process due to per-resource lock serialization)."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        user = FakeUser("user-1")
+
+        await daf.query(QueryInfo(resource_id="123"), user=user)
+
+        async def mutate(name: str) -> None:
+            await daf.put(
+                PutInfo(resource_id="123", data={"name": name}),
+                user=user,
+            )
+
+        await asyncio.gather(
+            mutate("Jane"),
+            mutate("Jack"),
+        )
+
+        namespace = hashlib.sha256(b"123").hexdigest()
+        final_gen = await cache.get(f"_daf_gen:{namespace}")
+        assert final_gen is not None and isinstance(final_gen, int)
+        assert final_gen >= 2
+
+
+class TestStaleCacheResurrection:
+    """Test that stale cache entries are never served after a mutation."""
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_not_resurrected_after_mutation(self) -> None:
+        """Test that a stale cache entry with an old generation is treated
+        as a miss after a mutation increments the generation counter."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+
+        await repo.save(
+            "123",
+            {"name": "John", "status": "active", "owner_id": "user-1"},
+        )
+        user = FakeUser("user-1")
+
+        result1 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result1.success is True
+        assert result1.cache_hit is False
+        assert result1.data == {
+            "name": "John",
+            "status": "active",
+            "owner_id": "user-1",
+        }
+
+        await daf.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=user,
+        )
+
+        cache_key = _expected_cache_key("123", {}, None, "user-1")
+        stale_entry = {
+            "raw": {"name": "John", "status": "active", "owner_id": "user-1"},
+            "transformed": {"name": "John", "status": "active"},
+            "generation": 0,
+        }
+        cache._cache[cache_key] = stale_entry
+
+        result2 = await daf.query(QueryInfo(resource_id="123"), user=user)
+        assert result2.success is True
+        assert result2.cache_hit is False
+        assert result2.data == {
+            "name": "Jane",
+            "status": "active",
+            "owner_id": "user-1",
+        }
+
+
+class TestStaleCacheResurrectionAcrossInstances:
+    """Test that stale cache entries are not served across DataAccess instances."""
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_not_resurrected_across_data_access_instances(
+        self,
+    ) -> None:
+        """Test that instance A's stale cache miss is rejected after instance B
+        mutates the resource and advances the generation counter."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+
+        instance_a = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        instance_b = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        user = FakeUser("user-1")
+
+        result1 = await instance_a.query(QueryInfo(resource_id="123"), user=user)
+        assert result1.success is True
+        assert result1.cache_hit is False
+
+        await instance_b.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=user,
+        )
+
+        result2 = await instance_a.query(QueryInfo(resource_id="123"), user=user)
+        assert result2.success is True
+        assert result2.cache_hit is False
+        assert result2.data == {
+            "name": "Jane",
+            "owner_id": "user-1",
+        }
+
+
+class TestResourceScopedGenerationIsolation:
+    """Test that generation counters are scoped per resource."""
+
+    @pytest.mark.asyncio
+    async def test_resource_scoped_generation_does_not_invalidate_unrelated(
+        self,
+    ) -> None:
+        """Test that mutating resource '456' does not invalidate cache entries
+        for resource '123'."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "Resource 123"})
+        await repo.save("456", {"name": "Resource 456"})
+
+        await daf.query(QueryInfo(resource_id="123"))
+        assert (await daf.query(QueryInfo(resource_id="123"))).cache_hit is True
+
+        await daf.put(
+            PutInfo(resource_id="456", data={"name": "Resource 456 updated"})
+        )
+
+        result = await daf.query(QueryInfo(resource_id="123"))
+        assert result.success is True
+        assert result.cache_hit is True
+        assert result.data == {"name": "Resource 123"}
+
+
+class TestAlgorithmMutationDoesNotPoisonRawData:
+    """Test that algorithm in-place mutation does not poison cached raw data."""
+
+    @pytest.mark.asyncio
+    async def test_algorithm_mutation_does_not_poison_raw_data(self) -> None:
+        """Test that the 'raw' field stored in the cache is an independent deep
+        copy and is not modified by an algorithm's in-place mutation."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+
+        original_data = {"name": "John", "status": "active", "owner_id": "user-1"}
+
+        class MutatingAlgorithm:
+            async def execute(self, data: Any) -> Any:
+                if isinstance(data, dict):
+                    data["name"] = "Mutated"
+                return data
+
+            async def get_stats(self) -> dict[str, Any]:
+                return {}
+
+        daf = DataAccessFactory(
+            repository=repo,
+            cache=cache,
+            algorithms={"mutating": MutatingAlgorithm()},
+        ).create()
+
+        await repo.save("123", original_data)
+
+        result = await daf.query(
+            QueryInfo(resource_id="123", algorithm="mutating")
+        )
+        assert result.success is True
+        assert result.data == {
+            "name": "Mutated",
+            "status": "active",
+            "owner_id": "user-1",
+        }
+
+        cache_key = _expected_cache_key("123", {}, "mutating", "anonymous")
+        cached_entry = cache._cache.get(cache_key)
+        assert cached_entry is not None
+        assert cached_entry["raw"] == original_data
+        assert cached_entry["raw"]["name"] == "John"
+
+
+class TestCacheEntryStoresGeneration:
+    """Test that cache entries carry a generation field for invalidation."""
+
+    @pytest.mark.asyncio
+    async def test_cache_entry_contains_generation_field(self) -> None:
+        """Test that a cache entry stored on miss includes the current
+        resource-scoped generation counter."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+
+        await repo.save("123", {"name": "John"})
+
+        result = await daf.query(QueryInfo(resource_id="123"))
+        assert result.success is True
+        assert result.cache_hit is False
+
+        cache_key = _expected_cache_key("123", {}, None, "anonymous")
+        entry = cache._cache.get(cache_key)
+        assert entry is not None
+        assert "generation" in entry
+        assert entry["generation"] == 0
+
+        await daf.put(PutInfo(resource_id="123", data={"name": "Jane"}))
+
+        entry_after = cache._cache.get(cache_key)
+        assert entry_after is None

@@ -289,6 +289,8 @@ The existing tests validate component behavior well, but the following interacti
 - ✅ Prefix cache invalidation (PUT/DELETE invalidate all projections)
 - ✅ Atomic auth+read (single repository read for mutation operations)
 - ✅ Unknown algorithm validation (returns validation error)
+- ✅ Stale query interleaving after mutation (stale entry rejected by generation comparison)
+- ✅ Concurrent mutation generation monotonicity (per-resource lock serialization)
 
 ---
 

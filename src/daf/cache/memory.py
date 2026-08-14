@@ -8,7 +8,11 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryCache:
-    """In-memory cache implementation."""
+    """In-memory cache implementation.
+
+    Values must support ``copy.deepcopy()``. Non-deepcopy-able values
+    (e.g. open file handles, locks) are not supported.
+    """
 
     def __init__(self) -> None:
         """Initialize the in-memory cache."""
@@ -21,23 +25,27 @@ class MemoryCache:
             key: The cache key.
             
         Returns:
-            The cached value if found, None otherwise.
+            An independent copy of the cached value if found, None otherwise.
+            Callers must not mutate the returned value in-place.
         """
         logger.debug("cache get", extra={"key": key})
         value = self._cache.get(key)
-        if isinstance(value, dict):
+        if value is not None:
             return copy.deepcopy(value)
-        return value
+        return None
 
     async def set(self, key: str, value: Any) -> None:
         """Store a value in cache.
         
+        The implementation stores an independent copy; the caller's
+        reference is not retained.
+
         Args:
             key: The cache key.
             value: The value to cache.
         """
         logger.debug("cache set", extra={"key": key})
-        self._cache[key] = value
+        self._cache[key] = copy.deepcopy(value)
 
     async def delete(self, key: str) -> None:
         """Delete a value from cache.
