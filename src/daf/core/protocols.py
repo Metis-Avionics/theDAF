@@ -1,5 +1,6 @@
 """Protocol definitions for repository, cache, and algorithm abstractions."""
 
+from collections.abc import Callable
 from typing import Any, Protocol
 
 
@@ -18,8 +19,26 @@ class Repository[T](Protocol):
         """Delete an item by key."""
         ...
 
-    async def list_all(self) -> dict[str, T]:
-        """List all items in the repository."""
+    async def create(self, value: T) -> str:
+        """Create a new item and return its generated resource ID."""
+        ...
+
+    async def try_update(
+        self, key: str, expected: T, update: Callable[[T], T]
+    ) -> T | None:
+        """Conditionally update if current value equals expected.
+
+        Returns the new value if successful, or None if the current value
+        does not match the expected value (e.g. due to concurrent modification).
+        """
+        ...
+
+    async def try_delete(self, key: str, expected: T) -> bool:
+        """Conditionally delete if current value equals expected.
+
+        Returns True if deleted, False if the current value does not match
+        the expected value.
+        """
         ...
 
 
@@ -36,6 +55,10 @@ class Cache(Protocol):
 
     async def delete(self, key: str) -> None:
         """Delete a value from cache."""
+        ...
+
+    async def delete_prefix(self, prefix: str) -> None:
+        """Delete all values with keys starting with the given prefix."""
         ...
 
     async def clear(self) -> None:
@@ -59,7 +82,11 @@ class Authorizer(Protocol):
     """Abstract authorizer protocol for access control."""
 
     async def authorize(
-        self, operation: str, resource_id: str | None, user: Any
+        self,
+        operation: str,
+        resource_id: str | None,
+        user: Any,
+        data: Any = None,
     ) -> None:
         """Authorize an operation on a resource for a given user.
 
@@ -67,6 +94,7 @@ class Authorizer(Protocol):
             operation: The operation being performed.
             resource_id: The resource being accessed, or None for creation.
             user: The authenticated user context.
+            data: Optional data of the resource, for atomic authorization decisions.
 
         Raises:
             AuthorizationError: If the user is not authorized.

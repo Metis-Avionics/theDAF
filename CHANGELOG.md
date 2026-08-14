@@ -28,6 +28,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/integration/test_authorization.py` for IDOR prevention scenarios
 - `TestAuthorization` class in `tests/integration/test_fastapi_adapter.py`
 - `TestAuthorizerProtocol` class in `tests/unit/test_components.py`
+- `pydantic.mypy` plugin configuration for mypy strict compliance
+- `py.typed` marker for PEP 561 typed package distribution
+- `tests/integration/test_security_invariants.py` for security and cache interaction tests
+- Structured logging (`logging.getLogger(__name__)`) to `DataAccess`, `DataAccessRouter`, `MemoryRepository`, and `MemoryCache`
+- `DataAccess.get_components()` public method to decouple adapter from private state
+- Cache-aware canonical key generation including `filters`, `algorithm`, and `user_id`
+- In-memory filter application in `_apply_filters`
+- Per-resource cache invalidation in `post()`, `put()`, and `delete()`
+- Input validation guards for `resource_id`, `data`, and `resource_type`
+- `resource_type` preservation in `MutationResult.data` for POST operations
+- GET query parameter support for `filters` (JSON) and `algorithm` in FastAPI adapter
+- `Repository.try_update` and `Repository.try_delete` CAS primitives
+- `MemoryRepository.try_update` and `try_delete` with coarse lock and identity comparison
+- SHA-256 canonical JSON cache keys to prevent delimiter-collision attacks
+- Re-authorization on cache hit before returning cached data
+- POST authorizer receives proposed creation `data` for pre-persistence policy checks
+- Fail-closed authorization: non-dict resource data is denied access
+- `conflict` error_type for CAS failures in PUT and DELETE
+
+### Changed
+
+- `DataAccessRouter` now requires `get_current_user` at construction time; raises `ValueError` if missing
+- `DataAccess.query()` now validates `resource_id` before executing
+- `_apply_filters` returns `{}` when filters are present but data is not a dict
+- `_cache_key` raises `ValidationError` for non-JSON-serializable filters instead of crashing
+- FastAPI adapter authorizer skips existence check to prevent resource enumeration side-channel attacks
+- FastAPI PUT endpoint constructs new `PutInfo` instance instead of mutating validated model in-place
+- `MutationResult.data` now includes `resource_type` for POST operations
+- Cache invalidation uses tracked key map instead of prefix string matching
+- PUT and DELETE perform single repository read for auth and mutation (atomic auth+read)
+- Cache keys are now opaque SHA-256 hashes instead of colon-delimited strings
+
+### Fixed
+
+- Resource enumeration via authorizer existence check (R1)
+- GET endpoint hardcoded `filters=None, algorithm=None` (R2)
+- `_apply_filters` returning non-dict data when filters present (R3)
+- `_cache_key` crash on non-JSON-serializable filters (R4)
+- Missing input validation on query/post/put/delete (R5)
+- `post()` dropping `resource_type` from result (R6)
+- `DataAccessRouter` reaching into `DataAccess` private state (R7)
+- PUT endpoint mutating validated Pydantic model (R8)
+- No structured logging in core components (R9)
+- POST ownership bypass due to `None` resource_id short-circuit (R11)
+- TOCTOU race between authorization and mutation in PUT/DELETE (R12)
+- Cache-key collision via delimiter injection (R13)
+- Stale authorization grants on cache hits (R14)
+
+### Security
+
+- Removed timing side channel in authorizer that allowed distinguishing missing vs forbidden resources
+- Added input validation to prevent malformed requests from reaching repository layer
+- Added structured logging for audit trail and debugging
+- Fail-closed authorization rejects non-dict resources instead of silently granting access
+- POST creation payloads are inspectable by authorizer before persistence
+- Cached query results are re-authorized on every hit to prevent revoked-access bypass
+- CAS mutations prevent lost-update races between auth and persistence
 
 ## [0.1.0] - 2026-08-13
 

@@ -108,3 +108,4 @@ testpaths = ["tests"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+plugins = ["pydantic.mypy"]

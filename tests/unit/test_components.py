@@ -17,7 +17,7 @@ class TestMemoryRepository:
     @pytest.mark.asyncio
     async def test_save_and_get(self) -> None:
         """Test saving and retrieving items."""
-        repo: MemoryRepository[dict] = MemoryRepository()
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         data = {"name": "John", "email": "john@example.com"}
         
         await repo.save("user:1", data)
@@ -28,14 +28,14 @@ class TestMemoryRepository:
     @pytest.mark.asyncio
     async def test_get_nonexistent(self) -> None:
         """Test getting non-existent item returns None."""
-        repo: MemoryRepository[dict] = MemoryRepository()
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         result = await repo.get("nonexistent")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_delete(self) -> None:
         """Test deleting items."""
-        repo: MemoryRepository[dict] = MemoryRepository()
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         await repo.save("user:1", {"name": "John"})
         
         await repo.delete("user:1")
@@ -44,17 +44,18 @@ class TestMemoryRepository:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_list_all(self) -> None:
-        """Test listing all items."""
-        repo: MemoryRepository[dict] = MemoryRepository()
-        await repo.save("user:1", {"name": "John"})
-        await repo.save("user:2", {"name": "Jane"})
+    async def test_create(self) -> None:
+        """Test creating items returns a generated resource ID."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        data = {"name": "John", "email": "john@example.com"}
         
-        all_items = await repo.list_all()
+        resource_id = await repo.create(data)
         
-        assert len(all_items) == 2
-        assert all_items["user:1"]["name"] == "John"
-        assert all_items["user:2"]["name"] == "Jane"
+        assert resource_id is not None
+        assert isinstance(resource_id, str)
+        assert len(resource_id) > 0
+        saved = await repo.get(resource_id)
+        assert saved == data
 
 
 class TestMemoryCache:
@@ -187,7 +188,7 @@ class TestFibonacciDP:
             await algo.execute(-1)
         
         with pytest.raises(ValueError):
-            await algo.execute("not a number")  # type: ignore
+            await algo.execute("not a number")
 
 
 class TestAuthorizerProtocol:

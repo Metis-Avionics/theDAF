@@ -1,6 +1,6 @@
 """Request and response contract models."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -79,21 +79,27 @@ class QueryResult(BaseModel):
                 "success": True,
                 "data": {"id": "123", "name": "Sample"},
                 "error": None,
+                "error_type": None,
                 "cache_hit": False,
                 "algorithm_stats": None,
-                "timestamp": "2025-01-01T00:00:00",
+                "timestamp": "2025-01-01T00:00:00+00:00",
             }
         }
     )
 
     success: bool = Field(..., description="Whether the operation succeeded")
     data: Any = Field(None, description="The query result data")
-    error: str | None = Field(None, description="Error message if operation failed")
+    error: str | None = Field(
+        None, description="User-safe error message if operation failed"
+    )
+    error_type: str | None = Field(
+        None, description="Machine-readable error classification"
+    )
     cache_hit: bool = Field(False, description="Whether the result came from cache")
     algorithm_stats: dict[str, Any] | None = Field(
         None, description="Algorithm execution statistics"
     )
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class MutationResult(BaseModel):
@@ -106,7 +112,8 @@ class MutationResult(BaseModel):
                 "resource_id": "123",
                 "data": {"id": "123", "name": "Sample"},
                 "error": None,
-                "timestamp": "2025-01-01T00:00:00",
+                "error_type": None,
+                "timestamp": "2025-01-01T00:00:00+00:00",
             }
         }
     )
@@ -114,5 +121,10 @@ class MutationResult(BaseModel):
     success: bool = Field(..., description="Whether the operation succeeded")
     resource_id: str | None = Field(None, description="The resource ID involved")
     data: Any = Field(None, description="The result data")
-    error: str | None = Field(None, description="Error message if operation failed")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    error: str | None = Field(
+        None, description="User-safe error message if operation failed"
+    )
+    error_type: str | None = Field(
+        None, description="Machine-readable error classification"
+    )
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

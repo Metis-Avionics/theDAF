@@ -2,6 +2,8 @@
 
 A production-quality Python package that implements a reusable **data-access abstraction layer** with an optional **FastAPI integration**. The architecture cleanly separates data access logic from HTTP transport, enabling the core abstraction to be used in any context (HTTP, MCP, workers, tests, etc.).
 
+> ⚠️ **Red-team assessment available:** see [BUGS.md](./BUGS.md) and [SECURITY.md](./SECURITY.md).
+
 ## Why DAF?
 
 ### The Problem
@@ -49,22 +51,47 @@ class Repository(Protocol[T]):
     async def get(self, key: str) -> T | None: ...
     async def save(self, key: str, value: T) -> None: ...
     async def delete(self, key: str) -> None: ...
-    async def list_all(self) -> dict[str, T]: ...
+    async def create(self, value: T) -> str: ...
+    async def try_update(self, key: str, expected: T, update: Callable[[T], T]) -> T | None: ...
+    async def try_delete(self, key: str, expected: T) -> bool: ...
 ```
+
+`try_update` and `try_delete` provide compare-and-swap (CAS) semantics: the mutation only succeeds if the stored value still matches the `expected` value observed during authorization. This closes the TOCTOU window between auth and mutation.
 
 #### 2. **Cache** – Result Reuse
 
-Stores frequently accessed data to reduce repository lookups.
+Stores frequently accessed data to reduce repository lookups. Cache keys are canonicalized using SHA-256 over JSON-serialized query semantics (resource_id, filters, algorithm, user_id), ensuring no delimiter-collision attacks.
 
 ```python
 class Cache(Protocol):
     async def get(self, key: str) -> Any | None: ...
     async def set(self, key: str, value: Any) -> None: ...
     async def delete(self, key: str) -> None: ...
+    async def delete_prefix(self, prefix: str) -> None: ...
     async def clear(self) -> None: ...
 ```
 
-#### 3. **Algorithm** – Computation
+#### 3. **Authorizer** – Access Control
+
+Optional pluggable authorization layer. The authorizer receives the operation, resource ID, user, and resource data so it can make ownership decisions without additional repository lookups.
+
+```python
+class Authorizer(Protocol):
+    async def authorize(
+        self,
+        operation: str,
+        resource_id: str | None,
+        user: Any,
+        data: Any = None,
+    ) -> None: ...
+```
+
+Security invariants:
+- **Fail-closed:** If resource data is not a dict (or cannot be retrieved), authorization is denied.
+- **POST data inspection:** `post()` passes the proposed creation payload to the authorizer, enabling policy enforcement before persistence.
+- **Re-authorization on cache hit:** Cached results are re-authorized before return, preventing stale grants from bypassing revoked access.
+
+#### 4. **Algorithm** – Computation
 
 Encapsulates algorithmic behavior (DP, ML inference, etc.) separate from data access.
 
@@ -74,7 +101,7 @@ class Algorithm(Protocol):
     async def get_stats(self) -> dict[str, Any]: ...
 ```
 
-#### 4. **DataAccess** – Orchestration
+#### 5. **DataAccess** – Orchestration
 
 Composes repository, cache, and algorithm into a cohesive data access layer.
 
@@ -86,7 +113,7 @@ class DataAccess:
     async def delete(self, info: DeleteInfo) -> MutationResult: ...
 ```
 
-#### 5. **DataAccessFactory** – Composition
+#### 6. **DataAccessFactory** – Composition
 
 Responsible for constructing a configured `DataAccess` instance with its dependencies.
 
@@ -94,31 +121,36 @@ Responsible for constructing a configured `DataAccess` instance with its depende
 factory = DataAccessFactory(
     repository=my_repo,
     cache=my_cache,
-    algorithm=my_algorithm,
+    algorithms={"fibonacci": FibonacciDP(), "custom": MyAlgorithm()},
 )
 daf = factory.create()
 ```
 
-#### 6. **FastAPI Adapter** – HTTP Bridge
+#### 7. **FastAPI Adapter** – HTTP Bridge
 
 Translates HTTP requests into `DataAccess` operations. Endpoint-level rate limiting lives **only here**.
 
-```python
-@router.get("/data/{resource_id}")
-@limiter.limit("30/minute")
-async def query_endpoint(resource_id: str) -> QueryResult:
-    return await daf.query(QueryInfo(resource_id=resource_id))
+The FastAPI adapter automatically reads `filters` and `algorithm` from query parameters:
+
+```bash
+# Query with filters
+GET /data/123?filters={"status":"active"}
+
+# Query with algorithm
+GET /data/123?algorithm=fibonacci
 ```
 
 ### Query Execution Flow
 
 When you call `daf.query(info)`:
 
-1. **Cache Lookup** – Check if result is already cached
-2. **Repository Lookup** (if cache miss) – Fetch from persistent storage
-3. **Algorithm Execution** (if specified) – Apply computation
-4. **Cache Population** – Store result for future hits
-5. **Return Typed Result** – `QueryResult` with data, cache status, and stats
+1. **Authorization** – Check access if authorizer is configured
+2. **Cache Lookup** – Check if result is already cached. Cache keys are SHA-256 hashes of canonical JSON (resource_id, filters, algorithm, user_id). On cache hit, re-authorize with the cached data before returning.
+3. **Repository Lookup** (if cache miss) – Fetch from persistent storage
+4. **Filter Application** – Apply in-memory filters to the retrieved data
+5. **Algorithm Execution** (if specified) – Apply computation by algorithm name from registry
+6. **Cache Population** – Store result for future hits
+7. **Return Typed Result** – `QueryResult` with data, cache status, stats, and error classification
 
 ### Data Contracts
 
@@ -208,9 +240,11 @@ daf = factory.create()
 
 # Create FastAPI app
 app = FastAPI()
-router_builder = DataAccessRouter(daf)
+router_builder = DataAccessRouter(
+    daf,
+    get_current_user=get_current_user,  # REQUIRED
+)
 app.include_router(router_builder.get_router())
-app.state.limiter = limiter
 
 # Run with: uvicorn main:app --reload
 ```
@@ -227,14 +261,14 @@ Endpoints available:
 ```python
 from daf.algorithms import FibonacciDP
 
-# Create DAF with algorithm
+# Create DAF with algorithm registry
 repo = MemoryRepository()
 cache = MemoryCache()
 algo = FibonacciDP()
 factory = DataAccessFactory(
     repository=repo,
     cache=cache,
-    algorithm=algo,
+    algorithms={"fibonacci": algo},
 )
 daf = factory.create()
 
@@ -441,7 +475,7 @@ class RedisCache:
 
 ## Limitations
 
-1. **In-memory repository** – No persistence across restarts
+1. **In-memory repository** – No persistence across restarts. `try_update`/`try_delete` use a coarse lock and identity comparison (`is`) for CAS detection; this is best-effort only. Real transactional backends should implement true atomic CAS.
 2. **Basic cache** – No TTL or eviction policy
 3. **Fibonacci algorithm** – Demonstration only (use `math.fib()` in production)
 4. **Single-layer rate limiting** – FastAPI adapter only
@@ -469,17 +503,33 @@ Core domain errors are defined in `daf.core.errors`:
 - `RepositoryError` – Repository operation failed
 - `CacheError` – Cache operation failed
 - `AlgorithmError` – Algorithm execution failed
+- `AuthorizationError` – User not authorized
 
-Errors do not leak HTTP exceptions. The FastAPI adapter translates domain errors into appropriate HTTP responses.
+Expected errors are returned as typed result envelopes with `error_type` preserved:
+
+- `QueryResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`
+- `MutationResult.error_type` – `"not_found"`, `"validation"`, `"authorization"`, `"conflict"`
+
+Unexpected errors propagate as exceptions. The FastAPI adapter catches `DataAccessError` subclasses and maps them to HTTP 500 with a generic message.
+
+All FastAPI responses use HTTP 200 with a `QueryResult` or `MutationResult` envelope. Check `result.error_type` for errors:
+
+- `"authorization"` – User is not allowed to access the resource
+- `"not_found"` – Resource does not exist
+- `"validation"` – Input parameters are invalid
+- `"conflict"` – Concurrent modification detected during PUT or DELETE
 
 ```python
-try:
-    result = await daf.query(info)
-    if not result.success:
-        return {"error": result.error}  # User-safe error message
-except DataAccessError as e:
-    # Log, translate to HTTP status
-    raise HTTPException(status_code=500, detail=str(e))
+result = await daf.query(info)
+if not result.success:
+    if result.error_type == "authorization":
+        log.warning("auth failure")
+    elif result.error_type == "not_found":
+        log.info("missing resource")
+    elif result.error_type == "validation":
+        log.warning("bad input")
+    else:
+        log.error("unexpected error", extra={"error": result.error})
 ```
 
 ## Contributing
@@ -505,7 +555,9 @@ MIT License. See LICENSE for details.
 | **Result Reuse** | `Cache` abstraction |
 | **Computation** | `Algorithm` abstraction |
 | **Composition** | `DataAccessFactory` |
+| **Authorization** | `Authorizer` protocol (fail-closed, re-auth on cache hit) |
 | **Validation** | Pydantic contracts at boundary |
+| **CAS Semantics** | `Repository.try_update` / `try_delete` for mutation safety |
 
 **Result:** A reusable, testable, framework-independent data access layer.
 Data Access Factory Open SOurce Python contribution
