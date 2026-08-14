@@ -22,7 +22,7 @@ class MemoryCache:
         Returns:
             The cached value if found, None otherwise.
         """
-        logger.debug("cache get: key=%s", key)
+        logger.debug("cache get", extra={"key": key})
         return self._cache.get(key)
 
     async def set(self, key: str, value: Any) -> None:
@@ -32,7 +32,7 @@ class MemoryCache:
             key: The cache key.
             value: The value to cache.
         """
-        logger.debug("cache set: key=%s", key)
+        logger.debug("cache set", extra={"key": key})
         self._cache[key] = value
 
     async def delete(self, key: str) -> None:
@@ -41,8 +41,19 @@ class MemoryCache:
         Args:
             key: The cache key to delete.
         """
-        logger.debug("cache delete: key=%s", key)
+        logger.debug("cache delete", extra={"key": key})
         if key in self._cache:
+            del self._cache[key]
+
+    async def delete_prefix(self, prefix: str) -> None:
+        """Delete all values with keys starting with the given prefix.
+        
+        Args:
+            prefix: The key prefix to match.
+        """
+        logger.debug("cache delete_prefix", extra={"prefix": prefix})
+        keys_to_delete = [key for key in self._cache if key.startswith(prefix)]
+        for key in keys_to_delete:
             del self._cache[key]
 
     async def clear(self) -> None:
@@ -59,5 +70,5 @@ class MemoryCache:
         Returns:
             True if the key exists, False otherwise.
         """
-        logger.debug("cache has: key=%s", key)
+        logger.debug("cache has", extra={"key": key})
         return key in self._cache

@@ -215,8 +215,8 @@ class TestQueryParameters:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["success"] is True
-        assert data["data"]["value"] == 5
+        assert data["success"] is False
+        assert data["error_type"] == "validation"
 
     @pytest.mark.asyncio
     async def test_get_with_invalid_filters_json(

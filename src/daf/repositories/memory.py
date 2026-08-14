@@ -22,7 +22,7 @@ class MemoryRepository[T]:
         Returns:
             The value if found, None otherwise.
         """
-        logger.debug("repository get: key=%s", key)
+        logger.debug("repository get", extra={"key": key})
         return self._store.get(key)
 
     async def save(self, key: str, value: T) -> None:
@@ -32,7 +32,7 @@ class MemoryRepository[T]:
             key: The key to save under.
             value: The value to save.
         """
-        logger.debug("repository save: key=%s", key)
+        logger.debug("repository save", extra={"key": key})
         self._store[key] = value
 
     async def delete(self, key: str) -> None:
@@ -41,7 +41,7 @@ class MemoryRepository[T]:
         Args:
             key: The key to delete.
         """
-        logger.debug("repository delete: key=%s", key)
+        logger.debug("repository delete", extra={"key": key})
         if key in self._store:
             del self._store[key]
 

@@ -63,6 +63,7 @@ class Cache(Protocol):
     async def get(self, key: str) -> Any | None: ...
     async def set(self, key: str, value: Any) -> None: ...
     async def delete(self, key: str) -> None: ...
+    async def delete_prefix(self, prefix: str) -> None: ...
     async def clear(self) -> None: ...
 ```
 
@@ -487,15 +488,23 @@ Expected errors are returned as typed result envelopes with `error_type` preserv
 
 Unexpected errors propagate as exceptions. The FastAPI adapter catches `DataAccessError` subclasses and maps them to HTTP 500 with a generic message.
 
+All FastAPI responses use HTTP 200 with a `QueryResult` or `MutationResult` envelope. Check `result.error_type` for errors:
+
+- `"authorization"` – User is not allowed to access the resource
+- `"not_found"` – Resource does not exist
+- `"validation"` – Input parameters are invalid
+
 ```python
 result = await daf.query(info)
 if not result.success:
     if result.error_type == "authorization":
-        raise HTTPException(status_code=403)
+        log.warning("auth failure")
     elif result.error_type == "not_found":
-        raise HTTPException(status_code=404)
+        log.info("missing resource")
+    elif result.error_type == "validation":
+        log.warning("bad input")
     else:
-        raise HTTPException(status_code=400, detail=result.error)
+        log.error("unexpected error", extra={"error": result.error})
 ```
 
 ## Contributing

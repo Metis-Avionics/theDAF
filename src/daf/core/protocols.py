@@ -38,6 +38,10 @@ class Cache(Protocol):
         """Delete a value from cache."""
         ...
 
+    async def delete_prefix(self, prefix: str) -> None:
+        """Delete all values with keys starting with the given prefix."""
+        ...
+
     async def clear(self) -> None:
         """Clear all values from cache."""
         ...
@@ -59,7 +63,11 @@ class Authorizer(Protocol):
     """Abstract authorizer protocol for access control."""
 
     async def authorize(
-        self, operation: str, resource_id: str | None, user: Any
+        self,
+        operation: str,
+        resource_id: str | None,
+        user: Any,
+        data: Any = None,
     ) -> None:
         """Authorize an operation on a resource for a given user.
 
@@ -67,6 +75,7 @@ class Authorizer(Protocol):
             operation: The operation being performed.
             resource_id: The resource being accessed, or None for creation.
             user: The authenticated user context.
+            data: Optional data of the resource, for atomic authorization decisions.
 
         Raises:
             AuthorizationError: If the user is not authorized.

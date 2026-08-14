@@ -51,7 +51,17 @@ Detailed technical findings are documented in [BUGS.md](./BUGS.md). Critical and
 - ~~**POST drops resource_type**~~ — FIXED. `resource_type` is included in `MutationResult.data`.
 - ~~**Adapter reaches into private state**~~ — FIXED. Uses `daf.get_components()` to extract dependencies.
 - ~~**PUT mutates validated model**~~ — FIXED. Constructs new `PutInfo` instead of mutating in-place.
-- ~~**No structured logging**~~ — FIXED. Logging added to `DataAccess`, `DataAccessRouter`, `MemoryRepository`, and `MemoryCache`.
+- ~~**No structured logging**~~ — FIXED. Logging added with structured `extra` dicts across core components.
+
+---
+
+## Security Invariants (Phase 2)
+
+These invariants were added to prevent second-order defects from interacting incorrectly:
+
+- Cache invalidation now covers all derived projections (prefix-based invalidation)
+- Authorization is atomic with mutation reads (prevents TOCTOU race)
+- Unknown algorithms return validation errors (prevents silent raw data exposure)
 
 ## Security Best Practices for Users
 

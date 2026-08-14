@@ -215,15 +215,54 @@ When filters are provided but data is not a dict, `_apply_filters` now returns `
 
 ---
 
-### 22. No structured logging FIXED
+### 22. ~~No structured logging~~ FIXED
 
-`logging.getLogger(__name__)` added to `DataAccess`, `DataAccessRouter`, `MemoryRepository`, and `MemoryCache`. Logs at DEBUG for normal flow, WARNING for recoverable errors, and ERROR for failures.
+`logging.getLogger(__name__)` added to `DataAccess`, `DataAccessRouter`, `MemoryRepository`, and `MemoryCache`. Logs at DEBUG for normal flow, WARNING for recoverable errors, and ERROR for failures. Structured logging uses `extra={...}` dict instead of string interpolation.
 
 **Fix:**
-- `src/daf/core/access.py` — logs query, mutation, cache, and algorithm events
-- `src/daf/adapters/fastapi.py` — logs route handling and errors
-- `src/daf/repositories/memory.py` — logs get/save/delete/create
-- `src/daf/cache/memory.py` — logs get/set/delete/has/clear
+- `src/daf/core/access.py` — logs query, mutation, cache, and algorithm events with `extra` dict
+- `src/daf/adapters/fastapi.py` — logs route handling and errors with `extra` dict
+- `src/daf/repositories/memory.py` — logs get/save/delete/create with `extra` dict
+- `src/daf/cache/memory.py` — logs get/set/delete/delete_prefix/has/clear with `extra` dict
+
+---
+
+## Phase 2 Fixes (Invariant Composition)
+
+### 23. ~~Cache invalidation does not cover all derived projections~~ FIXED
+
+`put()` and `delete()` previously deleted only a single exact cache key, leaving stale entries for other filter/algorithm/user combinations. Now they use `cache.delete_prefix(f"query:{id}:")` to invalidate all derived projections atomically.
+
+**Fix:**
+- `src/daf/core/protocols.py:41` — `delete_prefix(self, prefix: str)` added to `Cache` protocol
+- `src/daf/cache/memory.py:48` — `delete_prefix()` implemented with `str.startswith` scan
+- `src/daf/core/access.py:305` — `put()` calls `delete_prefix` instead of single `delete`
+- `src/daf/core/access.py:388` — `delete()` calls `delete_prefix` instead of single `delete`
+
+---
+
+### 24. ~~Authorization and mutation reads are not atomic~~ FIXED
+
+`put()` and `delete()` previously performed two separate repository reads: one in the authorizer and another to fetch data for mutation. This created a TOCTOU race condition. Now the resource is read once, passed to the authorizer via `data` parameter, and the same object is used for mutation.
+
+**Fix:**
+- `src/daf/core/protocols.py:64` — `Authorizer.authorize()` gained optional `data` parameter
+- `src/daf/core/access.py:48` — `_check_authorization()` passes `data` through
+- `src/daf/core/access.py:264` — `put()` reads resource first, authorizes with data, then mutates
+- `src/daf/core/access.py:376` — `delete()` reads resource first, authorizes with data, then deletes
+- `src/daf/adapters/fastapi.py:96` — `_make_authorizer` uses `data` when provided, falls back to repository read for queries
+- `tests/integration/test_security_invariants.py:403` — atomic auth+read tests added
+
+---
+
+### 25. ~~Unknown algorithm silently returns raw data~~ FIXED
+
+Querying with an algorithm name not present in the registry silently returned raw repository data with `success=True`. Now `_execute_query()` raises `ValidationError("Unknown algorithm: {name}")`, which flows through the existing `except ValidationError` handler and returns `error_type="validation"`.
+
+**Fix:**
+- `src/daf/core/access.py:196` — raises `ValidationError` for unknown algorithm names
+- `tests/integration/test_fastapi_adapter.py:214` — updated to expect `error_type="validation"`
+- `tests/integration/test_security_invariants.py:515` — new `TestUnknownAlgorithmValidation`
 
 ---
 
@@ -247,6 +286,9 @@ The existing tests validate component behavior well, but the following interacti
 - ✅ Concurrent DELETE × query
 - ✅ Multiple users × same resource
 - ✅ Multiple tenants × same resource ID
+- ✅ Prefix cache invalidation (PUT/DELETE invalidate all projections)
+- ✅ Atomic auth+read (single repository read for mutation operations)
+- ✅ Unknown algorithm validation (returns validation error)
 
 ---
 

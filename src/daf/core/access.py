@@ -46,11 +46,15 @@ class DataAccess:
         self._authorizer = authorizer
 
     async def _check_authorization(
-        self, operation: str, resource_id: str | None, user: Any
+        self,
+        operation: str,
+        resource_id: str | None,
+        user: Any,
+        data: Any = None,
     ) -> None:
         """Check authorization for an operation if an authorizer is configured."""
         if self._authorizer is not None:
-            await self._authorizer.authorize(operation, resource_id, user)
+            await self._authorizer.authorize(operation, resource_id, user, data=data)
 
     def _user_id(self, user: Any) -> str:
         """Canonicalize user identity for cache keying."""
@@ -101,20 +105,24 @@ class DataAccess:
             if not info.resource_id or not isinstance(info.resource_id, str):
                 raise ValidationError("resource_id must be a non-empty string")
             logger.debug(
-                "query start: resource_id=%s filters=%s algorithm=%s user=%s",
-                info.resource_id,
-                info.filters,
-                info.algorithm,
-                self._user_id(user),
+                "query start",
+                extra={
+                    "resource_id": info.resource_id,
+                    "filters": info.filters,
+                    "algorithm": info.algorithm,
+                    "user": self._user_id(user),
+                },
             )
             if self._authorizer is not None:
                 await self._check_authorization("query", info.resource_id, user)
             return await self._execute_query(info, user)
         except AuthorizationError:
             logger.warning(
-                "query unauthorized: resource_id=%s user=%s",
-                info.resource_id,
-                self._user_id(user),
+                "query unauthorized",
+                extra={
+                    "resource_id": info.resource_id,
+                    "user": self._user_id(user),
+                },
             )
             return QueryResult(
                 success=False,
@@ -126,9 +134,11 @@ class DataAccess:
             )
         except NotFoundError:
             logger.info(
-                "query not found: resource_id=%s user=%s",
-                info.resource_id,
-                self._user_id(user),
+                "query not found",
+                extra={
+                    "resource_id": info.resource_id,
+                    "user": self._user_id(user),
+                },
             )
             return QueryResult(
                 success=False,
@@ -140,9 +150,11 @@ class DataAccess:
             )
         except ValidationError:
             logger.warning(
-                "query validation error: resource_id=%s user=%s",
-                info.resource_id,
-                self._user_id(user),
+                "query validation error",
+                extra={
+                    "resource_id": info.resource_id,
+                    "user": self._user_id(user),
+                },
             )
             return QueryResult(
                 success=False,
@@ -156,16 +168,18 @@ class DataAccess:
     async def _execute_query(self, info: QueryInfo, user: Any) -> QueryResult:
         """Execute the core query logic."""
         logger.debug(
-            "execute_query: resource_id=%s filters=%s algorithm=%s",
-            info.resource_id,
-            info.filters,
-            info.algorithm,
+            "execute_query",
+            extra={
+                "resource_id": info.resource_id,
+                "filters": info.filters,
+                "algorithm": info.algorithm,
+            },
         )
         cache_key = self._cache_key(info, user)
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
-            logger.debug("cache hit: key=%s", cache_key)
+            logger.debug("cache hit", extra={"key": cache_key})
             return QueryResult(
                 success=True,
                 data=cached,
@@ -177,7 +191,7 @@ class DataAccess:
 
         data = await self._repository.get(info.resource_id)
         if data is None:
-            logger.info("repository miss: resource_id=%s", info.resource_id)
+            logger.info("repository miss", extra={"resource_id": info.resource_id})
             raise NotFoundError(
                 f"Resource '{info.resource_id}' not found"
             )
@@ -188,13 +202,15 @@ class DataAccess:
         if info.algorithm:
             algorithm = self._algorithms.get(info.algorithm)
             if algorithm is not None:
-                logger.debug("running algorithm: %s", info.algorithm)
+                logger.debug("running algorithm", extra={"algorithm": info.algorithm})
                 algorithm_result = await algorithm.execute(data)
                 algorithm_stats = await algorithm.get_stats()
                 data = algorithm_result
+            else:
+                raise ValidationError(f"Unknown algorithm: {info.algorithm}")
 
         await self._cache.set(cache_key, data)
-        logger.debug("cache set: key=%s", cache_key)
+        logger.debug("cache set", extra={"key": cache_key})
 
         return QueryResult(
             success=True,
@@ -224,8 +240,8 @@ class DataAccess:
                 await self._check_authorization("post", None, user)
         except ValidationError:
             logger.warning(
-                "post validation error: resource_type=%s",
-                info.resource_type,
+                "post validation error",
+                extra={"resource_type": info.resource_type},
             )
             return MutationResult(
                 success=False,
@@ -235,7 +251,10 @@ class DataAccess:
                 error_type="validation",
             )
         except AuthorizationError:
-            logger.warning("post unauthorized: user=%s", self._user_id(user))
+            logger.warning(
+                "post unauthorized",
+                extra={"user": self._user_id(user)},
+            )
             return MutationResult(
                 success=False,
                 resource_id=None,
@@ -244,14 +263,17 @@ class DataAccess:
                 error_type="authorization",
             )
 
-        logger.debug("post create: resource_type=%s", info.resource_type)
+        logger.debug(
+            "post create",
+            extra={"resource_type": info.resource_type},
+        )
         resource_id = await self._repository.create(info.data)
 
-        cache_key = self._cache_key(
-            QueryInfo(resource_id=resource_id, filters=None, algorithm=None), user
+        await self._cache.delete_prefix(f"query:{resource_id}:")
+        logger.debug(
+            "post cache invalidated",
+            extra={"resource_id": resource_id},
         )
-        await self._cache.delete(cache_key)
-        logger.debug("post cache invalidated: key=%s", cache_key)
 
         return MutationResult(
             success=True,
@@ -277,7 +299,10 @@ class DataAccess:
             if not isinstance(info.data, dict):
                 raise ValidationError("Update data must be a dict")
         except ValidationError:
-            logger.warning("put validation error: resource_id=%s", info.resource_id)
+            logger.warning(
+                "put validation error",
+                extra={"resource_id": info.resource_id},
+            )
             return MutationResult(
                 success=False,
                 resource_id=info.resource_id,
@@ -286,43 +311,46 @@ class DataAccess:
                 error_type="validation",
             )
 
-        if self._authorizer is not None:
-            try:
-                await self._check_authorization("put", info.resource_id, user)
-            except AuthorizationError:
-                logger.warning(
-                    "put unauthorized: resource_id=%s user=%s",
-                    info.resource_id,
-                    self._user_id(user),
-                )
-                return MutationResult(
-                    success=False,
-                    resource_id=info.resource_id,
-                    data=None,
-                    error="Unauthorized",
-                    error_type="authorization",
-                )
         try:
-            logger.debug("put update: resource_id=%s", info.resource_id)
+            logger.debug(
+                "put update",
+                extra={"resource_id": info.resource_id},
+            )
             existing = await self._repository.get(info.resource_id)
             if existing is None:
                 raise NotFoundError(
                     f"Resource '{info.resource_id}' not found for update"
                 )
 
+            if self._authorizer is not None:
+                try:
+                    await self._check_authorization(
+                        "put", info.resource_id, user, data=existing
+                    )
+                except AuthorizationError:
+                    logger.warning(
+                        "put unauthorized",
+                        extra={
+                            "resource_id": info.resource_id,
+                            "user": self._user_id(user),
+                        },
+                    )
+                    return MutationResult(
+                        success=False,
+                        resource_id=info.resource_id,
+                        data=None,
+                        error="Unauthorized",
+                        error_type="authorization",
+                    )
+
             updated = {**existing, **info.data}
             await self._repository.save(info.resource_id, updated)
 
-            cache_key = self._cache_key(
-                QueryInfo(
-                    resource_id=info.resource_id,
-                    filters=None,
-                    algorithm=None,
-                ),
-                user,
+            await self._cache.delete_prefix(f"query:{info.resource_id}:")
+            logger.debug(
+                "put cache invalidated",
+                extra={"resource_id": info.resource_id},
             )
-            await self._cache.delete(cache_key)
-            logger.debug("put cache invalidated: key=%s", cache_key)
 
             return MutationResult(
                 success=True,
@@ -333,7 +361,10 @@ class DataAccess:
             )
 
         except NotFoundError:
-            logger.info("put not found: resource_id=%s", info.resource_id)
+            logger.info(
+                "put not found",
+                extra={"resource_id": info.resource_id},
+            )
             return MutationResult(
                 success=False,
                 resource_id=info.resource_id,
@@ -357,7 +388,8 @@ class DataAccess:
                 raise ValidationError("resource_id must be a non-empty string")
         except ValidationError:
             logger.warning(
-                "delete validation error: resource_id=%s", info.resource_id
+                "delete validation error",
+                extra={"resource_id": info.resource_id},
             )
             return MutationResult(
                 success=False,
@@ -367,42 +399,45 @@ class DataAccess:
                 error_type="validation",
             )
 
-        if self._authorizer is not None:
-            try:
-                await self._check_authorization("delete", info.resource_id, user)
-            except AuthorizationError:
-                logger.warning(
-                    "delete unauthorized: resource_id=%s user=%s",
-                    info.resource_id,
-                    self._user_id(user),
-                )
-                return MutationResult(
-                    success=False,
-                    resource_id=info.resource_id,
-                    data=None,
-                    error="Unauthorized",
-                    error_type="authorization",
-                )
         try:
-            logger.debug("delete: resource_id=%s", info.resource_id)
+            logger.debug(
+                "delete",
+                extra={"resource_id": info.resource_id},
+            )
             existing = await self._repository.get(info.resource_id)
             if existing is None:
                 raise NotFoundError(
                     f"Resource '{info.resource_id}' not found for deletion"
                 )
 
+            if self._authorizer is not None:
+                try:
+                    await self._check_authorization(
+                        "delete", info.resource_id, user, data=existing
+                    )
+                except AuthorizationError:
+                    logger.warning(
+                        "delete unauthorized",
+                        extra={
+                            "resource_id": info.resource_id,
+                            "user": self._user_id(user),
+                        },
+                    )
+                    return MutationResult(
+                        success=False,
+                        resource_id=info.resource_id,
+                        data=None,
+                        error="Unauthorized",
+                        error_type="authorization",
+                    )
+
             await self._repository.delete(info.resource_id)
 
-            cache_key = self._cache_key(
-                QueryInfo(
-                    resource_id=info.resource_id,
-                    filters=None,
-                    algorithm=None,
-                ),
-                user,
+            await self._cache.delete_prefix(f"query:{info.resource_id}:")
+            logger.debug(
+                "delete cache invalidated",
+                extra={"resource_id": info.resource_id},
             )
-            await self._cache.delete(cache_key)
-            logger.debug("delete cache invalidated: key=%s", cache_key)
 
             return MutationResult(
                 success=True,
@@ -413,7 +448,10 @@ class DataAccess:
             )
 
         except NotFoundError:
-            logger.info("delete not found: resource_id=%s", info.resource_id)
+            logger.info(
+                "delete not found",
+                extra={"resource_id": info.resource_id},
+            )
             return MutationResult(
                 success=False,
                 resource_id=info.resource_id,

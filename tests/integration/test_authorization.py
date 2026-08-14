@@ -27,7 +27,11 @@ class FakeAuthorizer:
         self._owned_resources = owned_resources
 
     async def authorize(
-        self, _operation: str, resource_id: str | None, user: Any
+        self,
+        _operation: str,
+        resource_id: str | None,
+        user: Any,
+        data: Any = None,  # noqa: ARG002
     ) -> None:
         if user is None:
             raise AuthorizationError("Unauthenticated")

@@ -7,7 +7,7 @@ import pytest
 
 from daf.algorithms import FibonacciDP
 from daf.cache import MemoryCache
-from daf.contracts import PostInfo, QueryInfo
+from daf.contracts import DeleteInfo, PostInfo, PutInfo, QueryInfo
 from daf.core import DataAccessFactory
 from daf.core.errors import AuthorizationError
 from daf.repositories import MemoryRepository
@@ -27,7 +27,11 @@ class FakeAuthorizer:
         self._owned_resources = owned_resources
 
     async def authorize(
-        self, _operation: str, resource_id: str | None, user: Any
+        self,
+        _operation: str,
+        resource_id: str | None,
+        user: Any,
+        data: Any = None,  # noqa: ARG002
     ) -> None:
         if user is None:
             raise AuthorizationError("Unauthenticated")
@@ -385,3 +389,148 @@ class TestFastAPIAdapterRequiresGetCurrentUser:
         
         with pytest.raises(ValueError, match="get_current_user is required"):
             DataAccessRouter(daf, get_current_user=None)  # type: ignore
+
+
+class TestPrefixCacheInvalidation:
+    """Test that mutations invalidate all cached projections for a resource."""
+
+    @pytest.mark.asyncio
+    async def test_put_invalidates_all_filtered_projections(self) -> None:
+        """Test that PUT invalidates cached entries for all filter variants."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        
+        await repo.save(
+            "123",
+            {"name": "John", "status": "active", "owner_id": "user-1"},
+        )
+        
+        user = FakeUser("user-1")
+        await daf.query(QueryInfo(resource_id="123"), user=user)
+        await daf.query(
+            QueryInfo(resource_id="123", filters={"status": "active"}), user=user
+        )
+        
+        keys_before = set(cache._cache.keys())
+        assert len(keys_before) == 2
+        
+        await daf.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=user,
+        )
+        
+        assert not any(key.startswith("query:123:") for key in cache._cache)
+
+    @pytest.mark.asyncio
+    async def test_delete_invalidates_all_algorithm_projections(self) -> None:
+        """Test that DELETE invalidates cached entries for all algorithm variants."""
+        from daf.algorithms import FibonacciDP
+        
+        repo: MemoryRepository[Any] = MemoryRepository()
+        cache = MemoryCache()
+        algo = FibonacciDP()
+        
+        await repo.save("fib_5", 5)
+        
+        factory = DataAccessFactory(
+            repository=repo,
+            cache=cache,
+            algorithms={"fibonacci": algo},
+        )
+        daf = factory.create()
+        
+        await daf.query(QueryInfo(resource_id="fib_5"))
+        await daf.query(QueryInfo(resource_id="fib_5", algorithm="fibonacci"))
+        
+        keys_before = set(cache._cache.keys())
+        assert len(keys_before) == 2
+        
+        await daf.delete(DeleteInfo(resource_id="fib_5"))
+        
+        assert not any(key.startswith("query:fib_5:") for key in cache._cache)
+
+
+class TestAtomicAuthAndRead:
+    """Test that authorization and mutation reads are atomic."""
+
+    @pytest.mark.asyncio
+    async def test_put_uses_single_repository_read(self) -> None:
+        """Test that PUT reads the repository only once."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        read_count = 0
+        original_get = repo.get
+        
+        async def counting_get(key: str) -> Any:
+            nonlocal read_count
+            read_count += 1
+            return await original_get(key)
+        
+        repo.get = counting_get  # type: ignore
+        
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result = await daf.put(
+            PutInfo(resource_id="123", data={"name": "Jane"}),
+            user=FakeUser("user-1"),
+        )
+        assert result.success is True
+        assert read_count == 1
+
+    @pytest.mark.asyncio
+    async def test_delete_uses_single_repository_read(self) -> None:
+        """Test that DELETE reads the repository only once."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        read_count = 0
+        original_get = repo.get
+        
+        async def counting_get(key: str) -> Any:
+            nonlocal read_count
+            read_count += 1
+            return await original_get(key)
+        
+        repo.get = counting_get  # type: ignore
+        
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result = await daf.delete(
+            DeleteInfo(resource_id="123"), user=FakeUser("user-1")
+        )
+        assert result.success is True
+        assert read_count == 1
+
+
+class TestUnknownAlgorithmValidation:
+    """Test that unknown algorithms return validation errors."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_algorithm_returns_validation_error(self) -> None:
+        """Test that querying with unknown algorithm returns validation error."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        daf = DataAccessFactory(repository=repo, cache=cache).create()
+        
+        await repo.save("123", {"name": "Test"})
+        
+        result = await daf.query(
+            QueryInfo(resource_id="123", algorithm="nonexistent")
+        )
+        assert result.success is False
+        assert result.error_type == "validation"

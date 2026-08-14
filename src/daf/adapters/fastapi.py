@@ -104,13 +104,18 @@ class DataAccessRouter:
         """
         class _Authorizer:
             async def authorize(
-                self, _operation: str, resource_id: str | None, user: Any
+                self,
+                _operation: str,
+                resource_id: str | None,
+                user: Any,
+                data: Any = None,
             ) -> None:
                 if user is None:
                     raise AuthorizationError("Unauthenticated")
                 if resource_id is None:
                     return
-                data = await repository.get(resource_id)
+                if data is None:
+                    data = await repository.get(resource_id)
                 if data is not None and isinstance(data, dict):
                     owner_id = data.get("owner_id")
                     if owner_id != user.id:
@@ -162,12 +167,14 @@ class DataAccessRouter:
             current_user = await self._get_current_user(request)
             try:
                 logger.debug(
-                    "query endpoint: resource_id=%s", resource_id
+                    "query endpoint",
+                    extra={"resource_id": resource_id},
                 )
                 return await self._daf.query(info, user=current_user)
             except DataAccessError:
                 logger.error(
-                    "query endpoint error: resource_id=%s", resource_id
+                    "query endpoint error",
+                    extra={"resource_id": resource_id},
                 )
                 raise HTTPException(
                     status_code=500, detail="Internal server error"
@@ -201,12 +208,14 @@ class DataAccessRouter:
             current_user = await self._get_current_user(request)
             try:
                 logger.debug(
-                    "put endpoint: resource_id=%s", resource_id
+                    "put endpoint",
+                    extra={"resource_id": resource_id},
                 )
                 return await self._daf.put(info, user=current_user)
             except DataAccessError:
                 logger.error(
-                    "put endpoint error: resource_id=%s", resource_id
+                    "put endpoint error",
+                    extra={"resource_id": resource_id},
                 )
                 raise HTTPException(
                     status_code=500, detail="Internal server error"
@@ -223,12 +232,14 @@ class DataAccessRouter:
             current_user = await self._get_current_user(request)
             try:
                 logger.debug(
-                    "delete endpoint: resource_id=%s", resource_id
+                    "delete endpoint",
+                    extra={"resource_id": resource_id},
                 )
                 return await self._daf.delete(info, user=current_user)
             except DataAccessError:
                 logger.error(
-                    "delete endpoint error: resource_id=%s", resource_id
+                    "delete endpoint error",
+                    extra={"resource_id": resource_id},
                 )
                 raise HTTPException(
                     status_code=500, detail="Internal server error"
