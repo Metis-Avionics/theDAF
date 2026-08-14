@@ -53,4 +53,18 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --frozen --group dev
       - run: uv run python -m graphify extract . --code-only --no-cluster
-      - run: uv run python -m graphify diagnose multigraph --graph graphify-out/graph.json --json
+      - run: uv run python -m graphify diagnose multigraph --graph graphify-out/graph.json --json > graphify-out/diagnose.json
+      - run: uv run python -c "
+import json, sys
+from pathlib import Path
+p = Path('graphify-out/diagnose.json')
+data = json.loads(p.read_text())
+s = data['summary']
+collapsed = s['directed_same_endpoint_collapsed_edges']
+threshold = 30
+print(f'directed_same_endpoint_collapsed_edges={collapsed}, threshold={threshold}')
+if collapsed > threshold:
+    print(f'FAIL: same-endpoint edge collapse {collapsed} exceeds threshold {threshold}', file=sys.stderr)
+    sys.exit(1)
+print('PASS: multigraph diagnostics within threshold')
+"
