@@ -153,7 +153,7 @@ Each session entry should include:
 - **Tests**: 87/87 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
-- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/new/fix/remaining-bugs-security
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/15
 
 ### Pending Work
 
@@ -177,7 +177,7 @@ Each session entry should include:
 
 ### Turn 1 Summary
 
-**Initial State**: PR #16 merged. Branch `fix/r7-r12-red-team-composition-fixes` created from main for R7-R12 red-team composition fixes.
+**Initial State**: PR #16 merged into `main`. Branch `fix/r7-r12-red-team-composition-fixes` created from `main` for R7-R12 red-team composition fixes.
 
 **Actions Taken**:
 - Read red-team plan `.kilo/plans/1786725060659-red-team-composition-fixes-r7-r12.md`
@@ -185,8 +185,9 @@ Each session entry should include:
 - Refactored `_execute_query` into `_handle_cache_hit`, `_execute_cache_miss`, and `_run_algorithm` to satisfy Power of Ten Rule 4
 - Updated living docs: README.md, CHANGELOG.md, HANDOVER.md, SESSION.md
 - Ran power_of_ten.py — all checks pass
-- Created branch `fix/r7-r12-red-team-composition-fixes`, committed, and pushed to GitHub
-- Created PR #17
+- Created branch `fix/r7-r12-red-team-composition-fixes` from `main`, committed, and pushed to GitHub
+- Force-rebased onto `origin/main` after PR #16 merge, then force-pushed to update PR #17
+- PR #17 remains MERGEABLE
 
 ### Files Modified/Created
 
