@@ -134,6 +134,8 @@ class DataAccessRouter:
         self._setup_delete_route()
 
     def _setup_query_route(self) -> None:
+        if self._router is None:
+            raise RuntimeError("Router not initialized")
         @self._router.get("/{resource_id}", response_model=QueryResult)
         @self._limit("30/minute")
         async def query_endpoint(

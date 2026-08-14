@@ -109,6 +109,60 @@ class DataAccess:
                 return {}
         return data
 
+    def _query_auth_error(self, info: QueryInfo, user: Any) -> QueryResult:
+        """Build unauthorized query result."""
+        logger.warning(
+            "query unauthorized",
+            extra={
+                "resource_id": info.resource_id,
+                "user": self._user_id(user),
+            },
+        )
+        return QueryResult(
+            success=False,
+            data=None,
+            error="Unauthorized",
+            error_type="authorization",
+            cache_hit=False,
+            algorithm_stats=None,
+        )
+
+    def _query_not_found_error(self, info: QueryInfo, user: Any) -> QueryResult:
+        """Build not-found query result."""
+        logger.info(
+            "query not found",
+            extra={
+                "resource_id": info.resource_id,
+                "user": self._user_id(user),
+            },
+        )
+        return QueryResult(
+            success=False,
+            data=None,
+            error="Not found",
+            error_type="not_found",
+            cache_hit=False,
+            algorithm_stats=None,
+        )
+
+    def _query_validation_error(self, info: QueryInfo, user: Any) -> QueryResult:
+        """Build validation error query result."""
+        logger.warning(
+            "query validation error",
+            extra={
+                "resource_id": info.resource_id,
+                "user": self._user_id(user),
+            },
+        )
+        return QueryResult(
+            success=False,
+            data=None,
+            error="Validation error",
+            error_type="validation",
+            cache_hit=False,
+            algorithm_stats=None,
+        )
+
     async def query(self, info: QueryInfo, user: Any = None) -> QueryResult:
         """Execute a query operation.
         
@@ -135,53 +189,11 @@ class DataAccess:
                 await self._check_authorization("query", info.resource_id, user)
             return await self._execute_query(info, user)
         except AuthorizationError:
-            logger.warning(
-                "query unauthorized",
-                extra={
-                    "resource_id": info.resource_id,
-                    "user": self._user_id(user),
-                },
-            )
-            return QueryResult(
-                success=False,
-                data=None,
-                error="Unauthorized",
-                error_type="authorization",
-                cache_hit=False,
-                algorithm_stats=None,
-            )
+            return self._query_auth_error(info, user)
         except NotFoundError:
-            logger.info(
-                "query not found",
-                extra={
-                    "resource_id": info.resource_id,
-                    "user": self._user_id(user),
-                },
-            )
-            return QueryResult(
-                success=False,
-                data=None,
-                error="Not found",
-                error_type="not_found",
-                cache_hit=False,
-                algorithm_stats=None,
-            )
+            return self._query_not_found_error(info, user)
         except ValidationError:
-            logger.warning(
-                "query validation error",
-                extra={
-                    "resource_id": info.resource_id,
-                    "user": self._user_id(user),
-                },
-            )
-            return QueryResult(
-                success=False,
-                data=None,
-                error="Validation error",
-                error_type="validation",
-                cache_hit=False,
-                algorithm_stats=None,
-            )
+            return self._query_validation_error(info, user)
 
     async def _execute_query(self, info: QueryInfo, user: Any) -> QueryResult:
         """Execute the core query logic."""
@@ -244,6 +256,34 @@ class DataAccess:
             algorithm_stats=algorithm_stats,
         )
 
+    def _post_validation_error(self, info: PostInfo) -> MutationResult:
+        """Build validation error post result."""
+        logger.warning(
+            "post validation error",
+            extra={"resource_type": info.resource_type},
+        )
+        return MutationResult(
+            success=False,
+            resource_id=None,
+            data=None,
+            error="Validation error",
+            error_type="validation",
+        )
+
+    def _post_auth_error(self, user: Any) -> MutationResult:
+        """Build unauthorized post result."""
+        logger.warning(
+            "post unauthorized",
+            extra={"user": self._user_id(user)},
+        )
+        return MutationResult(
+            success=False,
+            resource_id=None,
+            data=None,
+            error="Unauthorized",
+            error_type="authorization",
+        )
+
     async def post(self, info: PostInfo, user: Any = None) -> MutationResult:
         """Execute a create/post operation.
         
@@ -262,29 +302,9 @@ class DataAccess:
             if self._authorizer is not None:
                 await self._check_authorization("post", None, user, data=info.data)
         except ValidationError:
-            logger.warning(
-                "post validation error",
-                extra={"resource_type": info.resource_type},
-            )
-            return MutationResult(
-                success=False,
-                resource_id=None,
-                data=None,
-                error="Validation error",
-                error_type="validation",
-            )
+            return self._post_validation_error(info)
         except AuthorizationError:
-            logger.warning(
-                "post unauthorized",
-                extra={"user": self._user_id(user)},
-            )
-            return MutationResult(
-                success=False,
-                resource_id=None,
-                data=None,
-                error="Unauthorized",
-                error_type="authorization",
-            )
+            return self._post_auth_error(user)
 
         logger.debug(
             "post create",
@@ -306,6 +326,102 @@ class DataAccess:
             error_type=None,
         )
 
+    def _mutation_validation_error(
+        self, resource_id: str | None, operation: str
+    ) -> MutationResult:
+        """Build validation error mutation result."""
+        logger.warning(
+            f"{operation} validation error",
+            extra={"resource_id": resource_id},
+        )
+        return MutationResult(
+            success=False,
+            resource_id=resource_id,
+            data=None,
+            error="Validation error",
+            error_type="validation",
+        )
+
+    def _mutation_not_found_error(
+        self, resource_id: str | None, operation: str
+    ) -> MutationResult:
+        """Build not-found mutation result."""
+        logger.info(
+            f"{operation} not found",
+            extra={"resource_id": resource_id},
+        )
+        return MutationResult(
+            success=False,
+            resource_id=resource_id,
+            data=None,
+            error="Not found",
+            error_type="not_found",
+        )
+
+    def _mutation_auth_error(
+        self, resource_id: str | None, user: Any, operation: str
+    ) -> MutationResult:
+        """Build unauthorized mutation result."""
+        logger.warning(
+            f"{operation} unauthorized",
+            extra={
+                "resource_id": resource_id,
+                "user": self._user_id(user),
+            },
+        )
+        return MutationResult(
+            success=False,
+            resource_id=resource_id,
+            data=None,
+            error="Unauthorized",
+            error_type="authorization",
+        )
+
+    async def _execute_put(self, info: PutInfo, user: Any) -> MutationResult:
+        """Execute the core put mutation logic."""
+        logger.debug(
+            "put update",
+            extra={"resource_id": info.resource_id},
+        )
+        existing = await self._repository.get(info.resource_id)
+        if existing is None:
+            raise NotFoundError(
+                f"Resource '{info.resource_id}' not found for update"
+            )
+
+        if self._authorizer is not None:
+            await self._check_authorization(
+                "put", info.resource_id, user, data=existing
+            )
+
+        result = await self._repository.try_update(
+            info.resource_id,
+            expected=existing,
+            update=lambda e: {**e, **info.data},
+        )
+        if result is None:
+            return MutationResult(
+                success=False,
+                resource_id=info.resource_id,
+                data=None,
+                error="Conflict",
+                error_type="conflict",
+            )
+
+        await self._invalidate_cache_for_resource(info.resource_id)
+        logger.debug(
+            "put cache invalidated",
+            extra={"resource_id": info.resource_id},
+        )
+
+        return MutationResult(
+            success=True,
+            resource_id=info.resource_id,
+            data=result,
+            error=None,
+            error_type=None,
+        )
+
     async def put(self, info: PutInfo, user: Any = None) -> MutationResult:
         """Execute an update/put operation.
         
@@ -322,89 +438,57 @@ class DataAccess:
             if not isinstance(info.data, dict):
                 raise ValidationError("Update data must be a dict")
         except ValidationError:
-            logger.warning(
-                "put validation error",
-                extra={"resource_id": info.resource_id},
-            )
-            return MutationResult(
-                success=False,
-                resource_id=info.resource_id,
-                data=None,
-                error="Validation error",
-                error_type="validation",
-            )
+            return self._mutation_validation_error(info.resource_id, "put")
 
         try:
-            logger.debug(
-                "put update",
-                extra={"resource_id": info.resource_id},
-            )
-            existing = await self._repository.get(info.resource_id)
-            if existing is None:
-                raise NotFoundError(
-                    f"Resource '{info.resource_id}' not found for update"
-                )
-
-            if self._authorizer is not None:
-                await self._check_authorization(
-                    "put", info.resource_id, user, data=existing
-                )
-
-            result = await self._repository.try_update(
-                info.resource_id,
-                expected=existing,
-                update=lambda e: {**e, **info.data},
-            )
-            if result is None:
-                return MutationResult(
-                    success=False,
-                    resource_id=info.resource_id,
-                    data=None,
-                    error="Conflict",
-                    error_type="conflict",
-                )
-
-            await self._invalidate_cache_for_resource(info.resource_id)
-            logger.debug(
-                "put cache invalidated",
-                extra={"resource_id": info.resource_id},
-            )
-
-            return MutationResult(
-                success=True,
-                resource_id=info.resource_id,
-                data=result,
-                error=None,
-                error_type=None,
-            )
-
+            return await self._execute_put(info, user)
         except NotFoundError:
-            logger.info(
-                "put not found",
-                extra={"resource_id": info.resource_id},
-            )
-            return MutationResult(
-                success=False,
-                resource_id=info.resource_id,
-                data=None,
-                error="Not found",
-                error_type="not_found",
-            )
+            return self._mutation_not_found_error(info.resource_id, "put")
         except AuthorizationError:
-            logger.warning(
-                "put unauthorized",
-                extra={
-                    "resource_id": info.resource_id,
-                    "user": self._user_id(user),
-                },
+            return self._mutation_auth_error(info.resource_id, user, "put")
+
+    async def _execute_delete(self, info: DeleteInfo, user: Any) -> MutationResult:
+        """Execute the core delete mutation logic."""
+        logger.debug(
+            "delete",
+            extra={"resource_id": info.resource_id},
+        )
+        existing = await self._repository.get(info.resource_id)
+        if existing is None:
+            raise NotFoundError(
+                f"Resource '{info.resource_id}' not found for deletion"
             )
+
+        if self._authorizer is not None:
+            await self._check_authorization(
+                "delete", info.resource_id, user, data=existing
+            )
+
+        deleted = await self._repository.try_delete(
+            info.resource_id, expected=existing
+        )
+        if not deleted:
             return MutationResult(
                 success=False,
                 resource_id=info.resource_id,
                 data=None,
-                error="Unauthorized",
-                error_type="authorization",
+                error="Conflict",
+                error_type="conflict",
             )
+
+        await self._invalidate_cache_for_resource(info.resource_id)
+        logger.debug(
+            "delete cache invalidated",
+            extra={"resource_id": info.resource_id},
+        )
+
+        return MutationResult(
+            success=True,
+            resource_id=info.resource_id,
+            data=None,
+            error=None,
+            error_type=None,
+        )
 
     async def delete(self, info: DeleteInfo, user: Any = None) -> MutationResult:
         """Execute a delete operation.
@@ -420,84 +504,11 @@ class DataAccess:
             if not info.resource_id or not isinstance(info.resource_id, str):
                 raise ValidationError("resource_id must be a non-empty string")
         except ValidationError:
-            logger.warning(
-                "delete validation error",
-                extra={"resource_id": info.resource_id},
-            )
-            return MutationResult(
-                success=False,
-                resource_id=info.resource_id,
-                data=None,
-                error="Validation error",
-                error_type="validation",
-            )
+            return self._mutation_validation_error(info.resource_id, "delete")
 
         try:
-            logger.debug(
-                "delete",
-                extra={"resource_id": info.resource_id},
-            )
-            existing = await self._repository.get(info.resource_id)
-            if existing is None:
-                raise NotFoundError(
-                    f"Resource '{info.resource_id}' not found for deletion"
-                )
-
-            if self._authorizer is not None:
-                await self._check_authorization(
-                    "delete", info.resource_id, user, data=existing
-                )
-
-            deleted = await self._repository.try_delete(
-                info.resource_id, expected=existing
-            )
-            if not deleted:
-                return MutationResult(
-                    success=False,
-                    resource_id=info.resource_id,
-                    data=None,
-                    error="Conflict",
-                    error_type="conflict",
-                )
-
-            await self._invalidate_cache_for_resource(info.resource_id)
-            logger.debug(
-                "delete cache invalidated",
-                extra={"resource_id": info.resource_id},
-            )
-
-            return MutationResult(
-                success=True,
-                resource_id=info.resource_id,
-                data=None,
-                error=None,
-                error_type=None,
-            )
-
+            return await self._execute_delete(info, user)
         except NotFoundError:
-            logger.info(
-                "delete not found",
-                extra={"resource_id": info.resource_id},
-            )
-            return MutationResult(
-                success=False,
-                resource_id=info.resource_id,
-                data=None,
-                error="Not found",
-                error_type="not_found",
-            )
+            return self._mutation_not_found_error(info.resource_id, "delete")
         except AuthorizationError:
-            logger.warning(
-                "delete unauthorized",
-                extra={
-                    "resource_id": info.resource_id,
-                    "user": self._user_id(user),
-                },
-            )
-            return MutationResult(
-                success=False,
-                resource_id=info.resource_id,
-                data=None,
-                error="Unauthorized",
-                error_type="authorization",
-            )
+            return self._mutation_auth_error(info.resource_id, user, "delete")
