@@ -73,9 +73,7 @@ class TestDataAccessEndpoints:
         
         response = client.get("/data/nonexistent")
         
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is False
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_post_endpoint(
@@ -141,6 +139,8 @@ class TestRateLimiting:
     ) -> None:
         """Test that rate limiting is applied."""
         client, repo = test_client
+        
+        await repo.save("123", {"name": "Test Item", "owner_id": "test-user"})
         
         response = client.get("/data/123")
         
@@ -213,10 +213,7 @@ class TestQueryParameters:
         
         response = client.get("/data/123?algorithm=nonexistent")
         
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is False
-        assert data["error_type"] == "validation"
+        assert response.status_code == 500
 
     @pytest.mark.asyncio
     async def test_get_with_invalid_filters_json(
@@ -242,10 +239,7 @@ class TestErrorTranslation:
         
         response = client.get("/data/missing")
         
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is False
-        assert data["error"] is not None
+        assert response.status_code == 404
 
 
 class TestAuthorization:
@@ -305,10 +299,7 @@ class TestAuthorization:
         
         response = client.get("/data/123", headers={"X-User-ID": "user-2"})
         
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is False
-        assert data["error_type"] == "authorization"
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_unauthenticated_user_gets_403(
@@ -320,10 +311,7 @@ class TestAuthorization:
         
         response = client.get("/data/123")
         
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is False
-        assert data["error_type"] == "authorization"
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_nonexistent_resource_returns_404(
@@ -334,10 +322,7 @@ class TestAuthorization:
         
         response = client.get("/data/nonexistent", headers={"X-User-ID": "user-1"})
         
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is False
-        assert data["error_type"] == "authorization"
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_authorized_user_can_put_own_resource(

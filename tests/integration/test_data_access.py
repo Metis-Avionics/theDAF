@@ -8,6 +8,7 @@ from daf.algorithms import FibonacciDP
 from daf.cache import MemoryCache
 from daf.contracts import DeleteInfo, PostInfo, PutInfo, QueryInfo
 from daf.core import DataAccessFactory
+from daf.core.errors import NotFoundError
 from daf.repositories import MemoryRepository
 
 
@@ -85,10 +86,8 @@ class TestDataAccessQuery:
         """Test query for non-existent resource."""
         repo, cache, daf = setup_daf
         
-        result = await daf.query(QueryInfo(resource_id="nonexistent"))
-        
-        assert result.success is False
-        assert "not found" in result.error.lower()
+        with pytest.raises(NotFoundError):
+            await daf.query(QueryInfo(resource_id="nonexistent"))
 
     @pytest.mark.asyncio
     async def test_query_with_algorithm(
@@ -178,12 +177,10 @@ class TestDataAccessMutations:
         """Test PUT on non-existent resource fails."""
         repo, cache, daf = setup_daf
         
-        result = await daf.put(
-            PutInfo(resource_id="nonexistent", data={"name": "Jane"})
-        )
-        
-        assert result.success is False
-        assert "not found" in result.error.lower()
+        with pytest.raises(NotFoundError):
+            await daf.put(
+                PutInfo(resource_id="nonexistent", data={"name": "Jane"})
+            )
 
     @pytest.mark.asyncio
     async def test_delete_resource(
@@ -211,10 +208,8 @@ class TestDataAccessMutations:
         """Test DELETE on non-existent resource fails."""
         repo, cache, daf = setup_daf
         
-        result = await daf.delete(DeleteInfo(resource_id="nonexistent"))
-        
-        assert result.success is False
-        assert "not found" in result.error.lower()
+        with pytest.raises(NotFoundError):
+            await daf.delete(DeleteInfo(resource_id="nonexistent"))
 
     @pytest.mark.asyncio
     async def test_mutations_invalidate_cache(

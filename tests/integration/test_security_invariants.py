@@ -11,7 +11,7 @@ from daf.algorithms import FibonacciDP
 from daf.cache import MemoryCache
 from daf.contracts import DeleteInfo, PostInfo, PutInfo, QueryInfo
 from daf.core import DataAccessFactory
-from daf.core.errors import AuthorizationError
+from daf.core.errors import AuthorizationError, NotFoundError, ValidationError
 from daf.repositories import MemoryRepository
 
 
@@ -58,7 +58,7 @@ def _expected_cache_key(
         "user_id": user_id,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return f"query:{hashlib.sha256(canonical.encode()).hexdigest()}"
+    return f"query:{resource_id}:{hashlib.sha256(canonical.encode()).hexdigest()}"
 
 
 class TestAuthorizationCacheIsolation:
@@ -91,12 +91,10 @@ class TestAuthorizationCacheIsolation:
         assert result_user1_again.success is True
         assert result_user1_again.cache_hit is True
         
-        result_user2 = await daf.query(
-            QueryInfo(resource_id="123"), user=FakeUser("user-2")
-        )
-        assert result_user2.success is False
-        assert result_user2.error_type == "authorization"
-        assert result_user2.cache_hit is False
+        with pytest.raises(AuthorizationError):
+            await daf.query(
+                QueryInfo(resource_id="123"), user=FakeUser("user-2")
+            )
 
 
 class TestAlgorithmCacheIsolation:
@@ -266,33 +264,27 @@ class TestErrorTypePreservation:
 
     @pytest.mark.asyncio
     async def test_not_found_error_preserves_type(self) -> None:
-        """Test that NotFoundError is preserved in QueryResult."""
+        """Test that NotFoundError is raised for missing resources."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         daf = DataAccessFactory(repository=repo, cache=cache).create()
         
-        result = await daf.query(QueryInfo(resource_id="nonexistent"))
-        
-        assert result.success is False
-        assert result.error_type == "not_found"
-        assert result.error == "Not found"
+        with pytest.raises(NotFoundError):
+            await daf.query(QueryInfo(resource_id="nonexistent"))
 
     @pytest.mark.asyncio
     async def test_validation_error_preserves_type(self) -> None:
-        """Test that ValidationError is preserved in MutationResult."""
+        """Test that ValidationError is raised for invalid post input."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         daf = DataAccessFactory(repository=repo, cache=cache).create()
         
-        result = await daf.post(PostInfo(resource_type="", data={"name": "John"}))
-        
-        assert result.success is False
-        assert result.error_type == "validation"
-        assert result.error == "Validation error"
+        with pytest.raises(ValidationError):
+            await daf.post(PostInfo(resource_type="", data={"name": "John"}))
 
     @pytest.mark.asyncio
     async def test_authorization_error_preserves_type(self) -> None:
-        """Test that AuthorizationError is preserved in QueryResult."""
+        """Test that AuthorizationError is raised for unauthorized access."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
@@ -302,13 +294,10 @@ class TestErrorTypePreservation:
         
         await repo.save("123", {"name": "John", "owner_id": "user-1"})
         
-        result = await daf.query(
-            QueryInfo(resource_id="123"), user=FakeUser("user-2")
-        )
-        
-        assert result.success is False
-        assert result.error_type == "authorization"
-        assert result.error == "Unauthorized"
+        with pytest.raises(AuthorizationError):
+            await daf.query(
+                QueryInfo(resource_id="123"), user=FakeUser("user-2")
+            )
 
     @pytest.mark.asyncio
     async def test_unexpected_error_propagates(self) -> None:
@@ -348,20 +337,20 @@ class TestInputValidation:
 
     @pytest.mark.asyncio
     async def test_empty_resource_id_returns_validation_error(self) -> None:
-        """Test that empty resource_id returns validation error."""
+        """Test that empty resource_id raises validation error."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         daf = DataAccessFactory(repository=repo, cache=cache).create()
         
-        result = await daf.query(QueryInfo(resource_id=""))
-        assert result.success is False
-        assert result.error_type == "validation"
+        with pytest.raises(ValidationError):
+            await daf.query(QueryInfo(resource_id=""))
 
     @pytest.mark.asyncio
     async def test_nonexistent_resource_returns_not_found_for_authenticated_user(
         self,
     ) -> None:
-        """Test that non-existent resource returns not_found for authenticated user."""
+        """Test that non-existent resource raises NotFoundError for authenticated
+        user."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         authorizer = FakeAuthorizer(owned_resources={})
@@ -369,12 +358,11 @@ class TestInputValidation:
             repository=repo, cache=cache, authorizer=authorizer
         ).create()
         
-        result = await daf.query(
-            QueryInfo(resource_id="nonexistent"),
-            user=FakeUser("user-1"),
-        )
-        assert result.success is False
-        assert result.error_type == "not_found"
+        with pytest.raises(NotFoundError):
+            await daf.query(
+                QueryInfo(resource_id="nonexistent"),
+                user=FakeUser("user-1"),
+            )
 
 
 class TestFilterEdgeCases:
@@ -408,11 +396,10 @@ class TestFilterEdgeCases:
         
         await repo.save("123", {"name": "Test"})
         
-        result = await daf.query(
-            QueryInfo(resource_id="123", filters={"created": datetime.now()})
-        )
-        assert result.success is False
-        assert result.error_type == "validation"
+        with pytest.raises(ValidationError):
+            await daf.query(
+                QueryInfo(resource_id="123", filters={"created": datetime.now()})
+            )
 
 
 class TestFastAPIAdapterRequiresGetCurrentUser:
@@ -567,24 +554,88 @@ class TestAtomicAuthAndRead:
         assert result.success is True
         assert read_count == 1
 
+    @pytest.mark.asyncio
+    async def test_query_uses_single_repository_read(self) -> None:
+        """Test that QUERY reads the repository only once on cache miss."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        cache = MemoryCache()
+        
+        read_count = 0
+        original_get = repo.get
+        
+        async def counting_get(key: str) -> Any:
+            nonlocal read_count
+            read_count += 1
+            return await original_get(key)
+        
+        repo.get = counting_get  # type: ignore
+        
+        authorizer = FakeAuthorizer(owned_resources={"123": "user-1"})
+        daf = DataAccessFactory(
+            repository=repo, cache=cache, authorizer=authorizer
+        ).create()
+        
+        await repo.save("123", {"name": "John", "owner_id": "user-1"})
+        
+        result = await daf.query(
+            QueryInfo(resource_id="123"), user=FakeUser("user-1")
+        )
+        assert result.success is True
+        assert read_count == 1
+
+
+class TestMutableValueIsolation:
+    """Test that repository and cache return independent copies."""
+
+    @pytest.mark.asyncio
+    async def test_repository_returns_independent_copy(self) -> None:
+        """Test that mutating returned dict does not affect repository state."""
+        repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
+        original = {"name": "John", "owner_id": "user-1"}
+        await repo.save("123", original)
+        
+        fetched = await repo.get("123")
+        assert fetched is not None
+        fetched_copy: dict[str, Any] = fetched
+        fetched_copy["name"] = "Jane"
+        
+        stored = await repo.get("123")
+        assert stored is not None
+        assert stored["name"] == "John"
+
+    @pytest.mark.asyncio
+    async def test_cache_returns_independent_copy(self) -> None:
+        """Test that mutating cached dict does not affect cache state."""
+        cache = MemoryCache()
+        original = {"name": "John", "owner_id": "user-1"}
+        await cache.set("query:123:abc", original)
+        
+        fetched = await cache.get("query:123:abc")
+        assert fetched is not None
+        fetched_copy: dict[str, Any] = fetched
+        fetched_copy["name"] = "Jane"
+        
+        cached_again = await cache.get("query:123:abc")
+        assert cached_again is not None
+        assert cached_again["name"] == "John"
+
 
 class TestUnknownAlgorithmValidation:
     """Test that unknown algorithms return validation errors."""
 
     @pytest.mark.asyncio
     async def test_unknown_algorithm_returns_validation_error(self) -> None:
-        """Test that querying with unknown algorithm returns validation error."""
+        """Test that querying with unknown algorithm raises validation error."""
         repo: MemoryRepository[dict[str, Any]] = MemoryRepository()
         cache = MemoryCache()
         daf = DataAccessFactory(repository=repo, cache=cache).create()
         
         await repo.save("123", {"name": "Test"})
         
-        result = await daf.query(
-            QueryInfo(resource_id="123", algorithm="nonexistent")
-        )
-        assert result.success is False
-        assert result.error_type == "validation"
+        with pytest.raises(ValidationError):
+            await daf.query(
+                QueryInfo(resource_id="123", algorithm="nonexistent")
+            )
 
 
 class TestPostAuthorization:
@@ -618,12 +669,11 @@ class TestPostAuthorization:
             repository=repo, cache=cache, authorizer=authorizer
         ).create()
         
-        result = await daf.post(
-            PostInfo(resource_type="user", data={"name": "Admin", "admin": True}),
-            user=FakeUser("user-1"),
-        )
-        assert result.success is False
-        assert result.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.post(
+                PostInfo(resource_type="user", data={"name": "Admin", "admin": True}),
+                user=FakeUser("user-1"),
+            )
 
     @pytest.mark.asyncio
     async def test_post_authorizer_receives_data(self) -> None:
@@ -702,11 +752,10 @@ class TestCacheHitReauthorization:
         
         authorizer._allowed = False
         
-        result2 = await daf.query(
-            QueryInfo(resource_id="123"), user=FakeUser("user-1")
-        )
-        assert result2.success is False
-        assert result2.error_type == "authorization"
+        with pytest.raises(AuthorizationError):
+            await daf.query(
+                QueryInfo(resource_id="123"), user=FakeUser("user-1")
+            )
 
 
 class TestConcurrentModificationDetection:

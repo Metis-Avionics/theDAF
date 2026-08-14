@@ -5,7 +5,11 @@ from typing import Any, Protocol
 
 
 class Repository[T](Protocol):
-    """Abstract repository protocol for data access."""
+    """Abstract repository protocol for data access.
+
+    Implementations should return independent copies or snapshots.
+    Callers must not mutate returned values in-place.
+    """
 
     async def get(self, key: str) -> T | None:
         """Retrieve an item by key. Returns None if not found."""
@@ -43,7 +47,11 @@ class Repository[T](Protocol):
 
 
 class Cache(Protocol):
-    """Abstract cache protocol."""
+    """Abstract cache protocol.
+
+    Implementations should return independent copies.
+    Callers must not mutate cached values in-place.
+    """
 
     async def get(self, key: str) -> Any | None:
         """Retrieve a value from cache. Returns None if not found or expired."""
@@ -79,7 +87,11 @@ class Algorithm(Protocol):
 
 
 class Authorizer(Protocol):
-    """Abstract authorizer protocol for access control."""
+    """Abstract authorizer protocol for access control.
+
+    `user` must have a stable `.id` attribute for cache identity.
+    `str(user)` fallback is deprecated.
+    """
 
     async def authorize(
         self,

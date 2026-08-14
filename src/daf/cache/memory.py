@@ -1,5 +1,6 @@
 """Cache implementations."""
 
+import copy
 import logging
 from typing import Any
 
@@ -23,7 +24,10 @@ class MemoryCache:
             The cached value if found, None otherwise.
         """
         logger.debug("cache get", extra={"key": key})
-        return self._cache.get(key)
+        value = self._cache.get(key)
+        if isinstance(value, dict):
+            return copy.deepcopy(value)
+        return value
 
     async def set(self, key: str, value: Any) -> None:
         """Store a value in cache.
