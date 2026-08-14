@@ -81,6 +81,13 @@ class Cache(Protocol):
         """Delete all values with keys starting with the given prefix."""
         ...
 
+    async def shake(self, prefix: str) -> int:
+        """Delete all values with keys starting with the given prefix.
+
+        Returns the number of keys removed.
+        """
+        ...
+
     async def clear(self) -> None:
         """Clear all values from cache."""
         ...

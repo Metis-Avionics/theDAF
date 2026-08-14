@@ -64,9 +64,38 @@ class MemoryCache:
             prefix: The key prefix to match.
         """
         logger.debug("cache delete_prefix", extra={"prefix": prefix})
-        keys_to_delete = [key for key in self._cache if key.startswith(prefix)]
+        for key in self._delete_prefix_impl(prefix):
+            del self._cache[key]
+
+    async def shake(self, prefix: str) -> int:
+        """Delete all values with keys starting with the given prefix.
+
+        Returns the count of removed keys. This is the same operation as
+        ``delete_prefix`` but returns the number of keys removed, which is
+        useful for observability and testing.
+
+        Args:
+            prefix: The key prefix to match.
+
+        Returns:
+            Number of keys removed.
+        """
+        logger.debug("cache shake", extra={"prefix": prefix})
+        keys_to_delete = self._delete_prefix_impl(prefix)
         for key in keys_to_delete:
             del self._cache[key]
+        return len(keys_to_delete)
+
+    def _delete_prefix_impl(self, prefix: str) -> list[str]:
+        """Collect keys matching the given prefix for removal.
+        
+        Args:
+            prefix: The key prefix to match.
+            
+        Returns:
+            List of keys to delete.
+        """
+        return [key for key in self._cache if key.startswith(prefix)]
 
     async def clear(self) -> None:
         """Clear all values from cache."""

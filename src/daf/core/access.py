@@ -164,6 +164,31 @@ class DataAccess:
                 current = 0
             await self._cache.set(f"_daf_gen:{namespace}", current + 1)
 
+    async def _superedge_invalidate(self, resource_id: str) -> None:
+        """Atomically invalidate all cached projections for a resource.
+
+        Performs the "superedge collapse": deletes all query cache entries
+        and the generation counter for the resource, then advances the
+        generation counter so subsequent reads rebuild from the repository.
+
+        The generation counter is read under the per-resource lock before
+        any deletion so that concurrent mutations do not lose increments
+        when the generation key is absent.
+
+        Optionally calls ``shake`` on the cache to prune any orphaned
+        sub-branches that prefix deletion may have missed.
+        """
+        namespace = self._resource_namespace(resource_id)
+        lock = await self._generation_lock(resource_id)
+        async with lock:
+            current = await self._cache.get(f"_daf_gen:{namespace}")
+            if not isinstance(current, int):
+                current = 0
+            await self._cache.delete_prefix(f"query:{namespace}:")
+            await self._cache.delete(f"_daf_gen:{namespace}")
+            await self._cache.shake(f"_daf_gen:{namespace}")
+            await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+
     def _cache_key(self, info: QueryInfo, user: Any) -> str:
         """Build cache key from full query semantics."""
         user_id = self._user_id(user)
@@ -383,9 +408,7 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        namespace = self._resource_namespace(info.resource_id)
-        await self._cache.delete_prefix(f"query:{namespace}:")
-        await self._advance_generation(info.resource_id)
+        await self._superedge_invalidate(info.resource_id)
         logger.debug(
             "put cache invalidated",
             extra={"resource_id": info.resource_id},
@@ -449,9 +472,7 @@ class DataAccess:
                 error_type="conflict",
             )
 
-        namespace = self._resource_namespace(info.resource_id)
-        await self._cache.delete_prefix(f"query:{namespace}:")
-        await self._advance_generation(info.resource_id)
+        await self._superedge_invalidate(info.resource_id)
         logger.debug(
             "delete cache invalidated",
             extra={"resource_id": info.resource_id},

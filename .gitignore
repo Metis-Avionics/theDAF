@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# graphifyy artifacts (CI/development)
+graphify-out/
+graph.json

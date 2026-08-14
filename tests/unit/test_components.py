@@ -185,6 +185,51 @@ class TestMemoryCache:
         assert cached["name"] == "John"
         assert cached["tags"] == ["a", "b"]
 
+    @pytest.mark.asyncio
+    async def test_shake_removes_all_keys_under_prefix(self) -> None:
+        """Test that shake removes all keys matching the prefix."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:a:2", "v2")
+        await cache.set("ns:b:1", "v3")
+        await cache.set("other:x", "v4")
+
+        removed = await cache.shake("ns:a:")
+
+        assert removed == 2
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:a:2") is None
+        assert await cache.get("ns:b:1") == "v3"
+        assert await cache.get("other:x") == "v4"
+
+    @pytest.mark.asyncio
+    async def test_shake_returns_count_of_removed_keys(self) -> None:
+        """Test that shake returns the count of keys it removed."""
+        cache = MemoryCache()
+        await cache.set("p:x", "v1")
+        await cache.set("p:y", "v2")
+        await cache.set("p:z", "v3")
+
+        removed = await cache.shake("p:")
+
+        assert removed == 3
+
+    @pytest.mark.asyncio
+    async def test_shake_empty_cache_returns_zero(self) -> None:
+        """Test that shake on an empty cache returns 0."""
+        cache = MemoryCache()
+        removed = await cache.shake("ns:")
+        assert removed == 0
+
+    @pytest.mark.asyncio
+    async def test_shake_no_match_returns_zero(self) -> None:
+        """Test that shake with no matching keys returns 0 and leaves cache intact."""
+        cache = MemoryCache()
+        await cache.set("a:1", "v1")
+        removed = await cache.shake("b:")
+        assert removed == 0
+        assert await cache.get("a:1") == "v1"
+
 
 class TestFibonacciDP:
     """Test Fibonacci dynamic programming algorithm."""

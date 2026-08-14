@@ -8,23 +8,23 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 ### Repository Status
 
-- **Branch**: `fix/r7-r12-red-team-composition-fixes` (pushed to origin)
-- **Commits**: 2 ahead of main (R7-R12 + R13-R21 fixes), plus uncommitted concurrency-hardening changes
-- **Uncommitted Work**: Concurrency hardening (per-resource generation locks, stale-query test, concurrent-mutation test)
-- **PR Status**: #17 open for review (R7-R21 + concurrency hardening)
+- **Branch**: `main`
+- **Commits**: up to date with origin/main; uncommitted superedge collapse + tree shaking changes
+- **Uncommitted Work**: superedge collapse, AST tree shaking, graphifyy CI
+- **PR Status**: #17 merged
 
 ### Quality Status
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 121/121 passing |
+| Tests (pytest) | ✅ 127/127 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`, `.kilo/plans/1786725060659-red-team-composition-fixes-r7-r12.md`, and `.kilo/plans/1786725334556-red-team-composition-fixes-r13-r21.md` have been addressed:
+All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`, `.kilo/plans/1786725060659-red-team-composition-fixes-r7-r12.md`, `.kilo/plans/1786725334556-red-team-composition-fixes-r13-r21.md`, `.kilo/plans/1786729023035-concurrency-hardening.md`, and `.kilo/plans/1786731242087-ast-tree-shaking-superedge-collapse.md` have been addressed:
 
 - **R1**: Core raises AuthorizationError/NotFoundError; FastAPI maps to 403/404
 - **R2**: Single repository read per query with atomic auth+read ordering
@@ -47,24 +47,27 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`,
 - **R19**: `DataAccess` generation counter prevents stale cache resurrection; cache entries carry `generation`; stale entries rejected on cache hit
 - **R19b**: Generation moved to shared cache with per-resource scoping; prevents stale resurrection across DataAccess instances
 - **R19c**: Generation is per-resource, not global; mutating resource A does not invalidate resource B's cache
-- **R22**: Per-resource asyncio.Lock serializes _advance_generation within the same process; eliminates read-modify-write race for concurrent mutations sharing a cache
+- **R22**: Per-resource `asyncio.Lock` serializes `_advance_generation` within the same process; eliminates read-modify-write race for concurrent mutations sharing a cache
 - **R23**: Concurrency model documented in DataAccess docstring; delete_prefix is authoritative invalidation, generation is best-effort fast-path
 - **R24**: New tests prove stale query interleaving is rejected and concurrent mutations advance generation monotonically
-- **R20**: `Repository`/`Cache` protocols and `MemoryRepository`/`MemoryCache` docstrings document deepcopy-able value constraint
-- **R21**: `Algorithm` protocol documents immutability contract; `_execute_cache_miss` comment documents snapshot semantics; test added
-- **R21b**: `_execute_cache_miss` deepcopies repository data before algorithm execution; prevents in-place algorithm mutation from poisoning auth snapshot
+- **R25**: `Repository`/`Cache` protocols and `MemoryRepository`/`MemoryCache` docstrings document deepcopy-able value constraint
+- **R26**: `Algorithm` protocol documents immutability contract; `_execute_cache_miss` deepcopies data before algorithm execution
 - **R3b**: Cache key and invalidation prefix use `sha256(resource_id)` namespace; prevents delimiter-collision attacks when resource_id contains `:`
+- **R21b**: `_execute_cache_miss` deepcopies repository data before algorithm execution; prevents in-place algorithm mutation from poisoning auth snapshot
+- **Superedge collapse**: `_superedge_invalidate()` atomically deletes query keys, generation key, calls `shake()`, and writes back `current + 1` under the per-resource lock — eliminates the two-step `delete_prefix + _advance_generation` pattern in `put()` and `delete()`
+- **AST tree shaking**: `MemoryCache.shake(prefix) -> int` removes all keys under a prefix and returns the removal count; added to `Cache` protocol; enables proactive stale-branch pruning after mutations
+- **graphifyy CI**: `graphifyy>=0.9.42` added as a runtime dependency; new `graphify` CI job runs `graphify extract` and `graphify diagnose multigraph --json` after build; `graphify-out/` and `graph.json` ignored in `.gitignore`
 
 ### Key Facts
 
 - **Package**: `thedaf`
-- **Version**: 0.1.0 (0.2.0 pending)
+- **Version**: 0.2.0
 - **Python**: >= 3.12
 - **License**: MIT
 - **Author**: Rayan Aliane
-- **Core Dependency**: `pydantic>=2.0,<3.0`
+- **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 121/121 passing
+- **Test Count**: 127/127 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 
@@ -93,9 +96,9 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`,
 ├── tests/
 │   ├── unit/
 │   │   ├── test_contracts.py    # 14 tests
-│   │   └── test_components.py   # 19 tests
+│   │   └── test_components.py   # 23 tests
 │   └── integration/
-│       ├── test_data_access.py  # 14 tests
+│       ├── test_data_access.py  # 16 tests
 │       ├── test_authorization.py  # 15 tests
 │       ├── test_fastapi_adapter.py  # 18 tests
 │       └── test_security_invariants.py  # 30 tests
@@ -111,10 +114,9 @@ All issues from `.kilo/plans/1786701844113-red-team-composition-fixes-r1-r6.md`,
 
 ### Next Steps
 
-1. Review PR #17
-2. Merge PR after approval
-3. Tag release `v0.2.0`
-4. Publish to PyPI
+1. Commit all changes
+2. Tag release `v0.2.0`
+3. Publish to PyPI
 
 ### Gate Files
 
@@ -131,4 +133,4 @@ The following gate files are maintained and updated after every turn:
 
 - **Repository**: https://github.com/RAliane-REBORN/theDAF
 - **Issues**: https://github.com/RAliane-REBORN/theDAF/issues
-- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17 (merged)

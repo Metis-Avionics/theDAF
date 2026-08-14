@@ -230,6 +230,71 @@ class TestDataAccessMutations:
         assert not any(key in cache._cache for key in keys_before)
 
 
+class TestSuperedgeInvalidate:
+    """Test _superedge_invalidate behavior."""
+
+    @pytest.fixture
+    def setup_daf(
+        self,
+    ) -> tuple[MemoryRepository[Any], MemoryCache, Any]:
+        repo: MemoryRepository[Any] = MemoryRepository()
+        cache = MemoryCache()
+        factory = DataAccessFactory(repository=repo, cache=cache)
+        daf = factory.create()
+        return repo, cache, daf
+
+    @pytest.mark.asyncio
+    async def test_superedge_invalidate_advances_generation_and_clears_prefix(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
+        """Test that _superedge_invalidate clears query keys and advances generation."""
+        repo, cache, daf = setup_daf
+
+        await repo.save("res-1", {"name": "Alice"})
+        await daf.query(QueryInfo(resource_id="res-1"))
+
+        gen_before = await daf._current_generation("res-1")
+        assert gen_before == 0
+
+        keys_before = {k for k in cache._cache if k.startswith("query:")}
+        assert len(keys_before) == 1
+
+        await daf._superedge_invalidate("res-1")
+
+        assert not any(
+            key in cache._cache for key in keys_before
+        ), "query keys should be removed after superedge invalidate"
+
+        gen_after = await daf._current_generation("res-1")
+        assert gen_after == gen_before + 1
+
+    @pytest.mark.asyncio
+    async def test_concurrent_mutations_with_superedge_do_not_lose_invalidations(
+        self, setup_daf: tuple[MemoryRepository[Any], MemoryCache, Any]
+    ) -> None:
+        """Test concurrent _superedge_invalidate calls advance
+        generation monotonically."""
+        import asyncio
+
+        repo, cache, daf = setup_daf
+        await repo.save("res-concurrent", {"name": "Alice"})
+
+        async def do_invalidate() -> int:
+            await daf._superedge_invalidate("res-concurrent")
+            return await daf._current_generation("res-concurrent")
+
+        results = await asyncio.gather(*[do_invalidate() for _ in range(5)])
+
+        final_gen = await daf._current_generation("res-concurrent")
+        assert final_gen == 5, (
+            f"Expected generation 5 after 5 invalidations, got {final_gen}"
+        )
+        for i, g in enumerate(results):
+            assert g == i + 1, (
+                f"Invalidation {i} returned generation {g}, expected {i + 1}"
+            )
+
+
 class TestDataAccessSubstitution:
     """Test repository substitution for testing."""
 

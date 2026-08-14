@@ -400,3 +400,64 @@ Each session entry should include:
 - Cross-process atomic generation remains best-effort; stale entries are always rejected by generation comparison
 
 ---
+
+## Session 007 - 2026-08-14
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `eeb0852` on branch `main` (PR #17 merged) passes 121 tests, mypy --strict clean, ruff clean, Power of Ten clean.
+
+**Actions Taken**:
+- Read plan `.kilo/plans/1786731242087-ast-tree-shaking-superedge-collapse.md`
+- Implemented superedge collapse: `_superedge_invalidate()` in `DataAccess` atomically deletes query keys, deletes generation key, calls `shake()`, then writes back `current + 1` under the per-resource lock (prevents lost increments when gen key is absent)
+- Implemented AST tree shaking: `MemoryCache.shake(prefix) -> int` reuses `_delete_prefix_impl` and returns removal count; added to `Cache` protocol
+- Replaced two-step `delete_prefix + _advance_generation` pattern in `_execute_put` and `_execute_delete` with `_superedge_invalidate`
+- Added graphifyy dev dependency (`graphifyy>=0.9.42`) to `pyproject.toml` dependencies
+- Added `graphify` CI job (needs `build`) running `graphify extract` and `graphify diagnose multigraph --json`
+- Added `graphify-out/` and `graph.json` to `.gitignore`
+- Added 6 new tests: 4 for `shake` (removes keys, returns count, empty cache, no match), 2 for `_superedge_invalidate` (advances generation + clears prefix, concurrent monotonicity)
+- Updated living docs: CHANGELOG.md, HANDOVER.md, SESSION.md
+- Ran full validation: 127 tests passing, mypy --strict clean, ruff clean, Power of Ten clean
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/core/access.py | Modified | Added `_superedge_invalidate()`; replaced two-step invalidation in `_execute_put` and `_execute_delete` |
+| src/daf/cache/memory.py | Modified | Added `_delete_prefix_impl()`, `shake()` returning removal count |
+| src/daf/core/protocols.py | Modified | Added `shake()` to `Cache` protocol |
+| pyproject.toml | Modified | Added `graphifyy>=0.9.42` to runtime dependencies |
+| .github/workflows/ci.yml | Modified | Added `graphify` CI job |
+| .gitignore | Modified | Added `graphify-out/` and `graph.json` |
+| tests/unit/test_components.py | Modified | Added 4 shake tests |
+| tests/integration/test_data_access.py | Modified | Added `TestSuperedgeInvalidate` with 2 tests |
+| CHANGELOG.md | Modified | Added superedge collapse, tree shaking, graphifyy entries |
+| HANDOVER.md | Modified | Updated project state |
+| SESSION.md | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `main`
+- **Version**: 0.2.0
+- **Tests**: 127/127 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Power of Ten**: All checks pass
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17 (merged)
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- `_superedge_invalidate` reads generation under lock before deletion, preventing lost increments when the gen key is absent
+- `shake` is O(N) over the entire `MemoryCache`; documented as bounded in-memory only
+- graphifyy version is pinned to avoid graph-shape drift across releases
+
+---

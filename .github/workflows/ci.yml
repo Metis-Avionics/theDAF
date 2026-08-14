@@ -44,3 +44,13 @@ jobs:
           name: dist
           path: dist/*
           retention-days: 7
+
+  graphify:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --frozen --group dev
+      - run: uv run python -m graphify extract . --code-only --no-cluster
+      - run: uv run python -m graphify diagnose multigraph --graph graphify-out/graph.json --json
