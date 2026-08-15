@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TestMemoryCache.test_memory_cache_bounded_eviction` — LRU eviction at capacity
 - `TestMemoryCache.test_memory_cache_unbounded_default` — default mode retains all entries
 - `TestMemoryCache.test_cache_trie_invariant_under_random_mutations` — adversarial invariant test (200 random mutations)
+- `MemoryCache` terminal-only prefix trie: only terminal nodes store a key, intermediate nodes carry only `children`
+- `MemoryCache._dfs_collect()` DFS helper for terminal key collection
+- `MemoryCache._bfs_collect()` BFS helper for level-order terminal key collection
+- `MemoryCache._astar_collect(target)` A* best-first helper returning keys matching longest prefix with target
+- `test_bfs_collect_matches_bruteforce_prefix`, `test_astar_collect_matches_bruteforce_prefix` reference-model tests
+- `httpx>=0.27` upgraded to `httpx2>=0.27` in dev and optional-dependencies
+- `test_memory_cache_rejects_negative_max_size`, `test_memory_cache_max_size_one`
+- `test_memory_cache_lru_delete_after_promotion`, `test_memory_cache_lru_prefix_delete_after_promotion`
+- `test_memory_cache_shake_empty_prefix_bounded`, `test_memory_cache_empty_key_bounded`
+- `test_trie_collect_matches_bruteforce_prefix` reference-model test
+- `test_canonical_node_id_*` and `test_changed_files_raises_on_missing_base` in `tests/unit/test_graphify.py`
+- `test_main_exits_one_on_missing_base`, `test_graphify_schema_validation_*`
 
 ### Changed
 
@@ -25,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `delete_prefix()` and `shake()` use `_trie_delete_prefix` instead of looping `_trie_delete`
 - `graphify_affected.py` canonical node-ID lookup queries `graph.json` before falling back to `file_to_node_id()`
 - `graphify_affected.py` validates base SHA availability via `git rev-parse --verify` before diffing
+- `MemoryCache._TrieNode` stores only terminal `key`; intermediate nodes carry only `children`
+- `MemoryCache._trie_collect` uses `_dfs_collect` DFS over terminal keys
+- `MemoryCache._trie_delete_prefix` returns collected keys; callers remove from `_cache`/`_lru` directly
+- `MemoryCache` complexity updated to O(prefix_length + K) for prefix operations
+- `MemoryCache` added `_bfs_collect` and `_astar_collect` traversal helpers for prefix-key enumeration
+- `graphify_affected.py` `changed_files()` raises `RuntimeError` on missing base instead of returning `[]`
+- `graphify_affected.py` `main()` validates graph JSON schema before processing
+- `httpx>=0.27` upgraded to `httpx2>=0.27` in both dependency sections
 
 ### Removed
 
@@ -42,13 +62,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `graphify_affected.py` `file_to_node_id()` hand-rolls node-ID mapping; canonical lookup now queries graph JSON (P2)
 - `graphify_affected.py` `--base` handling assumes base SHA exists locally; now validates before diffing (P2)
 - Barrel test `test_daf_is_strict_subset_of_core` renamed to `test_daf_is_subset_of_core` to match `issubset()` assertion (P2)
+- `_canonical_node_id()` returns hand-rolled ID even when graph has matching node with different ID (P1)
+- `changed_files()` returns `[]` on missing base SHA, causing silent "No Python files changed" exit 0 (P1)
+- `graphify_affected.py` `main()` does not validate graph JSON schema; malformed output causes misleading "no impacted tests" (P2)
+- `MemoryCache.__init__()` accepts negative `max_size` without complaint (P2)
+- `_trie_collect()` does not match brute-force prefix scan for all key sets (P2)
 
 ### Security
 
 - Removed unbounded in-process cache of `resource_id → sha256` mappings (memory-growth / potential DoS vector)
 - Subprocess failures in CI tooling now propagate as errors instead of being silently ignored
 - LRU eviction bounds memory for `MemoryCache` in production deployments
-- Prefix-based subtree detachment is now O(prefix_length) instead of O(N × key_length)
+- Prefix-based subtree detachment is now O(prefix_length + K) instead of O(N × key_length)
+- Terminal-only trie eliminates O(N × L) redundant key-string references across trie nodes
+- `MemoryCache` BFS and A* traversal helpers enable ordered and best-first prefix-key enumeration
+- Missing base SHA no longer produces false-green CI (green from invalid baseline)
+- Malformed graphify JSON now fails fast instead of producing misleading "no impacted tests" output
+- Negative `max_size` rejected explicitly; invalid configuration cannot create unbounded cache silently
+- `httpx2` replaces `httpx` as the test HTTP client (starlette deprecation fix)
 
 ## [0.2.0] - 2026-08-14
 

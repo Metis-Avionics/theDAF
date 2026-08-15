@@ -1,7 +1,7 @@
 # Known Bugs and Structural Defects
 
 > Red-team assessment findings. Issues are ordered by severity.
-> Last updated: 2026-08-14
+> Last updated: 2026-08-15
 
 ## 🔴 Critical
 
@@ -263,6 +263,62 @@ Querying with an algorithm name not present in the registry silently returned ra
 - `src/daf/core/access.py:196` — raises `ValidationError` for unknown algorithm names
 - `tests/integration/test_fastapi_adapter.py:214` — updated to expect `error_type="validation"`
 - `tests/integration/test_security_invariants.py:515` — new `TestUnknownAlgorithmValidation`
+
+---
+
+## Adversarial Hardening (PR18)
+
+### 26. ~~Trie memory amplification~~ FIXED
+
+`_TrieNode` previously stored a `keys: set[str]` at every node along every key's path. For N keys of average length L, this stored O(N × L) redundant string references in addition to `_cache`. Fixed by storing keys only at terminal nodes; intermediate nodes carry only `children`.
+
+**Fix:**
+- `src/daf/cache/memory.py:14` — `_TrieNode` now has `children` and `key` (singular, `str | None`)
+- `src/daf/cache/memory.py:147` — `_dfs_collect` DFS helper collects terminal keys
+- `src/daf/cache/memory.py:157` — `_trie_insert` sets `node.key = key` at terminal node only
+- `src/daf/cache/memory.py:164` — `_trie_delete` clears `node.key` and prunes empty ancestors
+- `src/daf/cache/memory.py:193` — `_trie_delete_prefix` detaches subtree and returns terminal keys
+
+---
+
+### 27. ~~Canonical node ID ignores graph~~ FIXED
+
+`_canonical_node_id()` previously validated `file_to_node_id(path)` against the graph but still returned the hand-rolled ID on mismatch. Fixed to return the first graph node's ID when the graph contains a matching `source_file`.
+
+**Fix:**
+- `scripts/graphify_affected.py:62` — collect all nodes matching `source_file == path`
+- `scripts/graphify_affected.py:72` — prefer exact module-level match, else return first graph node's ID
+- `scripts/graphify_affected.py:66` — warn and fall back to hand-rolled only when no graph match exists
+
+---
+
+### 28. ~~Missing base SHA produces false-green CI~~ FIXED
+
+`changed_files()` returned `[]` when the base ref was missing, causing `main()` to print "No Python files changed" and exit 0. Fixed to raise `RuntimeError` on missing base SHA.
+
+**Fix:**
+- `scripts/graphify_affected.py:26` — `changed_files()` raises `RuntimeError` on missing base
+- `scripts/graphify_affected.py:168` — `main()` catches `RuntimeError` and returns 1
+
+---
+
+### 29. ~~Graph JSON schema not validated~~ FIXED
+
+`main()` did not validate graph JSON structure; malformed output caused misleading "no impacted test files detected" behavior. Fixed with `_validate_graph_schema()`.
+
+**Fix:**
+- `scripts/graphify_affected.py:119` — `_validate_graph_schema()` validates `nodes` list and node fields
+- `scripts/graphify_affected.py:146` — `main()` validates schema before processing
+
+---
+
+### 30. `httpx` deprecation warning in tests FIXED
+
+Test suite emits `StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated; install httpx2 instead`. Fixed by upgrading `httpx>=0.27` to `httpx2>=0.27` in dev and optional-dependencies.
+
+**Fix:**
+- `pyproject.toml:49` — `httpx2>=0.27`
+- `pyproject.toml:73` — `httpx2>=0.27`
 
 ---
 

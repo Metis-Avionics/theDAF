@@ -175,6 +175,22 @@ Custom `Algorithm` implementations execute arbitrary code. Only use trusted algo
 
 The built-in authorizer is a simple ownership check (`owner_id == user.id`). It does not support roles, scopes, tenant boundaries, or administrative access. Implement a custom `Authorizer` for production use.
 
+### HTTP Test Client
+
+The test suite uses `httpx2` (the actively maintained successor to `httpx`) for HTTP integration tests. `httpx2` resolves `StarletteDeprecationWarning` seen with older `httpx` versions in combination with Starlette's `TestClient`.
+
+### Trie Traversal Complexity
+
+`MemoryCache._trie_delete_prefix()` and `_trie_collect()` operate in O(prefix_length + K) time where K is the number of matching entries. The internal prefix trie stores keys only at terminal nodes, eliminating the O(N × L) memory amplification present in naive implementations that store key references at every node along each key's path.
+
+### Base SHA Validation
+
+`scripts/graphify_affected.py` validates the base ref exists locally via `git rev-parse --verify` before running `git diff`. This prevents CI from producing false-green results when the base ref is missing or the clone is shallow.
+
+### Graph JSON Schema Validation
+
+`scripts/graphify_affected.py` validates the loaded graph JSON contains a top-level `nodes` list and that each node has `source_file` and `id` fields. Malformed graph output now produces a clear error instead of silently producing "no impacted test files detected".
+
 ## Security Updates
 
 Security updates will be released as patch versions (e.g., 0.1.1) and announced via:

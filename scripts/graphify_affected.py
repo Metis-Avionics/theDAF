@@ -18,6 +18,7 @@ import subprocess
 import sys
 import warnings
 from pathlib import Path
+from typing import Any
 
 GRAPH_JSON = Path("graphify-out/graph.json")
 
@@ -29,14 +30,10 @@ def changed_files(base: str) -> list[str]:
             capture_output=True, text=True, check=True,
         )
     except subprocess.CalledProcessError as exc:
-        print(
-            f"ERROR: base ref '{base}' not found. "
-            "Ensure full clone or fetch the ref.",
-            file=sys.stderr,
-        )
-        if exc.stderr:
-            print(exc.stderr, file=sys.stderr)
-        return []
+        raise RuntimeError(
+            f"base ref '{base}' not found. "
+            "Ensure full clone or fetch the ref."
+        ) from exc
     result = subprocess.run(  # noqa: S603
         ["git", "diff", "--name-only", base, "HEAD"],  # noqa: S607
         capture_output=True, text=True, check=True
@@ -48,9 +45,10 @@ def _canonical_node_id(graph_json: Path, path: str) -> str | None:
     """Return the canonical graphify node ID for a source file path.
 
     Loads ``graph_json`` and searches for a node whose ``source_file``
-    matches ``path`` and whose ``id`` equals the hand-rolled module-level
-    mapping. Falls back to ``file_to_node_id()`` with a warning if the
-    graph does not contain a matching node.
+    matches ``path``. Prefers the one whose ``id`` equals the hand-rolled
+    module-level mapping. If no exact match, returns the first graph
+    node's ID (graph-driven). Falls back to ``file_to_node_id()`` with a
+    warning if the graph does not contain a matching node.
     """
     if not graph_json.exists():
         return None
@@ -61,15 +59,21 @@ def _canonical_node_id(graph_json: Path, path: str) -> str | None:
     expected_id = file_to_node_id(path)
     if expected_id is None:
         return None
-    for node in data.get("nodes", []):
-        if node.get("source_file") == path and node.get("id") == expected_id:
+    matches = [
+        node for node in data.get("nodes", [])
+        if node.get("source_file") == path
+    ]
+    if not matches:
+        warnings.warn(
+            f"graphify graph has no node for '{path}'; "
+            f"falling back to hand-rolled node ID '{expected_id}'.",
+            stacklevel=2,
+        )
+        return expected_id
+    for node in matches:
+        if node.get("id") == expected_id:
             return expected_id
-    warnings.warn(
-        f"graphify graph has no node for '{path}'; "
-        f"falling back to hand-rolled node ID '{expected_id}'.",
-        stacklevel=2,
-    )
-    return expected_id
+    return matches[0].get("id")
 
 
 def file_to_node_id(path: str) -> str | None:
@@ -113,24 +117,44 @@ def extract_test_files(affected_output: str) -> set[str]:
     return test_files
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="graphify affected analysis for CI")
-    parser.add_argument("--base", default="origin/main", help="Base ref for diff")
-    parser.add_argument("--depth", type=int, default=2, help="Traversal depth")
-    args = parser.parse_args()
+def _validate_graph_schema(data: dict[str, Any]) -> None:
+    nodes = data.get("nodes")
+    if not isinstance(nodes, list):
+        raise RuntimeError(
+            "graphify graph JSON missing top-level 'nodes' list."
+        )
+    for node in nodes:
+        if not isinstance(node, dict):
+            raise RuntimeError(
+                "graphify graph JSON contains a non-dict entry in 'nodes'."
+            )
+        if "source_file" not in node or "id" not in node:
+            raise RuntimeError(
+                "graphify graph JSON node missing 'source_file' or 'id' field."
+            )
 
-    if not GRAPH_JSON.exists():
+
+def _load_graph(graph_path: Path) -> dict[str, Any] | None:
+    if not graph_path.exists():
         print(
-            f"ERROR: {GRAPH_JSON} not found. Run graphify extract first.",
+            f"ERROR: {graph_path} not found. Run graphify extract first.",
             file=sys.stderr,
         )
-        return 1
+        return None
+    try:
+        data = json.loads(graph_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"ERROR: failed to load {graph_path}: {exc}", file=sys.stderr)
+        return None
+    try:
+        _validate_graph_schema(data)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return None
+    return data
 
-    files = changed_files(args.base)
-    if not files:
-        print("No Python files changed.")
-        return 0
 
+def _process_files(files: list[str], depth: int) -> tuple[int, set[str]]:
     print(f"Changed files ({len(files)}):")
     for f in files:
         print(f"  {f}")
@@ -140,7 +164,7 @@ def main() -> int:
         node_id = _canonical_node_id(GRAPH_JSON, path)
         if not node_id:
             continue
-        output = affected(node_id, args.depth)
+        output = affected(node_id, depth)
         test_files = extract_test_files(output)
         if test_files:
             print(f"\nImpacted tests from {path}:")
@@ -155,7 +179,30 @@ def main() -> int:
     else:
         print("\nNo impacted test files detected.")
 
-    return 0
+    return 0, all_test_files
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="graphify affected analysis for CI")
+    parser.add_argument("--base", default="origin/main", help="Base ref for diff")
+    parser.add_argument("--depth", type=int, default=2, help="Traversal depth")
+    args = parser.parse_args()
+
+    data = _load_graph(GRAPH_JSON)
+    if data is None:
+        return 1
+
+    try:
+        files = changed_files(args.base)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    if not files:
+        print("No Python files changed.")
+        return 0
+
+    exit_code, _ = _process_files(files, args.depth)
+    return exit_code
 
 
 if __name__ == "__main__":

@@ -60,7 +60,7 @@ class Repository(Protocol[T]):
 
 #### 2. **Cache** – Result Reuse
 
-Stores frequently accessed data to reduce repository lookups. Cache keys are canonicalized using SHA-256 over JSON-serialized query semantics (resource_id, filters, algorithm, user_id), ensuring no delimiter-collision attacks.
+Stores frequently accessed data to reduce repository lookups. Cache keys are canonicalized using SHA-256 over JSON-serialized query semantics (resource_id, filters, algorithm, user_id), ensuring no delimiter-collision attacks. The `MemoryCache` implementation includes a terminal-only prefix trie with DFS, BFS, and A* traversal helpers for prefix-key enumeration.
 
 ```python
 class Cache(Protocol):

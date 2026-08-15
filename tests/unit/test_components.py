@@ -368,6 +368,114 @@ class TestMemoryCache:
         """After each mutation, _cache keys and _trie keys must stay synchronized."""
         await _run_random_mutation_invariant_test()
 
+    @pytest.mark.asyncio
+    async def test_memory_cache_rejects_negative_max_size(self) -> None:
+        with pytest.raises(ValueError, match="max_size must be non-negative"):
+            MemoryCache(max_size=-1)
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_max_size_one(self) -> None:
+        cache = MemoryCache(max_size=1)
+        await cache.set("a", 1)
+        assert await cache.get("a") == 1
+        await cache.set("b", 2)
+        assert await cache.get("a") is None
+        assert await cache.get("b") == 2
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_lru_delete_after_promotion(self) -> None:
+        cache = MemoryCache(max_size=2)
+        await cache.set("a", 1)
+        await cache.set("b", 2)
+        await cache.get("a")
+        await cache.delete("a")
+        assert await cache.get("a") is None
+        assert await cache.get("b") == 2
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_lru_prefix_delete_after_promotion(self) -> None:
+        cache = MemoryCache(max_size=2)
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:b:1", "v2")
+        await cache.get("ns:a:1")
+        await cache.delete_prefix("ns:a:")
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:b:1") == "v2"
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_shake_empty_prefix_bounded(self) -> None:
+        cache = MemoryCache(max_size=3)
+        await cache.set("a", 1)
+        await cache.set("b", 2)
+        await cache.set("c", 3)
+        removed = await cache.shake("")
+        assert removed == 3
+        assert await cache.get("a") is None
+        assert await cache.get("b") is None
+        assert await cache.get("c") is None
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_empty_key_bounded(self) -> None:
+        cache = MemoryCache(max_size=2)
+        await cache.set("", "empty")
+        await cache.set("x", 1)
+        assert await cache.get("") == "empty"
+        assert await cache.get("x") == 1
+
+    @pytest.mark.asyncio
+    async def test_trie_collect_matches_bruteforce_prefix(self) -> None:
+        cache = MemoryCache()
+        keys = ["alpha", "alb", "beta", "b", "gamma", "ga:1"]
+        for k in keys:
+            await cache.set(k, k)
+        for prefix in ["", "a", "b", "g", "ga", "al", "be", "z"]:
+            trie_result = cache._trie_collect(prefix)
+            brute = {k for k in keys if k.startswith(prefix)}
+            assert trie_result == brute, (
+                f"prefix={prefix!r}: trie={trie_result}, brute={brute}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_bfs_collect_matches_dfs_collect(self) -> None:
+        cache = MemoryCache()
+        keys = ["alpha", "alb", "beta", "b", "gamma", "ga:1"]
+        for k in keys:
+            await cache.set(k, k)
+        bfs_result = cache._bfs_collect(cache._trie)
+        dfs_result = cache._dfs_collect(cache._trie)
+        assert bfs_result == dfs_result
+
+    @pytest.mark.asyncio
+    async def test_astar_collect_matches_longest_common_prefix(self) -> None:
+        cache = MemoryCache()
+        keys = ["alpha", "alb", "beta", "b", "gamma", "ga:1"]
+        for k in keys:
+            await cache.set(k, k)
+        for target in ["alb", "ga", "bet", "z"]:
+            astar_result = cache._astar_collect(cache._trie, target)
+            expected = _astar_expected(keys, target)
+            assert astar_result == expected, (
+                f"target={target!r}: astar={astar_result}, expected={expected}"
+            )
+
+
+def _astar_expected(keys: list[str], target: str) -> set[str]:
+    best = 0
+    result: set[str] = set()
+    for k in keys:
+        lcp = 0
+        for a, b in zip(k, target, strict=False):
+            if a == b:
+                lcp += 1
+            else:
+                break
+        if lcp > best:
+            best = lcp
+            result = {k}
+        elif lcp == best and best > 0:
+            result.add(k)
+    return result
+
 
 async def _run_random_mutation_invariant_test() -> None:
     rng = random.Random(42)  # noqa: S311
@@ -403,7 +511,7 @@ async def _run_random_mutation_invariant_test() -> None:
             prefix = f"k{rng.randint(0, 9)}"
             keys = _filter_prefix(prefix)
             await cache.shake(prefix)
-        assert set(cache._cache.keys()) == cache._trie.keys
+        assert set(cache._cache.keys()) == cache._trie_collect("")
 
 
 class TestFibonacciDP:
