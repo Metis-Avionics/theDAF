@@ -1,8 +1,9 @@
 """Memoization primitives.
 
 Provides:
-- Memo: key→value cache with iteration and hit tracking (for algorithms).
-- ResourceMemo: lazy-init memo under a global lock (for generation locks).
+- Memo: key-to-value cache with iteration and hit tracking (for algorithms).
+- ResourceMemo: lazy-init memo under a global lock with optional LRU eviction
+  (for generation locks).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -61,7 +63,7 @@ class Memo:
 
 
 class ResourceMemo:
-    """Lazy-init resource memo under a global lock.
+    """Lazy-init resource memo under a global lock with optional LRU eviction.
 
     Encapsulates the pattern: lazily create a value keyed by a derived
     key, cache it, and return the cached value on subsequent calls.
@@ -69,6 +71,15 @@ class ResourceMemo:
     for the same key receive the same resource object.
 
     Used for generation-lock objects in DataAccess.
+
+    Args:
+        key_fn: Callable that derives the cache key from the key argument.
+        factory: Callable that creates a new value for a given key argument.
+        ttl_seconds: Optional time-to-live in seconds; entries older than this
+            are treated as expired and recreated on next access.
+        max_size: Maximum number of entries to retain. ``0`` (default) means
+            unbounded. When the limit is reached, the least-recently-used
+            entry is evicted before inserting a new one.
     """
 
     def __init__(
@@ -76,11 +87,13 @@ class ResourceMemo:
         key_fn: Callable[[Any], str],
         factory: Callable[[Any], T],
         ttl_seconds: float | None = None,
+        max_size: int = 0,
     ) -> None:
         self._key_fn = key_fn
         self._factory = factory
         self._ttl_seconds = ttl_seconds
-        self._store: dict[str, T] = {}
+        self._max_size = max_size
+        self._store: OrderedDict[str, T] = OrderedDict()
         self._timestamps: dict[str, float] = {}
         self._lock = asyncio.Lock()
 
@@ -90,15 +103,22 @@ class ResourceMemo:
         age = time.monotonic() - self._timestamps.get(key, 0.0)
         return age > self._ttl_seconds
 
+    def _evict_if_full(self, key: str) -> None:
+        if self._max_size > 0 and key not in self._store:
+            while len(self._store) >= self._max_size:
+                self._store.popitem(last=False)
+
     async def get(self, key_arg: Any) -> T:
         key = self._key_fn(key_arg)
         async with self._lock:
             if key in self._store and not self._is_expired(key):
-                return self._store[key]
+                self._store.move_to_end(key)
+                return self._store[key]  # type: ignore[return-value]
+            self._evict_if_full(key)
             value = self._factory(key_arg)
             self._store[key] = value
             self._timestamps[key] = time.monotonic()
-            return value
+            return value  # type: ignore[return-value]
 
     async def clear(self) -> None:
         async with self._lock:

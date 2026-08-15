@@ -933,3 +933,62 @@ Each session entry should include:
 - `Memo.get()` raises `KeyError` on miss (increments `_iterations`); on hit returns value (increments `_cache_hits`)
 - `ResourceMemo` uses synchronous factories; concurrency is serialized by internal `asyncio.Lock`
 - `daf/utils/` is now a proper package with barrel pattern consistent with other `daf/*` packages
+
+---
+
+## Session 014 - 2026-08-15
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: PR #18 deferred P1/P2 fix plan execution; 191 tests passing. Three inconsistencies remained from adversarial review: `GenerationKeyError` was defined but never raised, `ResourceMemo` was unbounded despite PR docs claiming bounded lock striping, and `graphify_affected.py` did not validate JSON root type.
+
+**Actions Taken**:
+- `_current_generation` now raises `GenerationKeyError` when cache value is `None` or not `int`
+- `_advance_generation` raises `GenerationKeyError` when cache value is present but not `int`; missing key defaults to 0 for mutations
+- `_superedge_invalidate` raises `GenerationKeyError` when cache value is present but not `int`; missing key defaults to 0
+- `ResourceMemo` gains `max_size: int = 0` parameter with `OrderedDict`-based LRU eviction on insertion
+- `DataAccess` configures `_generation_locks_memo` with `max_size=256`
+- `_validate_graph_schema` now validates that the JSON root is a `dict` before structural checks
+- Added `test_non_dict_root_raises` in `tests/unit/test_graphify.py`
+- Fixed ARG005 unused lambda argument (`resource_id` → `_`) in `DataAccess.__init__`
+- Updated living docs: BUGS.md (findings 36/37), CHANGELOG.md, SESSION.md, HANDOVER.md
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/core/access.py | Modified | GenerationKeyError raised in _current_generation, _advance_generation, _superedge_invalidate; ARG005 fix |
+| src/daf/utils/_memoize.py | Modified | ResourceMemo gains max_size with OrderedDict LRU eviction |
+| scripts/graphify_affected.py | Modified | _validate_graph_schema validates JSON root is dict |
+| tests/unit/test_graphify.py | Modified | Added test_non_dict_root_raises |
+| BUGS.md | Modified | Updated findings 36/37 descriptions and line references |
+| CHANGELOG.md | Modified | Added deferred-fix entries under Added, Changed, Fixed |
+| SESSION.md | Modified | This session entry |
+| HANDOVER.md | Modified | Updated latest changes and uncommitted work list |
+
+### Project Status
+
+- **Branch**: `refactor/barrel-overlap-optimizations`
+- **Version**: 0.2.0
+- **Tests**: 192/192 passing (1 new test)
+- **Type Checking**: mypy strict, pre-existing errors only (none in modified files)
+- **Linting**: Ruff, 0 errors
+
+### Pending Work
+
+- [ ] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch to origin (updates PR #18)
+- [ ] Request adversarial red-team in-depth review on PR #18
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- `GenerationKeyError` is now live code: `_execute_query` and `_execute_cache_miss` exception handlers are reachable
+- `ResourceMemo` LRU eviction uses `OrderedDict.move_to_end` on access and `popitem(last=False)` to evict the LRU entry
+- `_validate_graph_schema` now fails closed on non-dict roots (arrays, strings, numbers, null)
+- ARG005 fix: `factory=lambda _: asyncio.Lock()` silences the unused-argument warning

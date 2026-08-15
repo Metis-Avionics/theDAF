@@ -122,7 +122,7 @@ except DataAccessError as e:
 
 ### Cache Invalidation
 
-Be aware that `POST` performs global cache invalidation. In high-throughput systems, this can cause cache stampedes. Consider implementing per-resource invalidation at the repository or cache layer until this is fixed in the framework.
+Be aware that mutations use per-resource prefix invalidation (`delete_prefix`). In high-throughput systems, prefix invalidation can still cause cache stampedes. Consider implementing per-key invalidation or TTL-based expiration at the repository or cache layer if your workload requires it.
 
 ### Rate Limiting
 

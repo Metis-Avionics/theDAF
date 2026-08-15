@@ -498,6 +498,11 @@ class RedisCache:
 2. **Bounded cache** — `max_size=0` (default) is unbounded. Set a positive `max_size` for LRU eviction. Generation state shares the same cache namespace as query entries; evicting generation metadata forces a cache miss, which is correct but may increase repository load.
 3. **Fibonacci algorithm** – Demonstration only (use `math.fib()` in production)
 4. **Single-layer rate limiting** – FastAPI adapter only
+5. **Unbounded `_cached_key` cache** — `_cached_key` uses `functools.cache` without eviction. Long-running processes with many unique query combinations may experience unbounded memory growth. See [#23](https://github.com/RAliane-REBORN/theDAF/issues/23).
+6. **Test files not mypy-strict clean** — `tests/unit/test_memoize.py`, `tests/unit/test_recursion.py`, and `tests/unit/test_barrels.py` have missing type annotations. See [#22](https://github.com/RAliane-REBORN/theDAF/issues/22).
+7. **`graphify_affected.py` dynamic loading** — Uses `importlib.util.spec_from_file_location` for testability, which is fragile across packaging tools. See [#21](https://github.com/RAliane-REBORN/theDAF/issues/21).
+8. **`ResourceMemo` type-ignore workaround** — `OrderedDict[str, T]` triggers mypy false positives requiring `# type: ignore[return-value]`. See [#20](https://github.com/RAliane-REBORN/theDAF/issues/20).
+9. **`_trie.py` unsound `__init__` reset** — `root.__init__()` is used to reset the trie root; mypy flags this as unsound. See [#19](https://github.com/RAliane-REBORN/theDAF/issues/19).
 
 These are intentional to keep the package focused. Extend as needed for your use case.
 

@@ -16,14 +16,14 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 172/172 passing |
+| Tests (pytest) | ✅ 192/192 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`, `.kilo/plans/1786799336554-adversarial-hardening-plan.md`, `.kilo/plans/1786800722008-pr18-red-team-fixes.md`, and `.kilo/plans/1786803535993-dp-pickup-plan.md` have been addressed:
+All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`, `.kilo/plans/1786799336554-adversarial-hardening-plan.md`, `.kilo/plans/1786800722008-pr18-red-team-fixes.md`, `.kilo/plans/1786803535993-dp-pickup-plan.md`, and `.kilo/plans/1786806609555-deferred-p1-p2-fixes.md` have been addressed:
 
 - **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files
 - **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant
@@ -76,10 +76,18 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
   - `_bfs_collect` and `_astar_collect` marked experimental in docstrings
   - `_canonical_node_id` fail-closed: calls `_validate_graph_schema`, returns `None` on malformed input
   - `graphify_affected.py` docstring documents `.py`-only scope and CI full-suite guarantee
+  - `GenerationKeyError` raised in `_current_generation`, `_advance_generation`, `_superedge_invalidate` for absent/malformed generation keys
+  - `ResourceMemo` bounded with `max_size=256` and `OrderedDict`-based LRU eviction
+  - `_validate_graph_schema` validates that JSON root is a `dict` before structural checks
+  - `test_non_dict_root_raises` verifies `RuntimeError` on non-dict graph JSON root
   - Cache-correctness invariant documented in `DataAccess` concurrency model
   - `test_generation_eviction_forces_cache_miss` verifies bounded LRU eviction of generation metadata
   - `test_malformed_graph_schema_returns_none` verifies fail-closed canonicalization
   - `test_missing_nodes_key` updated to expect `None` (fail-closed) instead of warning + fallback
+  - `GenerationKeyError` raised in `_current_generation`, `_advance_generation`, `_superedge_invalidate` for absent/malformed generation keys
+  - `ResourceMemo` bounded with `max_size=256` and `OrderedDict`-based LRU eviction
+  - `_validate_graph_schema` validates that JSON root is a `dict` before structural checks
+  - `test_non_dict_root_raises` verifies `RuntimeError` on non-dict graph JSON root
 
 ### Key Facts
 
@@ -90,7 +98,7 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 191/191 passing
+- **Test Count**: 192/192 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 - **Architecture Docs**: `graphify-out/GRAPH_TREE.html`, `graphify-out/theDAF-callflow.html`

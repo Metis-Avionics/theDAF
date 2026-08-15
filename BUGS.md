@@ -371,21 +371,23 @@ CI ran `graphify extract` then `graphify_report.py`, which runs `graphify extrac
 
 ### 36. `_generation_locks` unbounded dict FIXED
 
-`_generation_locks` was an unbounded `dict[str, asyncio.Lock]` with the same cardinality risk as the removed `_namespace_cache`. Replaced with a fixed-size lock-striping array (N=16) using hash-mod indexing on the resource namespace.
+`_generation_locks` was an unbounded `dict[str, asyncio.Lock]` with the same cardinality risk as the removed `_namespace_cache`. Replaced with `ResourceMemo` lock striping configured with `max_size=256` and `OrderedDict`-based LRU eviction.
 
 **Fix:**
-- `src/daf/core/access.py:112` — `_generation_locks` replaced with `_generation_locks_memo = ResourceMemo(key_fn=..., factory=...)`
-- `src/daf/utils/_memoize.py` — `ResourceMemo` provides bounded lazy-init memoization
+- `src/daf/core/access.py:117` — `_generation_locks_memo = ResourceMemo(key_fn=..., factory=..., max_size=256)`
+- `src/daf/utils/_memoize.py` — `ResourceMemo` accepts `max_size: int = 0` with LRU eviction via `OrderedDict`
 
 ---
 
 ### 37. Bounded LRU can evict `_daf_gen:*` metadata FIXED
 
-When `max_size > 0`, LRU eviction could remove `_daf_gen:<namespace>` while leaving the query cache entry. The old `_current_generation` silently returned 0 for missing keys, serving potentially stale data. Fixed by raising `GenerationKeyError` when the generation key is absent; callers treat this as a cache miss.
+`_current_generation` previously returned 0 for missing or non-int generation keys, serving potentially stale data. Now raises `GenerationKeyError`; callers treat this as a cache miss. `_advance_generation` and `_superedge_invalidate` raise `GenerationKeyError` when the key is present but not an int; missing key defaults to 0 for mutations.
 
 **Fix:**
 - `src/daf/core/errors.py:34` — `GenerationKeyError(CacheError)` added
-- `src/daf/core/access.py:168` — `_current_generation` raises `GenerationKeyError` on missing/non-int value
+- `src/daf/core/access.py:173` — `_current_generation` raises `GenerationKeyError` on absent/non-int value
+- `src/daf/core/access.py:181` — `_advance_generation` raises `GenerationKeyError` when key present but not int
+- `src/daf/core/access.py:196` — `_superedge_invalidate` raises `GenerationKeyError` when key present but not int
 - `src/daf/core/access.py:288` — `_execute_query` catches `GenerationKeyError` → cache miss
 - `src/daf/core/access.py:330` — `_execute_cache_miss` catches `GenerationKeyError` → gen=0, writes generation key
 

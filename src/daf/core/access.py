@@ -116,7 +116,8 @@ class DataAccess:
         self._authorizer = authorizer
         self._generation_locks_memo = ResourceMemo(
             key_fn=lambda resource_id: self._resource_namespace(resource_id),
-            factory=lambda resource_id: asyncio.Lock(),
+            factory=lambda _: asyncio.Lock(),
+            max_size=256,
         )
 
     async def _check_authorization(
@@ -176,7 +177,11 @@ class DataAccess:
         async with lock:
             namespace = self._resource_namespace(resource_id)
             value = await self._cache.get(f"_daf_gen:{namespace}")
-            return value if isinstance(value, int) else 0
+            if not isinstance(value, int):
+                raise GenerationKeyError(
+                    f"Generation key '_daf_gen:{namespace}' is absent or not an int"
+                )
+            return value
 
     async def _advance_generation(self, resource_id: str) -> None:
         """Increment the generation counter for a resource in the cache.
@@ -189,9 +194,11 @@ class DataAccess:
         async with lock:
             namespace = self._resource_namespace(resource_id)
             current = await self._cache.get(f"_daf_gen:{namespace}")
-            if not isinstance(current, int):
-                current = 0
-            await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+            if current is not None and not isinstance(current, int):
+                raise GenerationKeyError(
+                    f"Generation key '_daf_gen:{namespace}' is not an int"
+                )
+            await self._cache.set(f"_daf_gen:{namespace}", (current or 0) + 1)
 
     async def _superedge_invalidate(self, resource_id: str) -> None:
         """Atomically invalidate all cached projections for a resource.
@@ -211,12 +218,14 @@ class DataAccess:
         lock = await self._generation_lock(resource_id)
         async with lock:
             current = await self._cache.get(f"_daf_gen:{namespace}")
-            if not isinstance(current, int):
-                current = 0
+            if current is not None and not isinstance(current, int):
+                raise GenerationKeyError(
+                    f"Generation key '_daf_gen:{namespace}' is not an int"
+                )
             await self._cache.delete_prefix(f"query:{namespace}:")
             await self._cache.delete(f"_daf_gen:{namespace}")
             await self._cache.shake(f"_daf_gen:{namespace}")
-            await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+            await self._cache.set(f"_daf_gen:{namespace}", (current or 0) + 1)
 
     def _cache_key(self, info: QueryInfo, user: Any) -> str:
         """Build cache key from full query semantics."""

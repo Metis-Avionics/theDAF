@@ -133,6 +133,11 @@ def extract_test_files(affected_output: str) -> set[str]:
 
 
 def _validate_graph_schema(data: dict[str, Any]) -> None:
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            "graphify graph JSON root must be a dict; "
+            f"got {type(data).__name__}."
+        )
     nodes = data.get("nodes")
     if not isinstance(nodes, list):
         raise RuntimeError(

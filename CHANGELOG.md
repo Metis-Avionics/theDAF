@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `test_canonical_node_id_returns_lexicographically_first_when_no_exact_match` — deterministic canonical ID
 - `test_graphify_schema_validation_*` — type, non-empty, uniqueness, non-dict entry validation
 - `test_changed_files_raises_on_git_diff_failure` — git diff failure normalized to RuntimeError
+- `test_non_dict_root_raises` — verifies `RuntimeError` when graph JSON root is not a dict
+- `ResourceMemo(max_size=N)` bounded with `OrderedDict`-based LRU eviction on insertion
 
 ### Changed
 
@@ -90,15 +92,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TreeCollector._bfs` uses `collections.deque` + `popleft()` for O(1) queue operations
 - `_bfs_collect` and `_astar_collect` docstrings note "**Experimental** — no production consumer yet."
 - `graphify_affected.py` module docstring documents `.py`-only scope and CI full-suite guarantee
+- `_validate_graph_schema` validates that the JSON root is a `dict` before structural checks
+- `test_non_dict_root_raises` — verifies `RuntimeError` on non-dict graph JSON root
 
 ### Changed
 
 - `_current_generation` raises `GenerationKeyError` instead of silently returning 0 for missing generation keys
 - `_execute_query` catches `GenerationKeyError` → delegates to `_execute_cache_miss`
 - `_execute_cache_miss` catches `GenerationKeyError` → treats as gen=0 and writes generation key
+- `_advance_generation` raises `GenerationKeyError` when generation key is present but not `int`
+- `_superedge_invalidate` raises `GenerationKeyError` when generation key is present but not `int`
 - `DataAccess` concurrency docstring replaced with formal cache-correctness invariant
 - `_canonical_node_id` calls `_validate_graph_schema` after `json.loads`; returns `None` on validation failure
 - `test_missing_nodes_key` updated: fail-closed behavior returns `None` instead of warning + fallback
+- `ResourceMemo` accepts `max_size: int = 0` with `OrderedDict`-based LRU eviction on insertion
+- `DataAccess` configures `_generation_locks_memo` with `max_size=256` for bounded lock striping
+- `_validate_graph_schema` validates that the JSON root is a `dict` before structural checks
 
 ### Fixed
 
@@ -106,6 +115,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bounded LRU eviction of `_daf_gen:*` could serve stale data; missing generation now forces cache miss
 - `_canonical_node_id` fell back to hand-rolled ID on malformed graph; now fail-closed returns `None`
 - `graphify_affected.py` scope implied "changed files" without `.py`-only filter; docstring now explicit
+- `ResourceMemo` was unbounded despite PR docs claiming bounded lock striping; now bounded with `max_size=256`
+- `graphify_affected.py` accepted non-dict JSON roots (arrays, strings, numbers); now validates root type
+- `_advance_generation` and `_superedge_invalidate` silently defaulted malformed generation keys to 0; now raise `GenerationKeyError`
+- `ResourceMemo` was unbounded despite PR docs claiming bounded lock striping; now bounded with `max_size=256`
+- `graphify_affected.py` accepted non-dict JSON roots (arrays, strings, numbers); now validates root type
+- `_advance_generation` and `_superedge_invalidate` silently defaulted malformed generation keys to 0; now raise `GenerationKeyError`
 
 ### Security
 

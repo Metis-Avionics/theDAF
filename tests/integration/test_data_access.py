@@ -222,7 +222,7 @@ class TestDataAccessMutations:
         await repo.save("123", {"name": "John"})
         await daf.query(QueryInfo(resource_id="123"))
         
-        keys_before = set(cache._cache.keys())
+        keys_before = {k for k in cache._cache if k.startswith("query:")}
         assert len(keys_before) == 1
         
         await daf.put(PutInfo(resource_id="123", data={"name": "Jane"}))

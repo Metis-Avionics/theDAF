@@ -165,6 +165,10 @@ class TestGraphifySchemaValidation:
                 ]
             })
 
+    def test_non_dict_root_raises(self) -> None:
+        with pytest.raises(RuntimeError, match="root must be a dict"):
+            _validate_graph_schema(["not", "a", "dict"])
+
     def test_non_dict_node_entry(self) -> None:
         with pytest.raises(RuntimeError, match="non-dict entry in 'nodes'"):
             _validate_graph_schema({"nodes": ["bad"]})
