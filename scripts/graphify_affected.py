@@ -34,10 +34,16 @@ def changed_files(base: str) -> list[str]:
             f"base ref '{base}' not found. "
             "Ensure full clone or fetch the ref."
         ) from exc
-    result = subprocess.run(  # noqa: S603
-        ["git", "diff", "--name-only", base, "HEAD"],  # noqa: S607
-        capture_output=True, text=True, check=True
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "diff", "--name-only", base, "HEAD"],  # noqa: S607
+            capture_output=True, text=True, check=True
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"git diff failed for base ref '{base}': "
+            f"{exc.stderr.strip()}"
+        ) from exc
     return [f for f in result.stdout.strip().splitlines() if f.endswith(".py")]
 
 
@@ -70,6 +76,7 @@ def _canonical_node_id(graph_json: Path, path: str) -> str | None:
             stacklevel=2,
         )
         return expected_id
+    matches.sort(key=lambda n: n.get("id", ""))
     for node in matches:
         if node.get("id") == expected_id:
             return expected_id
@@ -123,15 +130,27 @@ def _validate_graph_schema(data: dict[str, Any]) -> None:
         raise RuntimeError(
             "graphify graph JSON missing top-level 'nodes' list."
         )
+    seen_ids: set[str] = set()
     for node in nodes:
         if not isinstance(node, dict):
             raise RuntimeError(
                 "graphify graph JSON contains a non-dict entry in 'nodes'."
             )
-        if "source_file" not in node or "id" not in node:
+        node_id = node.get("id")
+        source_file = node.get("source_file")
+        if not isinstance(node_id, str) or not node_id:
             raise RuntimeError(
-                "graphify graph JSON node missing 'source_file' or 'id' field."
+                "graphify graph JSON node 'id' must be a non-empty string."
             )
+        if not isinstance(source_file, str) or not source_file:
+            raise RuntimeError(
+                "graphify graph JSON node 'source_file' must be a non-empty string."
+            )
+        if node_id in seen_ids:
+            raise RuntimeError(
+                f"graphify graph JSON contains duplicate node ID '{node_id}'."
+            )
+        seen_ids.add(node_id)
 
 
 def _load_graph(graph_path: Path) -> dict[str, Any] | None:

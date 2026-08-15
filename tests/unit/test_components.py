@@ -403,6 +403,45 @@ class TestMemoryCache:
         assert await cache.get("ns:b:1") == "v2"
 
     @pytest.mark.asyncio
+    async def test_memory_cache_lru_eviction_prefix_sharing(self) -> None:
+        """Evicting a key that is a prefix of another must not break the longer key."""
+        cache = MemoryCache(max_size=2)
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:a:1:b", "v2")
+        await cache.set("ns:a:1:c", "v3")
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:a:1:b") == "v2"
+        assert await cache.get("ns:a:1:c") == "v3"
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_lru_eviction_near_duplicate(self) -> None:
+        """Keys sharing a common prefix but differing later must evict the true LRU."""
+        cache = MemoryCache(max_size=2)
+        await cache.set("prefix:1", "v1")
+        await cache.set("prefix:2", "v2")
+        await cache.set("prefix:3", "v3")
+        assert await cache.get("prefix:1") is None
+        assert await cache.get("prefix:2") == "v2"
+        assert await cache.get("prefix:3") == "v3"
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_set_after_prefix_delete(self) -> None:
+        """Setting new entries after prefix delete must not resurrect deleted keys."""
+        cache = MemoryCache(max_size=3)
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:a:2", "v2")
+        await cache.set("other:x", "v3")
+        await cache.delete_prefix("ns:a:")
+        await cache.set("ns:a:3", "v4")
+        await cache.set("ns:b:1", "v5")
+        await cache.set("ns:b:2", "v6")
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:a:2") is None
+        assert await cache.get("ns:a:3") == "v4"
+        assert await cache.get("ns:b:1") == "v5"
+        assert await cache.get("ns:b:2") == "v6"
+
+    @pytest.mark.asyncio
     async def test_memory_cache_shake_empty_prefix_bounded(self) -> None:
         cache = MemoryCache(max_size=3)
         await cache.set("a", 1)
@@ -456,6 +495,38 @@ class TestMemoryCache:
             expected = _astar_expected(keys, target)
             assert astar_result == expected, (
                 f"target={target!r}: astar={astar_result}, expected={expected}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_astar_collect_regression_mismatching_prefix(self) -> None:
+        """A* must not score post-mismatch child characters as a longer LCP.
+
+        With keys ["xabc", "abc", "xabd"] and target "abc", the path
+        x->a->b->c must not score match_len=3 because the root mismatch
+        at depth 1 must reset the LCP for all descendants.
+        """
+        cache = MemoryCache()
+        keys = ["xabc", "abc", "xabd"]
+        for k in keys:
+            await cache.set(k, k)
+        astar_result = cache._astar_collect(cache._trie, "abc")
+        assert astar_result == {"abc"}
+
+    @pytest.mark.asyncio
+    async def test_astar_collect_property_based_random(self) -> None:
+        """A* result must match brute-force LCP model over 200 random instances."""
+        rng = random.Random(123)  # noqa: S311
+        for _ in range(200):
+            keys = [f"k{rng.randint(0, 99)}" for _ in range(rng.randint(1, 10))]
+            target = f"t{rng.randint(0, 99)}"
+            cache = MemoryCache()
+            for k in keys:
+                await cache.set(k, k)
+            astar_result = cache._astar_collect(cache._trie, target)
+            expected = _astar_expected(keys, target)
+            assert astar_result == expected, (
+                f"keys={keys}, target={target}: "
+                f"astar={astar_result}, expected={expected}"
             )
 
 

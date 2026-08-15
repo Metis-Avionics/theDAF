@@ -492,7 +492,7 @@ class RedisCache:
 ## Limitations
 
 1. **In-memory repository** – No persistence across restarts. `try_update`/`try_delete` use a coarse lock and identity comparison (`is`) for CAS detection; this is best-effort only. Real transactional backends should implement true atomic CAS.
-2. **Basic cache** – No TTL or eviction policy
+2. **Basic cache** – `max_size=0` (the default) means unbounded and is appropriate for development and testing. Set a positive `max_size` for bounded LRU eviction in production. Backwards-compatible default is not memory-safe.
 3. **Fibonacci algorithm** – Demonstration only (use `math.fib()` in production)
 4. **Single-layer rate limiting** – FastAPI adapter only
 

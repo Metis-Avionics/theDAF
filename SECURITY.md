@@ -163,6 +163,10 @@ pip-audit
 
 Do not use them in production with sensitive data.
 
+### MemoryCache Bounds
+
+`MemoryCache(max_size=0)` (the default) is backwards-compatible and unbounded. It is **not** memory-safe for production deployments. Set a positive `max_size` to enable LRU eviction and bound memory growth.
+
 ### Rate Limiting
 
 Rate limiting is implemented at the FastAPI adapter layer only. If you expose `DataAccess` directly (without the adapter), you must implement your own rate limiting.

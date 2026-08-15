@@ -16,14 +16,14 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 158/158 passing |
+| Tests (pytest) | ✅ 170/170 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`, and `.kilo/plans/1786799336554-adversarial-hardening-plan.md` have been addressed:
+All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`, `.kilo/plans/1786799336554-adversarial-hardening-plan.md`, and `.kilo/plans/1786800722008-pr18-red-team-fixes.md` have been addressed:
 
 - **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files
 - **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant
@@ -49,7 +49,15 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 - **LRU adversarial tests (P2-3)**: `test_memory_cache_max_size_one`, `test_memory_cache_lru_delete_after_promotion`, `test_memory_cache_lru_prefix_delete_after_promotion`, `test_memory_cache_shake_empty_prefix_bounded`, `test_memory_cache_empty_key_bounded`
 - **Graphify schema validation (P2-4)**: `_validate_graph_schema` in `graphify_affected.py`; `main()` returns 1 on malformed JSON
 - **Graphify canonical-ID tests (P2-5)**: `tests/unit/test_graphify.py` with 9 tests covering graph preference, fallback, warnings, malformed JSON, missing base
-- **Complexity docstrings (P2-6)**: `MemoryCache` class and `_trie_delete_prefix` updated to O(prefix_length + K)
+- **Complexity docstrings (P2-6)**: `MemoryCache` class and `_trie_delete_prefix` updated to O(prefix_length + subtree_nodes)
+- **A* depth-tracking fix (P1)**: `_astar_collect` heap stores depth; `match_len` only increments when `match_len == depth`, preventing post-mismatch child characters from incorrectly extending LCP
+- **Graph canonicalization deterministic (P2)**: `_canonical_node_id` sorts matching nodes by `id` before selecting first
+- **Graph schema validation deepened (P2)**: validates node types, non-empty strings, and uniqueness
+- **Git diff failure normalized (P2)**: `changed_files()` wraps `git diff` in try/except; raises `RuntimeError` with stderr context
+- **CI duplicate extraction removed (P2)**: graphify job now runs single `graphify_report.py` invocation with `fetch-depth: 0`
+- **LRU edge-case tests (P2)**: `test_memory_cache_lru_eviction_prefix_sharing`, `test_memory_cache_lru_eviction_near_duplicate`, `test_memory_cache_set_after_prefix_delete`
+- **Graphify adversarial tests (P2)**: `test_canonical_node_id_returns_lexicographically_first_when_no_exact_match`, `test_graphify_schema_validation_*` (5 tests), `test_changed_files_raises_on_git_diff_failure`
+- **A* regression and property tests (P1)**: `test_astar_collect_regression_mismatching_prefix`, `test_astar_collect_property_based_random`
 - **R1-R26, R19b, R19c, R3b, R21b, R22, R23, R24, R25, R26, superedge collapse, AST tree shaking, graphifyy CI**: All implemented and merged in PR #17
 - **Architecture docs**: `scripts/graphify_report.py` and `scripts/graphify_affected.py` automate graphify suite; CI uploads `GRAPH_TREE.html` and `theDAF-callflow.html` artifacts
 
@@ -62,7 +70,7 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 158/158 passing
+- **Test Count**: 170/170 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 - **Architecture Docs**: `graphify-out/GRAPH_TREE.html`, `graphify-out/theDAF-callflow.html`
@@ -98,8 +106,8 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 ├── tests/
 │   ├── unit/
 │   │   ├── test_contracts.py    # 14 tests
-│   │   ├── test_components.py   # 69 tests (9 new LRU/trie/BFS/A* tests; TestDataAccessNamespaceCache removed)
-│   │   └── test_graphify.py     # 9 tests (canonical ID, changed_files, schema validation)
+│   │   ├── test_components.py   # 97 tests (LRU/trie/BFS/A*/graphify adversarial tests)
+│   │   ├── test_graphify.py     # 18 tests (canonical ID, changed_files, schema validation)
 │   │   └── test_barrels.py      # 2 tests (barrel consistency)
 │   └── integration/
 │       ├── test_data_access.py  # 18 tests

@@ -322,6 +322,53 @@ Test suite emits `StarletteDeprecationWarning: Using httpx with starlette.testcl
 
 ---
 
+### 31. `_astar_collect` LCP score does not reset on mismatch FIXED
+
+With keys `["xabc", "abc"]` and target `"abc"`, the path `x→a→b→c` scored `match_len=3` because after the root mismatch (`x` ≠ `a`), the algorithm incremented when child `a` happened to match `target[0]`. The LCP of `"xabc"` with `"abc"` is 0, not 3. Fixed by tracking depth in each heap entry and only extending `match_len` when `match_len == depth` (no mismatch yet).
+
+**Fix:**
+- `src/daf/cache/memory.py:170` — heap tuple expanded to `(priority, tiebreaker, node, depth, match_len)`
+- `src/daf/cache/memory.py:186` — child only extends match if `match_len == depth` and `ch == target[match_len]`
+
+---
+
+### 32. `_canonical_node_id` non-deterministic selection FIXED
+
+When multiple nodes share `source_file` and none matches hand-rolled ID, `matches[0]` depends on graphify output ordering. Fixed by sorting matching nodes by `id` before selecting the first.
+
+**Fix:**
+- `scripts/graphify_affected.py:62` — `matches.sort(key=lambda n: n.get("id", ""))`
+
+---
+
+### 33. `graphify_affected.py` schema validation gaps FIXED
+
+Validation checked `isinstance(nodes, list)` and key presence, but not types, non-emptiness, or uniqueness. Fixed with type checks, non-empty string checks, and a second-pass uniqueness check.
+
+**Fix:**
+- `scripts/graphify_affected.py:120` — `_validate_graph_schema` validates types, non-emptiness, and uniqueness
+
+---
+
+### 34. `git diff` subprocess failure asymmetry FIXED
+
+`git rev-parse` failure raises `RuntimeError`, but `git diff` failure raised raw `CalledProcessError`. Fixed by wrapping `git diff` in try/except and raising `RuntimeError` with stderr context.
+
+**Fix:**
+- `scripts/graphify_affected.py:37` — `git diff` wrapped in try/except
+
+---
+
+### 35. CI graphify job duplicates graph extraction FIXED
+
+CI ran `graphify extract` then `graphify_report.py`, which runs `graphify extract` again. Fixed by removing the redundant explicit extraction step.
+
+**Fix:**
+- `.github/workflows/ci.yml:55` — removed `uv run python -m graphify extract . --code-only --no-cluster`
+- `.github/workflows/ci.yml:52` — added `fetch-depth: 0` to checkout step
+
+---
+
 ## Missing Test Dimensions
 
 The existing tests validate component behavior well, but the following interaction dimensions are now covered:

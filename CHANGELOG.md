@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `test_trie_collect_matches_bruteforce_prefix` reference-model test
 - `test_canonical_node_id_*` and `test_changed_files_raises_on_missing_base` in `tests/unit/test_graphify.py`
 - `test_main_exits_one_on_missing_base`, `test_graphify_schema_validation_*`
+- `test_astar_collect_regression_mismatching_prefix` — A* depth-tracking regression test
+- `test_astar_collect_property_based_random` — property-based A* LCP test (200 random instances)
+- `test_memory_cache_lru_eviction_prefix_sharing`, `test_memory_cache_lru_eviction_near_duplicate`
+- `test_memory_cache_set_after_prefix_delete` — set after prefix deletion under bounded LRU
+- `test_canonical_node_id_returns_lexicographically_first_when_no_exact_match` — deterministic canonical ID
+- `test_graphify_schema_validation_*` — type, non-empty, uniqueness, non-dict entry validation
+- `test_changed_files_raises_on_git_diff_failure` — git diff failure normalized to RuntimeError
 
 ### Changed
 
@@ -40,11 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MemoryCache._TrieNode` stores only terminal `key`; intermediate nodes carry only `children`
 - `MemoryCache._trie_collect` uses `_dfs_collect` DFS over terminal keys
 - `MemoryCache._trie_delete_prefix` returns collected keys; callers remove from `_cache`/`_lru` directly
-- `MemoryCache` complexity updated to O(prefix_length + K) for prefix operations
+- `MemoryCache` complexity updated to O(prefix_length + subtree_nodes) for prefix operations
 - `MemoryCache` added `_bfs_collect` and `_astar_collect` traversal helpers for prefix-key enumeration
 - `graphify_affected.py` `changed_files()` raises `RuntimeError` on missing base instead of returning `[]`
 - `graphify_affected.py` `main()` validates graph JSON schema before processing
 - `httpx>=0.27` upgraded to `httpx2>=0.27` in both dependency sections
+- `graphify_affected.py` `_canonical_node_id` sorts matching nodes by `id` for deterministic selection
+- `graphify_affected.py` `_validate_graph_schema` validates node types, non-empty strings, and uniqueness
+- `graphify_affected.py` `changed_files()` wraps `git diff` in try/except and raises `RuntimeError` on failure
+- CI graphify job uses `fetch-depth: 0` checkout and single `graphify_report.py` invocation
 
 ### Removed
 
@@ -67,6 +78,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `graphify_affected.py` `main()` does not validate graph JSON schema; malformed output causes misleading "no impacted tests" (P2)
 - `MemoryCache.__init__()` accepts negative `max_size` without complaint (P2)
 - `_trie_collect()` does not match brute-force prefix scan for all key sets (P2)
+- `_astar_collect()` does not reset match score on mismatch, causing post-mismatch child characters to incorrectly extend the LCP (P1)
+- `_canonical_node_id()` returns non-deterministic node ID when multiple graph nodes share `source_file` and none matches hand-rolled ID (P2)
+- `graphify_affected.py` `changed_files()` wraps only `git rev-parse` in try/except; `git diff` failure raises raw `CalledProcessError` (P2)
 
 ### Security
 

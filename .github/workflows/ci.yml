@@ -50,9 +50,10 @@ jobs:
     needs: [build]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --frozen --group dev
-      - run: uv run python -m graphify extract . --code-only --no-cluster
       - run: uv run python scripts/graphify_report.py
       - run: uv run python scripts/graphify_affected.py --base ${{ github.event.pull_request.base.sha || 'origin/main' }}
       - uses: actions/upload-artifact@v4

@@ -31,8 +31,9 @@ class MemoryCache:
     Bounded mode uses LRU eviction: when the cache is at capacity, the
     least-recently-used entry is evicted on the next ``set()``.
 
-    Prefix operations (``shake``, ``delete_prefix``) are O(prefix_length + K)
-    where K is the number of matching entries, via a terminal-only prefix trie.
+    Prefix operations (``shake``, ``delete_prefix``) are
+    O(prefix_length + subtree_nodes) where K is the number of matching
+    entries, via a terminal-only prefix trie.
     """
 
     def __init__(self, max_size: int = 0) -> None:
@@ -173,9 +174,9 @@ class MemoryCache:
         best_keys: builtins.set[str] = builtins.set()
         best_match_len = 0
         counter = 0
-        heap: list[tuple[int, int, _TrieNode, int]] = [(0, counter, node, 0)]
+        heap: list[tuple[int, int, _TrieNode, int, int]] = [(0, 0, node, 0, 0)]
         while heap:
-            _neg_match, _cnt, current, match_len = heapq.heappop(heap)
+            _neg_match, _cnt, current, depth, match_len = heapq.heappop(heap)
             if match_len > 0 and current.key is not None:
                 if match_len > best_match_len:
                     best_match_len = match_len
@@ -183,11 +184,20 @@ class MemoryCache:
                 elif match_len == best_match_len:
                     best_keys.add(current.key)
             for ch, child in current.children.items():
-                new_match = match_len + (
-                    1 if match_len < len(target) and ch == target[match_len] else 0
-                )
+                child_depth = depth + 1
+                if (
+                    match_len < len(target)
+                    and match_len == depth
+                    and ch == target[match_len]
+                ):
+                    child_match = match_len + 1
+                else:
+                    child_match = match_len
                 counter += 1
-                heapq.heappush(heap, (-new_match, counter, child, new_match))
+                heapq.heappush(
+                    heap,
+                    (-child_match, counter, child, child_depth, child_match),
+                )
         return best_keys
 
     def _trie_insert(self, key: str) -> None:
@@ -232,7 +242,7 @@ class MemoryCache:
         Walks to the prefix node, collects all terminal keys via DFS,
         removes the prefix node from its parent's children, and returns the
         collected keys for bulk ``_cache`` cleanup. Complexity is
-        O(prefix_length + K) where K is the number of matching entries.
+        O(prefix_length + subtree_nodes) where K is the number of matching entries.
         """
         if prefix == "":
             keys = self._dfs_collect(self._trie)

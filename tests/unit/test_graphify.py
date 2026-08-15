@@ -42,6 +42,27 @@ class TestCanonicalNodeId:
         result = _canonical_node_id(g, "src/daf/cache/memory.py")
         assert result == "src_daf_cache_memory"
 
+    def test_returns_lexicographically_first_when_no_exact_match(
+        self, tmp_path: Path,
+    ) -> None:
+        g = tmp_path / "graph.json"
+        g.write_text(
+            json.dumps({
+                "nodes": [
+                    {
+                        "id": "z_last",
+                        "source_file": "src/daf/cache/memory.py",
+                    },
+                    {
+                        "id": "a_first",
+                        "source_file": "src/daf/cache/memory.py",
+                    },
+                ]
+            })
+        )
+        result = _canonical_node_id(g, "src/daf/cache/memory.py")
+        assert result == "a_first"
+
     def test_returns_graph_id_when_differs(self, tmp_path: Path) -> None:
         g = tmp_path / "graph.json"
         g.write_text(
@@ -96,6 +117,18 @@ class TestChangedFiles:
         with pytest.raises(RuntimeError, match="base ref 'origin/ghost' not found"):
             changed_files("origin/ghost")
 
+    def test_raises_on_git_diff_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        def _fake_run(cmd, *_, **__):
+            if cmd[0] == "git" and cmd[1] == "diff":
+                raise subprocess.CalledProcessError(128, cmd, stderr="diff failed")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(_GA.subprocess, "run", _fake_run)
+        with pytest.raises(RuntimeError, match="git diff failed"):
+            changed_files("origin/main")
+
 
 class TestGraphifySchemaValidation:
     def test_missing_nodes(self) -> None:
@@ -103,10 +136,37 @@ class TestGraphifySchemaValidation:
             _validate_graph_schema({"nodes": "not-a-list"})
 
     def test_missing_id_field(self) -> None:
-        with pytest.raises(RuntimeError, match="missing 'source_file' or 'id' field"):
+        with pytest.raises(RuntimeError, match="'id' must be a non-empty string"):
             _validate_graph_schema({
                 "nodes": [{"source_file": "x.py"}]
             })
+
+    def test_node_id_must_be_non_empty_string(self) -> None:
+        with pytest.raises(RuntimeError, match="'id' must be a non-empty string"):
+            _validate_graph_schema({"nodes": [{"id": "", "source_file": "x.py"}]})
+
+    def test_node_id_must_be_string_type(self) -> None:
+        with pytest.raises(RuntimeError, match="'id' must be a non-empty string"):
+            _validate_graph_schema({"nodes": [{"id": 123, "source_file": "x.py"}]})
+
+    def test_source_file_must_be_non_empty_string(self) -> None:
+        with pytest.raises(
+            RuntimeError, match="'source_file' must be a non-empty string"
+        ):
+            _validate_graph_schema({"nodes": [{"id": "x", "source_file": ""}]})
+
+    def test_duplicate_node_ids(self) -> None:
+        with pytest.raises(RuntimeError, match="duplicate node ID"):
+            _validate_graph_schema({
+                "nodes": [
+                    {"id": "same", "source_file": "x.py"},
+                    {"id": "same", "source_file": "y.py"},
+                ]
+            })
+
+    def test_non_dict_node_entry(self) -> None:
+        with pytest.raises(RuntimeError, match="non-dict entry in 'nodes'"):
+            _validate_graph_schema({"nodes": ["bad"]})
 
 
 class TestMainExitsOneOnMissingBase:
