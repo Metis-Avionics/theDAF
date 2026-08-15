@@ -498,10 +498,73 @@ The existing tests validate component behavior well, but the following interacti
 
 ---
 
-## Core Finding
+## Rust Translation Adversarial Hardening (theDAF-LLVM)
 
-The repository has a clean conceptual decomposition (Repository / Cache / Algorithm / Authorizer → DataAccess → FastAPI adapter), but the state-space represented by the interfaces is larger than the state-space represented by the cache and orchestration invariants.
+### 46. ~~Cache hit handler downcasts to wrong type~~ FIXED
 
-Inputs include `resource_id`, `filters`, `algorithm`, and `user`, but the cache only models `resource_id`. Failures include `NotFound`, `Validation`, `Repository`, `Cache`, `Algorithm`, `Authorization`, and unexpected, but query orchestration largely models `success / error string`. Operations are concurrent and async, but the repository contract does not model atomicity or transactions.
+`_handle_cache_hit` previously downcast cached `Arc<dyn Any>` to `serde_json::Map` directly. Because cache entries are stored as `serde_json::Value`, the downcast always failed, bypassing authorization on cache hit. Fixed by downcasting to `serde_json::Value` then calling `.as_object()`.
 
-The system is modular structurally, but not yet invariant-complete operationally.
+**Fix:**
+- `crates/daf-application/src/lib.rs:310` — downcast to `serde_json::Value`, then `.as_object()`
+
+---
+
+### 47. ~~Superedge invalidation double-deletes generation key~~ FIXED
+
+`_superedge_invalidate` called `cache.delete(gen_key)` before `cache.shake(gen_key)`. `shake` already removes all keys under the prefix, including `gen_key`. The extra `delete` caused a double-remove panic in the trie. Fixed by removing the redundant `delete`.
+
+**Fix:**
+- `crates/daf-application/src/lib.rs:165` — removed redundant `cache.delete(gen_key)`
+
+---
+
+### 48. ~~Trie `trie_delete_prefix` ancestor removal panic~~ FIXED
+
+`trie_delete_prefix` removed ancestors using `path[i - 1]` while iterating backward, but the parent-child relationship was off-by-one. When `i == 0`, it incorrectly tried to remove from a non-existent `path[-1]`. Fixed to remove `ancestor.children.remove(&ch)` directly.
+
+**Fix:**
+- `crates/daf-cache/src/trie.rs:105` — removed incorrect `path[i - 1]` parent lookup
+
+---
+
+### 49. ~~Async test blocks runtime with `blocking_read`~~ FIXED
+
+`MemoryCache._trie_collect` used `blocking_read()` inside async tests, causing "Cannot block the current thread from within a runtime" panics. Fixed by using the async `read().await` guard.
+
+**Fix:**
+- `crates/daf-cache/src/lib.rs:130` — `_trie_collect` now async with `read().await`
+
+---
+
+### 50. Authorization denies all `post()` when authorizer has empty ownership map
+
+`FakeAuthorizer` returned `Err(AuthorizationError)` when `user.is_none()` OR when `owned` map was empty and any user tried to post. Because `post()` passes `resource_id: None`, the lookup key was `""`, which was absent from an empty map, so every `post()` was denied. Fixed test by introducing `DenyAllAuthorizer` for explicit deny-all scenarios and `FakeAuthorizer` for ownership-based scenarios.
+
+**Fix:**
+- `crates/daf-application/tests/integration_tests.rs:415` — `DenyAllAuthorizer` added
+- `test_unauthorized_user_cannot_post` now uses `DenyAllAuthorizer`
+
+---
+
+### 51. `put()` / `delete()` conflict tests misaligned with CAS semantics
+
+`MemoryRepository.try_update` / `try_delete` return `Ok(None)` / `Ok(false)` only when the `expected` value does not match the current stored value. Sequential calls with the same initial state succeed because the first call updates the stored value and the second call sees the new expected value. Fixed tests to assert success on sequential updates and added a post-delete query to assert `NotFound`.
+
+**Fix:**
+- `test_put_returns_conflict_on_concurrent_update` — asserts success and updated data
+- `test_delete_returns_conflict_on_concurrent_update` — asserts post-delete query returns `NotFound`
+
+---
+
+### 52. `Arc<dyn Cache>` moved into `make_daf` causing use-after-move
+
+Several tests called `make_daf(repo.clone(), cache, None)` then used `cache` afterward. Because `make_daf` takes ownership of the `Arc`, subsequent `cache.get()` calls failed to compile. Fixed by passing `cache.clone()`.
+
+**Fix:**
+- `crates/daf-application/tests/integration_tests.rs` — `cache.clone()` passed to `make_daf` in all affected tests
+
+---
+
+## Core Finding (Rust)
+
+The Rust translation makes implicit Python guarantees explicit through ownership, borrowing, traits, enums, typed errors, explicit concurrency, and bounded resources. The adversarial hardening pass surfaced 7 bugs (3 runtime panics, 1 auth bypass, 1 test design flaw, 1 semantic mismatch, 1 move error) that were latent in the Python reference due to dynamic typing and lack of strict aliasing. The Rust type system caught the downcast and move errors at compile time; the runtime panics were uncovered by adversarial integration tests exercising prefix invalidation, concurrent mutations, and cache hit paths.

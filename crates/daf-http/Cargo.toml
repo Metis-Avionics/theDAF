@@ -1,0 +1,15 @@
+[package]
+name = "daf-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+daf-core = { path = "../daf-core" }
+daf-application = { path = "../daf-application" }
+async-trait.workspace = true
+tokio.workspace = true
+axum = { version = "0.7", features = ["macros"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

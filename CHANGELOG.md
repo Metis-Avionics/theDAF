@@ -9,22 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 3 new `TestMemoryCache` tests: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
-- `graphify_affected.py` raises `RuntimeError` with stderr context on subprocess failure
-- `MemoryCache(max_size=0)` unbounded default; optional `max_size > 0` enables LRU eviction via `OrderedDict`
-- `MemoryCache._trie_delete_prefix()` for O(prefix_length) subtree detachment
-- `TestMemoryCache.test_memory_cache_bounded_eviction` — LRU eviction at capacity
-- `TestMemoryCache.test_memory_cache_unbounded_default` — default mode retains all entries
-- `TestMemoryCache.test_cache_trie_invariant_under_random_mutations` — adversarial invariant test (200 random mutations)
-- `MemoryCache` terminal-only prefix trie: only terminal nodes store a key, intermediate nodes carry only `children`
-- `MemoryCache._dfs_collect()` DFS helper for terminal key collection
-- `MemoryCache._bfs_collect()` BFS helper for level-order terminal key collection
-- `MemoryCache._astar_collect(target)` A* best-first helper returning keys matching longest prefix with target
-- `test_bfs_collect_matches_bruteforce_prefix`, `test_astar_collect_matches_bruteforce_prefix` reference-model tests
-- `httpx>=0.27` upgraded to `httpx2>=0.27` in dev and optional-dependencies
-- `test_memory_cache_rejects_negative_max_size`, `test_memory_cache_max_size_one`
-- `test_memory_cache_lru_delete_after_promotion`, `test_memory_cache_lru_prefix_delete_after_promotion`
-- `test_memory_cache_shake_empty_prefix_bounded`, `test_memory_cache_empty_key_bounded`
+- theDAF-LLVM Rust workspace with 9 crates (`daf-core`, `daf-application`, `daf-cache`, `daf-repository`, `daf-algorithms`, `daf-runtime`, `daf-messaging`, `daf-http`, `daf-ffi`) implementing the same data-access semantics as the Python reference
+- `Generation` enum (`Missing` / `Valid(u64)`) preventing sentinel-`0` conflation from Python
+- C-compatible FFI boundary (`daf-ffi`) with opaque pointers and `i32` error codes for reverse compatibility
+- 23 Rust integration tests covering authorization, cache isolation, generation monotonicity, prefix invalidation, filter semantics, and conflict behavior
+- `MemoryCache` terminal-only prefix trie translated from Python with O(prefix_length + K) prefix ops
+- `MemoryRepository` CAS semantics (`try_update` / `try_delete`) using `Arc` clone isolation
+- `FibonacciDP` algorithm with typed `AlgorithmStats`
+- `DataAccessRouter` Axum adapter with 403/404/500 error translation
+- `trie_delete_prefix` off-by-one fix and ancestor cleanup regression coverage
+- `_handle_cache_hit` downcast fix (serde_json::Value + .as_object()) preventing auth bypass on cache hit
+- `_superedge_invalidate` double-delete fix preventing generation-key panic
+- `DenyAllAuthorizer` test fixture for explicit deny-all scenarios
+- Concurrent mutation generation monotonicity test (per-resource lock serialization)
+- Authorization prevents mutation side effects test (denied mutations do not advance generation)
+- Query after successful POST roundtrip test
+- Query filters return matching data / Null on mismatch test
 - `test_trie_collect_matches_bruteforce_prefix` reference-model test
 - `test_canonical_node_id_*` and `test_changed_files_raises_on_missing_base` in `tests/unit/test_graphify.py`
 - `test_main_exits_one_on_missing_base`, `test_graphify_schema_validation_*`
