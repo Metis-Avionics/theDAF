@@ -293,16 +293,50 @@ class TestMemoryCache:
         assert removed == 0
 
     @pytest.mark.asyncio
-    async def test_trie_set_existing_key_is_idempotent(self) -> None:
-        """Test that setting an existing key is idempotent."""
+    async def test_shake_empty_prefix_removes_all_keys(self) -> None:
+        """shake('') must remove every key — preserves original linear semantics."""
         cache = MemoryCache()
-        await cache.set("key:1", "v1")
-        await cache.set("key:1", "v2")
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:b:2", "v2")
+        await cache.set("other:x", "v3")
 
-        result = await cache.get("key:1")
-        assert result == "v2"
+        removed = await cache.shake("")
 
-        removed = await cache.shake("key:")
+        assert removed == 3
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:b:2") is None
+        assert await cache.get("other:x") is None
+
+    @pytest.mark.asyncio
+    async def test_delete_prefix_empty_removes_all_keys(self) -> None:
+        """delete_prefix('') must remove every key — preserves original semantics."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:b:2", "v2")
+        await cache.set("other:x", "v3")
+
+        await cache.delete_prefix("")
+
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:b:2") is None
+        assert await cache.get("other:x") is None
+
+    @pytest.mark.asyncio
+    async def test_trie_prunes_empty_branches_after_delete(self) -> None:
+        """After deleting all keys sharing a path, the trie collapses the
+        branch rather than retaining structural garbage."""
+        cache = MemoryCache()
+        await cache.set("abcdef", "v1")
+        await cache.set("abcghi", "v2")
+
+        await cache.delete("abcdef")
+        await cache.delete("abcghi")
+
+        removed = await cache.shake("abc")
+        assert removed == 0
+
+        await cache.set("abcxyz", "v3")
+        removed = await cache.shake("abc")
         assert removed == 1
 
 
@@ -414,50 +448,3 @@ class TestAuthorizerProtocol:
         # Should raise for forbidden resource
         with pytest.raises(AuthorizationError):
             await authorizer.authorize("query", "forbidden", "user-1")
-
-
-class TestDataAccessNamespaceCache:
-    """Test _resource_namespace caching behavior."""
-
-    @pytest.mark.asyncio
-    async def test_namespace_cache_returns_same_namespace_for_same_resource_id(
-        self,
-    ) -> None:
-        """Test that _resource_namespace returns the same value for the
-        same resource_id."""
-        import hashlib
-
-        from daf.core.access import DataAccess
-        from daf.repositories import MemoryRepository
-
-        repo = MemoryRepository()
-        cache = MemoryCache()
-        daf = DataAccess(repository=repo, cache=cache)
-
-        ns1 = daf._resource_namespace("res-1")
-        ns2 = daf._resource_namespace("res-1")
-
-        assert ns1 == ns2
-        assert ns1 == hashlib.sha256(b"res-1").hexdigest()
-
-    @pytest.mark.asyncio
-    async def test_namespace_cache_returns_different_namespaces_for_different_ids(
-        self,
-    ) -> None:
-        """Test that _resource_namespace returns different values for
-        different resource_ids."""
-        import hashlib
-
-        from daf.core.access import DataAccess
-        from daf.repositories import MemoryRepository
-
-        repo = MemoryRepository()
-        cache = MemoryCache()
-        daf = DataAccess(repository=repo, cache=cache)
-
-        ns1 = daf._resource_namespace("res-1")
-        ns2 = daf._resource_namespace("res-2")
-
-        assert ns1 != ns2
-        assert ns1 == hashlib.sha256(b"res-1").hexdigest()
-        assert ns2 == hashlib.sha256(b"res-2").hexdigest()

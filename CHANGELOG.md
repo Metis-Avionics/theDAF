@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- 3 new `TestMemoryCache` tests: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
+- `graphify_affected.py` raises `RuntimeError` with stderr context on subprocess failure
+
+### Changed
+
+- `DataAccess._resource_namespace` computes SHA-256 inline (no `_namespace_cache` dict)
+- `MemoryCache._trie_delete` tracks insertion path and prunes empty branches bottom-up
+- `MemoryCache._trie_insert` and `_trie_delete` include root node in key tracking
+
+### Removed
+
+- `DataAccess._namespace_cache` (unbounded dict eliminated as P1 memory-growth risk)
+- `TestDataAccessNamespaceCache` (2 tests; cached-namespace behavior no longer exists)
+- Duplicate silent `graphify diagnose multigraph` invocation from `scripts/graphify_report.py`
+
+### Fixed
+
+- Empty-prefix semantic regression in `MemoryCache` prefix trie: `shake("")` and `delete_prefix("")` now operate on entire cache (P0)
+- Trie never pruned empty branches after key deletion, causing unbounded structural memory growth (P1)
+- Unbounded `_namespace_cache` dict in `DataAccess` grows without limit (P1)
+- Duplicate `graphify diagnose multigraph` invocation in `graphify_report.py` masks first-call failures (P2)
+- `graphify_affected.py` `affected()` swallows subprocess failures, printing "No impacted test files detected" on error (P2)
+
+### Security
+
+- Removed unbounded in-process cache of `resource_id → sha256` mappings (memory-growth / potential DoS vector)
+- Subprocess failures in CI tooling now propagate as errors instead of being silently ignored
+
 ## [0.2.0] - 2026-08-14
 
 ### Added
@@ -155,6 +187,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Global generation counter advances on any mutation, invalidating unrelated resource caches (R19c)
 - `_advance_generation` read-modify-write is non-atomic; concurrent mutations can lose increments (R22)
 - Query/mutation interleaving untested; stale query can repopulate cache after mutation (R23)
+- Empty-prefix semantic regression in `MemoryCache` prefix trie: `shake("")` and `delete_prefix("")` return empty set instead of all keys (P0)
+- Trie never prunes empty branches after key deletion, causing unbounded structural memory growth (P1)
+- Unbounded `_namespace_cache` dict in `DataAccess` grows without limit (P1)
+- Duplicate silent `graphify diagnose multigraph` invocation in `graphify_report.py` masks failures (P2)
+- `graphify_affected.py` `affected()` swallows subprocess failures, printing "No impacted test files detected" on error (P2)
 
 ### Security
 

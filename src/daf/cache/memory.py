@@ -114,6 +114,7 @@ class MemoryCache:
         return self._trie_collect(prefix)
 
     def _trie_insert(self, key: str) -> None:
+        self._trie.keys.add(key)
         node = self._trie
         for ch in key:
             node.children.setdefault(ch, _TrieNode())
@@ -121,12 +122,21 @@ class MemoryCache:
             node.keys.add(key)
 
     def _trie_delete(self, key: str) -> None:
+        self._trie.keys.discard(key)
+        path: list[tuple[_TrieNode, str]] = []
         node: _TrieNode | None = self._trie
         for ch in key:
-            node = node.children.get(ch) if node is not None else None
+            if node is None:
+                return
+            path.append((node, ch))
+            node = node.children.get(ch)
             if node is None:
                 return
             node.keys.discard(key)
+        for parent, ch in reversed(path):
+            child = parent.children.get(ch)
+            if child is not None and not child.keys and not child.children:
+                del parent.children[ch]
 
     def _trie_collect(self, prefix: str) -> builtins.set[str]:
         node: _TrieNode | None = self._trie

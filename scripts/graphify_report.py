@@ -31,9 +31,6 @@ def main() -> int:
     )
 
     print("\n=== graphify diagnose multigraph ===")
-    run(["uv", "run", "python", "-m", "graphify", "diagnose", "multigraph",
-         "--graph", str(GRAPH_JSON), "--json"], check=False)
-    # CLI writes to stdout; capture via shell redirect instead
     result = subprocess.run(  # noqa: S603
         ["uv", "run", "python", "-m", "graphify", "diagnose", "multigraph",  # noqa: S607
          "--graph", str(GRAPH_JSON), "--json"],

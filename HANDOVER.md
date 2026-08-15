@@ -4,14 +4,14 @@
 
 ### Current State
 
-The project is in **feature-complete** state with all planned bugs and security issues resolved. All work from the barrel-overlap plan and cache optimization plan is complete and uncommitted in the working tree.
+The project is in **feature-complete** state with all planned bugs and security issues resolved. All work from the barrel-overlap plan, cache optimization plan, and red-team fix plan is complete and uncommitted in the working tree.
 
 ### Repository Status
 
-- **Branch**: `main`
-- **Commits**: up to date with origin/main; uncommitted barrel-overlap and optimization changes
-- **Uncommitted Work**: barrel `_public` helper across 7 barrels, namespace cache, prefix trie, barrel-consistency tests
-- **PR Status**: #17 merged; new PR pending for barrel-overlap work
+- **Branch**: `refactor/barrel-overlap-optimizations`
+- **Commits**: up to date with origin/refactor/barrel-overlap-optimizations; uncommitted red-team fixes and optimization changes
+- **Uncommitted Work**: trie root-key tracking, trie empty-branch pruning, `_namespace_cache` removal, graphify script fixes, 3 new trie tests, `TestDataAccessNamespaceCache` removal
+- **PR Status**: #18 open for red-team fixes on barrel-overlap-optimizations branch
 
 ### Quality Status
 
@@ -24,12 +24,17 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, and prior red-team plans have been addressed:
+All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, and prior red-team plans have been addressed:
 
 - **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files
 - **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant
-- **Namespace cache**: `DataAccess._namespace_cache` caches SHA-256 hashes for repeated `_resource_namespace` calls
-- **Prefix trie**: `MemoryCache._TrieNode` enables O(prefix_len) prefix collection for `delete_prefix` and `shake`
+- **Namespace cache**: `DataAccess._namespace_cache` removed; `_resource_namespace` computes SHA-256 inline (unbounded dict was a memory-growth risk)
+- **Prefix trie root-key tracking**: `MemoryCache._trie_insert` and `_trie_delete` now include root node in key tracking, fixing `shake("")` / `delete_prefix("")` semantics
+- **Trie empty-branch pruning**: `_trie_delete` prunes child nodes where both `keys` and `children` are empty, preventing unbounded structural memory growth
+- **Graphify report deduplication**: Removed silent duplicate `graphify diagnose multigraph` invocation in `scripts/graphify_report.py`
+- **Graphify affected error handling**: `scripts/graphify_affected.py` `affected()` now raises `RuntimeError` on subprocess failure instead of silently returning empty output
+- **3 new trie tests**: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
+- **TestDataAccessNamespaceCache removed**: 2 obsolete tests deleted (namespace caching behavior no longer exists)
 - **R1-R26, R19b, R19c, R3b, R21b, R22, R23, R24, R25, R26, superedge collapse, AST tree shaking, graphifyy CI**: All implemented and merged in PR #17
 - **Architecture docs**: `scripts/graphify_report.py` and `scripts/graphify_affected.py` automate graphify suite; CI uploads `GRAPH_TREE.html` and `theDAF-callflow.html` artifacts
 
@@ -56,7 +61,7 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 │   ├── py.typed                 # PEP 561 typed package marker
 │   ├── core/
 │   │   ├── __init__.py          # Internal barrel (_public helper)
-│   │   ├── access.py            # DataAccess orchestration + namespace cache
+│   │   ├── access.py            # DataAccess orchestration (no namespace cache)
 │   │   ├── factory.py           # DataAccessFactory (composition)
 │   │   ├── protocols.py         # Repository, Cache, Algorithm protocols
 │   │   └── errors.py            # Domain exceptions
@@ -68,7 +73,7 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 │   │   └── memory.py            # MemoryRepository reference impl
 │   ├── cache/
 │   │   ├── __init__.py          # Cache barrel (_public helper)
-│   │   └── memory.py            # MemoryCache with prefix trie
+│   │   └── memory.py            # MemoryCache with prefix trie (root-key tracking + pruning)
 │   ├── algorithms/
 │   │   ├── __init__.py          # Algorithms barrel (_public helper)
 │   │   └── dynamic_programming.py  # FibonacciDP
@@ -78,7 +83,7 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 ├── tests/
 │   ├── unit/
 │   │   ├── test_contracts.py    # 14 tests
-│   │   ├── test_components.py   # 50 tests
+│   │   ├── test_components.py   # 51 tests (3 new trie tests; TestDataAccessNamespaceCache removed)
 │   │   └── test_barrels.py      # 2 tests (barrel consistency)
 │   └── integration/
 │       ├── test_data_access.py  # 18 tests
@@ -87,8 +92,8 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 │       └── test_security_invariants.py  # 30 tests
 ├── scripts/
 │   ├── power_of_ten.py         # NASA/JPL Power of Ten AST checker
-│   ├── graphify_report.py      # graphify extract+diagnose+tree+callflow pipeline
-│   └── graphify_affected.py    # impacted-test analysis for CI optimization
+│   ├── graphify_report.py      # graphify extract+diagnose+tree+callflow pipeline (deduplicated diagnose)
+│   └── graphify_affected.py    # impacted-test analysis for CI (fail-fast on subprocess errors)
 ├── pyproject.toml               # Build config, metadata, tool configs
 ├── README.md                    # Package documentation
 ├── SECURITY.md                  # Security policy
@@ -122,4 +127,4 @@ The following gate files are maintained and updated after every turn:
 
 - **Repository**: https://github.com/RAliane-REBORN/theDAF
 - **Issues**: https://github.com/RAliane-REBORN/theDAF/issues
-- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/17 (merged)
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/18 (open — red-team fixes)

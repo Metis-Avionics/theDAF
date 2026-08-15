@@ -45,11 +45,17 @@ def file_to_node_id(path: str) -> str | None:
 
 
 def affected(node_id: str, depth: int = 2) -> str:
-    result = subprocess.run(  # noqa: S603
-        ["uv", "run", "python", "-m", "graphify", "affected", node_id,  # noqa: S607
-         "--depth", str(depth), "--graph", str(GRAPH_JSON)],
-        capture_output=True, text=True
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["uv", "run", "python", "-m", "graphify", "affected", node_id,  # noqa: S607
+             "--depth", str(depth), "--graph", str(GRAPH_JSON)],
+            capture_output=True, text=True, check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"graphify affected failed for node '{node_id}': "
+            f"{exc.stderr.strip()}"
+        ) from exc
     return result.stdout
 
 
