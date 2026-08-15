@@ -369,6 +369,105 @@ CI ran `graphify extract` then `graphify_report.py`, which runs `graphify extrac
 
 ---
 
+### 36. `_generation_locks` unbounded dict FIXED
+
+`_generation_locks` was an unbounded `dict[str, asyncio.Lock]` with the same cardinality risk as the removed `_namespace_cache`. Replaced with a fixed-size lock-striping array (N=16) using hash-mod indexing on the resource namespace.
+
+**Fix:**
+- `src/daf/core/access.py:112` — `_generation_locks` replaced with `_generation_locks_memo = ResourceMemo(key_fn=..., factory=...)`
+- `src/daf/utils/_memoize.py` — `ResourceMemo` provides bounded lazy-init memoization
+
+---
+
+### 37. Bounded LRU can evict `_daf_gen:*` metadata FIXED
+
+When `max_size > 0`, LRU eviction could remove `_daf_gen:<namespace>` while leaving the query cache entry. The old `_current_generation` silently returned 0 for missing keys, serving potentially stale data. Fixed by raising `GenerationKeyError` when the generation key is absent; callers treat this as a cache miss.
+
+**Fix:**
+- `src/daf/core/errors.py:34` — `GenerationKeyError(CacheError)` added
+- `src/daf/core/access.py:168` — `_current_generation` raises `GenerationKeyError` on missing/non-int value
+- `src/daf/core/access.py:288` — `_execute_query` catches `GenerationKeyError` → cache miss
+- `src/daf/core/access.py:330` — `_execute_cache_miss` catches `GenerationKeyError` → gen=0, writes generation key
+
+---
+
+### 38. Multi-index invariant not documented FIXED
+
+`MemoryCache.set`/`delete`/`delete_prefix`/`shake`/`clear` must not `await` between updates to `_cache`, `_trie`, and `_lru`. Added explicit atomicity note to `MemoryCache` class docstring.
+
+**Fix:**
+- `src/daf/cache/memory.py:31` — class docstring documents no-await-between-indexes invariant
+
+---
+
+### 39. BFS uses O(n²) list.pop(0) FIXED
+
+`TreeCollector._bfs` used `list.pop(0)` on a growing queue, yielding O(n²) worst-case traversal. Replaced with `collections.deque` and `popleft()` for O(1) per operation.
+
+**Fix:**
+- `src/daf/utils/_recursion.py:14` — `from collections import deque`
+- `src/daf/utils/_recursion.py:72` — `queue: deque = deque([root])` + `popleft()`
+
+---
+
+### 40. A* / BFS architectural homeless FIXED
+
+A* and BFS collectors accumulated algorithmic capability without a production consumer, expanding the trusted surface unjustifiably. Marked both as experimental in docstrings.
+
+**Fix:**
+- `src/daf/cache/memory.py:160` — `_bfs_collect` docstring notes "**Experimental** — no production consumer yet."
+- `src/daf/cache/memory.py:170` — `_astar_collect` docstring notes "**Experimental** — no production consumer yet."
+
+---
+
+### 41. `_canonical_node_id` does not validate graph schema FIXED
+
+`_canonical_node_id` loaded graph JSON without schema validation; malformed graphs fell through to `file_to_node_id` with a plausible but unverified ID. Fixed to call `_validate_graph_schema` and return `None` on validation failure.
+
+**Fix:**
+- `scripts/graphify_affected.py:65` — `_validate_graph_schema(data)` called after `json.loads`
+- `scripts/graphify_affected.py:67` — `RuntimeError` from validation caught, returns `None`
+
+---
+
+### 42. `graphify_affected.py` scope narrower than advertised FIXED
+
+Module docstring implied "changed files" without specifying the `.py`-only filter. Updated docstring to state scope explicitly and note that CI still runs the full suite.
+
+**Fix:**
+- `scripts/graphify_affected.py:2` — docstring documents `.py`-only scope and CI full-suite guarantee
+
+---
+
+### 43. `TreeCollector` `astar` strategy is broken FIXED
+
+`TreeCollector._astar` cannot correctly implement LCP matching because its API (`key_extractor(node) -> str | None`, `children_extractor(node) -> Iterable`) does not expose path characters. The condition `self._key_extractor(child) is not None` checks whether a child is terminal, not whether its character matches the target. `MemoryCache._astar_collect` already exists with the correct implementation. No code uses `TreeCollector(strategy="astar")`. Removed `astar` strategy and `_astar` method.
+
+**Fix:**
+- `src/daf/utils/_recursion.py` — removed `_astar` method and `heapq` import
+- `src/daf/utils/_recursion.py` — `collect()` only dispatches to `dfs` and `bfs`
+
+---
+
+### 44. Dead code in `_memoize.py` FIXED
+
+`memoize` decorator and `PureMemo`/`_make_key` were new code with zero consumers, expanding the attack surface and confusing readers. Removed entirely.
+
+**Fix:**
+- `src/daf/utils/_memoize.py` — removed `memoize`, `PureMemo`, `_make_key`
+- `src/daf/utils/_memoize.py` — removed unused `hashlib`, `Awaitable`/`Callable` imports
+
+---
+
+### 45. Unused `heapq` import in `_trie.py` FIXED
+
+`heapq` was imported but never used in the trie implementation.
+
+**Fix:**
+- `src/daf/cache/_trie.py` — removed unused `heapq` import
+
+---
+
 ## Missing Test Dimensions
 
 The existing tests validate component behavior well, but the following interaction dimensions are now covered:

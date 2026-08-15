@@ -1,5 +1,6 @@
 """Pydantic contract models for data access operations."""
 
+from daf._barrel import _public
 from daf.contracts.query import (
     DeleteInfo,  # noqa: F401
     MutationResult,  # noqa: F401
@@ -8,11 +9,6 @@ from daf.contracts.query import (
     QueryInfo,  # noqa: F401
     QueryResult,  # noqa: F401
 )
-
-
-def _public(*names: str) -> list[str]:
-    return list(names)
-
 
 __all__ = _public(
     "QueryInfo",

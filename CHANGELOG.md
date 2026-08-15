@@ -82,6 +82,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_canonical_node_id()` returns non-deterministic node ID when multiple graph nodes share `source_file` and none matches hand-rolled ID (P2)
 - `graphify_affected.py` `changed_files()` wraps only `git rev-parse` in try/except; `git diff` failure raises raw `CalledProcessError` (P2)
 
+### Added
+
+- `GenerationKeyError(CacheError)` raised when `_daf_gen:<namespace>` key is absent
+- `test_generation_eviction_forces_cache_miss` — bounded LRU eviction of generation metadata forces cache miss
+- `test_malformed_graph_schema_returns_none` — `_canonical_node_id` returns `None` on malformed graph JSON
+- `TreeCollector._bfs` uses `collections.deque` + `popleft()` for O(1) queue operations
+- `_bfs_collect` and `_astar_collect` docstrings note "**Experimental** — no production consumer yet."
+- `graphify_affected.py` module docstring documents `.py`-only scope and CI full-suite guarantee
+
+### Changed
+
+- `_current_generation` raises `GenerationKeyError` instead of silently returning 0 for missing generation keys
+- `_execute_query` catches `GenerationKeyError` → delegates to `_execute_cache_miss`
+- `_execute_cache_miss` catches `GenerationKeyError` → treats as gen=0 and writes generation key
+- `DataAccess` concurrency docstring replaced with formal cache-correctness invariant
+- `_canonical_node_id` calls `_validate_graph_schema` after `json.loads`; returns `None` on validation failure
+- `test_missing_nodes_key` updated: fail-closed behavior returns `None` instead of warning + fallback
+
+### Fixed
+
+- Unbounded `_generation_locks: dict` replaced with fixed-size `ResourceMemo` lock striping (N=16)
+- Bounded LRU eviction of `_daf_gen:*` could serve stale data; missing generation now forces cache miss
+- `_canonical_node_id` fell back to hand-rolled ID on malformed graph; now fail-closed returns `None`
+- `graphify_affected.py` scope implied "changed files" without `.py`-only filter; docstring now explicit
+
+### Security
+
+- Generation metadata shares cache namespace with query entries; eviction forces correct cache miss rather than serving stale data
+- Fail-closed canonicalization prevents malformed graph JSON from producing plausible but unverified node IDs
+
 ### Security
 
 - Removed unbounded in-process cache of `resource_id → sha256` mappings (memory-growth / potential DoS vector)
@@ -94,6 +124,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Malformed graphify JSON now fails fast instead of producing misleading "no impacted tests" output
 - Negative `max_size` rejected explicitly; invalid configuration cannot create unbounded cache silently
 - `httpx2` replaces `httpx` as the test HTTP client (starlette deprecation fix)
+
+### Added
+
+- `test_memoize.py` — 10 direct tests for `Memo` (6) and `ResourceMemo` (4)
+- `test_recursion.py` — 8 direct tests for `TreeCollector` (5) and `walk_tree` (3)
+- `test_no_barrel_defines_own_public` — asserts no barrel `__init__.py` defines its own `_public`
+
+### Changed
+
+- `daf/utils/__init__.py` barrel pattern added: imports `_public` from `daf._barrel`
+- `FibonacciDP._compute_fib` uses `Memo` for explicit memoization with iteration and hit tracking
+- `MemoryCache._dfs_collect` delegates to `TreeCollector` with `strategy="dfs"`
+- `DataAccess._generation_locks` replaced with `ResourceMemo` for bounded lazy-init lock striping
+
+### Removed
+
+- Broken `astar` strategy from `TreeCollector`; `_astar` method and `heapq` import deleted
+- Unused `memoize` decorator and `PureMemo`/`_make_key` from `daf/utils/_memoize.py`
+- Unused `heapq` import from `daf/cache/_trie.py`
+
+### Fixed
+
+- `TreeCollector` type args: `Iterable[Any]` and `deque[Any]` added in `_recursion.py`
+- `memo.get(n)` return annotated with `# type: ignore[no-any-return]` in `dynamic_programming.py`
+- `ResourceMemo.get()` `no-any-return` returns annotated with `# type: ignore[no-any-return]`
+- `_memoize.py` docstring rewritten to list only `Memo` and `ResourceMemo`
 
 ## [0.2.0] - 2026-08-14
 

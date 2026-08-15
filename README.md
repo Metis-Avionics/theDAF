@@ -382,8 +382,11 @@ uv run pytest --cov=src/daf tests/
 - ✅ Rate limiting
 - ✅ Error translation to HTTP responses
 - ✅ DP memoization efficiency verification
+- ✅ Direct primitive tests for `Memo`, `ResourceMemo`, `TreeCollector`, `walk_tree`
 
 ## Quality Assurance
+
+- **191 tests** passing (17 unit + 25 integration + 8 end-to-end + 141 component/primitive tests)
 
 ### Type Checking
 
@@ -492,7 +495,7 @@ class RedisCache:
 ## Limitations
 
 1. **In-memory repository** – No persistence across restarts. `try_update`/`try_delete` use a coarse lock and identity comparison (`is`) for CAS detection; this is best-effort only. Real transactional backends should implement true atomic CAS.
-2. **Basic cache** – `max_size=0` (the default) means unbounded and is appropriate for development and testing. Set a positive `max_size` for bounded LRU eviction in production. Backwards-compatible default is not memory-safe.
+2. **Bounded cache** — `max_size=0` (default) is unbounded. Set a positive `max_size` for LRU eviction. Generation state shares the same cache namespace as query entries; evicting generation metadata forces a cache miss, which is correct but may increase repository load.
 3. **Fibonacci algorithm** – Demonstration only (use `math.fib()` in production)
 4. **Single-layer rate limiting** – FastAPI adapter only
 

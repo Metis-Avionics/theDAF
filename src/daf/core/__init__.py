@@ -1,5 +1,6 @@
 """Core data access abstractions and factory."""
 
+from daf._barrel import _public
 from daf.core.access import DataAccess  # noqa: F401
 from daf.core.errors import (
     AlgorithmError,  # noqa: F401
@@ -12,11 +13,6 @@ from daf.core.errors import (
 )
 from daf.core.factory import DataAccessFactory  # noqa: F401
 from daf.core.protocols import Algorithm, Authorizer, Cache, Repository  # noqa: F401
-
-
-def _public(*names: str) -> list[str]:
-    return list(names)
-
 
 __all__ = _public(
     "DataAccess",

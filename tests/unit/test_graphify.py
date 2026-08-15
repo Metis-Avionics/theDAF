@@ -96,14 +96,15 @@ class TestCanonicalNodeId:
     def test_missing_nodes_key(self, tmp_path: Path) -> None:
         g = tmp_path / "graph.json"
         g.write_text(json.dumps({}))
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = _canonical_node_id(g, "src/daf/x.py")
-        assert len(caught) == 1
-        assert result == "src_daf_x"
+        assert _canonical_node_id(g, "src/daf/x.py") is None
 
     def test_missing_graph_file(self, tmp_path: Path) -> None:
         g = tmp_path / "nonexistent.json"
+        assert _canonical_node_id(g, "src/daf/x.py") is None
+
+    def test_malformed_graph_schema_returns_none(self, tmp_path: Path) -> None:
+        g = tmp_path / "graph.json"
+        g.write_text(json.dumps({"nodes": [{"id": 123, "source_file": "x.py"}]}))
         assert _canonical_node_id(g, "src/daf/x.py") is None
 
 

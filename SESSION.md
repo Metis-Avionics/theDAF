@@ -808,3 +808,128 @@ Each session entry should include:
 - `httpx2` resolves the StarletteDeprecationWarning seen in test output
 
 ---
+
+## Session 013 - 2026-08-15
+
+### Agent: Kilo-pr18-redteam-r2
+
+### Turn 1 Summary
+
+**Initial State**: PR #18 adversarial red-team round 2 findings (7 items: P1 lock striping, generation key missing, BFS O(n²), experimental scope, fail-closed canonicalization, graphify scope, documentation invariant). 172 tests passing.
+
+**Actions Taken**:
+- Added `GenerationKeyError(CacheError)` to `src/daf/core/errors.py`
+- Replaced unbounded `_generation_locks: dict` with `ResourceMemo` lock striping (N=16) in `DataAccess.__init__`
+- `_current_generation` raises `GenerationKeyError` on missing/non-int generation key
+- `_execute_query` catches `GenerationKeyError` → delegates to `_execute_cache_miss`
+- `_execute_cache_miss` catches `GenerationKeyError` → treats as gen=0 and writes generation key
+- Replaced `list.pop(0)` BFS queue with `collections.deque` + `popleft()` in `TreeCollector._bfs`
+- Added "**Experimental** — no production consumer yet." to `_bfs_collect` and `_astar_collect` docstrings
+- `_canonical_node_id` now calls `_validate_graph_schema` after `json.loads`; returns `None` on validation failure
+- `graphify_affected.py` module docstring documents `.py`-only scope and CI full-suite guarantee
+- `DataAccess` concurrency docstring replaced with formal cache-correctness invariant
+- Added `test_generation_eviction_forces_cache_miss` verifying bounded LRU eviction of generation metadata
+- Added `test_malformed_graph_schema_returns_none` verifying fail-closed canonicalization
+- Updated `test_missing_nodes_key` to expect `None` (fail-closed) instead of warning + fallback
+- Updated README Limitations, BUGS.md (findings 36-42), CHANGELOG.md, HANDOVER.md
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/core/errors.py | Modified | Added `GenerationKeyError` |
+| src/daf/core/access.py | Modified | Lock striping, GenerationKeyError handling, invariant doc |
+| src/daf/utils/_recursion.py | Modified | `deque` for BFS queue |
+| src/daf/cache/memory.py | Modified | Experimental docstrings for BFS/A* |
+| scripts/graphify_affected.py | Modified | Fail-closed `_canonical_node_id`, scope docstring |
+| tests/unit/test_components.py | Modified | Generation eviction test |
+| tests/unit/test_graphify.py | Modified | Malformed graph test, updated missing_nodes_key |
+| README.md | Modified | Bounded-cache generation note in Limitations |
+| BUGS.md | Modified | Findings 36-42 FIXED entries |
+| CHANGELOG.md | Modified | PR18 Round 2 entries |
+| HANDOVER.md | Modified | Test count 172, latest changes |
+| SESSION.md | Modified | This session entry |
+
+### Project Status
+
+- **Branch**: `refactor/barrel-overlap-optimizations`
+- **Version**: 0.2.0
+- **Tests**: 172/172 passing
+- **Type Checking**: mypy strict, pre-existing errors only (none in modified files)
+- **Linting**: Ruff, pre-existing issues only (none in modified files)
+
+### Pending Work
+
+- [ ] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch to origin (updates PR #18)
+- [ ] Request adversarial red-team in-depth review on PR #18
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- `ResourceMemo` (from `_memoize.py`) provides bounded lazy-init memoization for generation locks
+- `_execute_cache_miss` writes the generation key on first query to prevent repeated cache misses for unmutated resources
+- BFS/A* marked experimental to justify future removal or promotion as deliberate decision
+- Fail-closed canonicalization prevents malformed graph JSON from producing plausible but unverified node IDs
+
+## Session 002 - 2026-08-15
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: DP plan execution after structural extraction; 172 tests passing.
+
+**Actions Taken**:
+- Lint cleanup: removed dead code from `_memoize.py` (`memoize`, `PureMemo`, `_make_key`), `_recursion.py` (`_astar`, `heapq`), `_trie.py` (unused `heapq`)
+- Fixed type annotations: added `[Any]` to `Iterable` and `deque` in `_recursion.py`; `# type: ignore[no-any-return]` in `dynamic_programming.py` and `_memoize.py`
+- Removed broken `astar` strategy from `TreeCollector`; `MemoryCache._astar_collect` remains as sole LCP implementation
+- Added barrel pattern to `src/daf/utils/__init__.py`
+- Added `test_memoize.py` with 10 direct tests for `Memo` (6) and `ResourceMemo` (4)
+- Added `test_recursion.py` with 8 direct tests for `TreeCollector` (5) and `walk_tree` (3)
+- Added `test_no_barrel_defines_own_public` to `test_barrels.py`
+- Updated CHANGELOG.md, HANDOVER.md, SESSION.md
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/utils/__init__.py | Modified | Added barrel pattern (`_public` import + `__all__`) |
+| src/daf/utils/_memoize.py | Modified | Removed `memoize`, `PureMemo`, `_make_key`; fixed docstring and lint |
+| src/daf/utils/_recursion.py | Modified | Removed `_astar` and `heapq`; added `[Any]` type args |
+| src/daf/cache/_trie.py | Modified | Removed unused `heapq` import |
+| src/daf/algorithms/dynamic_programming.py | Modified | Added `# type: ignore[no-any-return]` on `memo.get(n)` |
+| tests/unit/test_memoize.py | Created | 10 direct primitive tests |
+| tests/unit/test_recursion.py | Created | 8 direct primitive tests |
+| tests/unit/test_barrels.py | Modified | Added `test_no_barrel_defines_own_public` |
+| CHANGELOG.md | Modified | DP extraction and cleanup entries |
+| HANDOVER.md | Modified | Test count 191, project structure, latest changes |
+| SESSION.md | Modified | This session entry |
+
+### Project Status
+
+- **Branch**: `refactor/barrel-overlap-optimizations`
+- **Version**: 0.2.0
+- **Tests**: 191/191 passing
+- **Type Checking**: mypy strict, pre-existing errors only (none in modified files)
+- **Linting**: Ruff, 0 errors in modified files
+
+### Pending Work
+
+- [ ] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch to origin (updates PR #18)
+- [ ] Request adversarial red-team in-depth review on PR #18
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- `TreeCollector` no longer supports `astar`; `MemoryCache._astar_collect` is the canonical LCP implementation
+- `Memo.get()` raises `KeyError` on miss (increments `_iterations`); on hit returns value (increments `_cache_hits`)
+- `ResourceMemo` uses synchronous factories; concurrency is serialized by internal `asyncio.Lock`
+- `daf/utils/` is now a proper package with barrel pattern consistent with other `daf/*` packages

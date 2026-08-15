@@ -9,15 +9,22 @@ import logging
 from collections import OrderedDict
 from typing import Any
 
+from daf.cache._trie import (
+    _trie_collect,
+    _trie_delete,
+    _trie_delete_prefix,
+    _trie_insert,
+    _TrieNode,
+)
+from daf.utils._recursion import TreeCollector
+
 logger = logging.getLogger(__name__)
 
-
-class _TrieNode:
-    __slots__ = ("children", "key")
-
-    def __init__(self) -> None:
-        self.children: dict[str, _TrieNode] = {}
-        self.key: str | None = None
+_DFS_COLLECTOR = TreeCollector(
+    key_extractor=lambda node: node.key,
+    children_extractor=lambda node: node.children.values(),
+    strategy="dfs",
+)
 
 
 class MemoryCache:
@@ -91,7 +98,7 @@ class MemoryCache:
             if self._max_size > 0:
                 self._lru[key] = None
         self._cache[key] = copy.deepcopy(value)
-        self._trie_insert(key)
+        _trie_insert(self._trie, key)
 
     async def delete(self, key: str) -> None:
         """Delete a value from cache.
@@ -101,7 +108,7 @@ class MemoryCache:
         """
         logger.debug("cache delete", extra={"key": key})
         if key in self._cache:
-            self._trie_delete(key)
+            _trie_delete(self._trie, key)
             del self._cache[key]
             if self._max_size > 0:
                 self._lru.pop(key, None)
@@ -113,7 +120,7 @@ class MemoryCache:
             prefix: The key prefix to match.
         """
         logger.debug("cache delete_prefix", extra={"prefix": prefix})
-        keys_to_delete = self._trie_delete_prefix(prefix)
+        keys_to_delete = _trie_delete_prefix(self._trie, prefix)
         for key in keys_to_delete:
             del self._cache[key]
             if self._max_size > 0:
@@ -133,7 +140,7 @@ class MemoryCache:
             Number of keys removed.
         """
         logger.debug("cache shake", extra={"prefix": prefix})
-        keys_to_delete = self._trie_delete_prefix(prefix)
+        keys_to_delete = _trie_delete_prefix(self._trie, prefix)
         for key in keys_to_delete:
             del self._cache[key]
             if self._max_size > 0:
@@ -143,32 +150,32 @@ class MemoryCache:
     def _evict_oldest(self) -> None:
         """Evict the least-recently-used entry from the cache."""
         key, _ = self._lru.popitem(last=False)
-        self._trie_delete(key)
+        _trie_delete(self._trie, key)
         del self._cache[key]
 
     def _dfs_collect(self, node: _TrieNode | None) -> builtins.set[str]:
-        if node is None:
-            return builtins.set()
-        result = builtins.set()
-        if node.key is not None:
-            result.add(node.key)
-        for child in node.children.values():
-            result.update(self._dfs_collect(child))
-        return result
+        return _DFS_COLLECTOR.collect(node) if node is not None else builtins.set()
 
     def _bfs_collect(self, node: _TrieNode | None) -> builtins.set[str]:
+        """Level-order terminal key collection.
+
+        **Experimental** — no production consumer yet.
+        """
         if node is None:
             return builtins.set()
-        result: builtins.set[str] = builtins.set()
-        queue = [node]
-        while queue:
-            current = queue.pop(0)
-            if current.key is not None:
-                result.add(current.key)
-            queue.extend(current.children.values())
-        return result
+        collector = TreeCollector(
+            key_extractor=lambda n: n.key,
+            children_extractor=lambda n: n.children.values(),
+            strategy="bfs",
+        )
+        return collector.collect(node)
 
     def _astar_collect(self, node: _TrieNode | None, target: str) -> builtins.set[str]:
+        """Best-first terminal key collection returning keys with longest
+        common prefix against ``target``.
+
+        **Experimental** — no production consumer yet.
+        """
         if node is None:
             return builtins.set()
         best_keys: builtins.set[str] = builtins.set()
@@ -200,41 +207,8 @@ class MemoryCache:
                 )
         return best_keys
 
-    def _trie_insert(self, key: str) -> None:
-        node = self._trie
-        for ch in key:
-            node.children.setdefault(ch, _TrieNode())
-            node = node.children[ch]
-        node.key = key
-
-    def _trie_delete(self, key: str) -> None:
-        path: list[tuple[_TrieNode, str]] = []
-        node: _TrieNode | None = self._trie
-        for ch in key:
-            if node is None:
-                return
-            path.append((node, ch))
-            node = node.children.get(ch)
-            if node is None:
-                return
-        if node is None or node.key != key:
-            return
-        node.key = None
-        for i in range(len(path) - 1, -1, -1):
-            parent, ch = path[i]
-            child = parent.children.get(ch)
-            if child is not None and child.key is None and not child.children:
-                del parent.children[ch]
-            else:
-                break
-
     def _trie_collect(self, prefix: str) -> builtins.set[str]:
-        node: _TrieNode | None = self._trie
-        for ch in prefix:
-            node = node.children.get(ch) if node is not None else None
-            if node is None:
-                return builtins.set()
-        return self._dfs_collect(node)
+        return _trie_collect(self._trie, prefix)
 
     def _trie_delete_prefix(self, prefix: str) -> builtins.set[str]:
         """Detach the subtree rooted at ``prefix`` and return its terminal keys.
@@ -244,32 +218,7 @@ class MemoryCache:
         collected keys for bulk ``_cache`` cleanup. Complexity is
         O(prefix_length + subtree_nodes) where K is the number of matching entries.
         """
-        if prefix == "":
-            keys = self._dfs_collect(self._trie)
-            self._trie = _TrieNode()
-            return keys
-        path: list[tuple[_TrieNode, str]] = []
-        node: _TrieNode | None = self._trie
-        for ch in prefix:
-            if node is None:
-                return builtins.set()
-            path.append((node, ch))
-            node = node.children.get(ch)
-            if node is None:
-                return builtins.set()
-        parent, ch = path[-1]
-        keys = self._dfs_collect(node)
-        del parent.children[ch]
-        for i in range(len(path) - 1, -1, -1):
-            ancestor = path[i][0]
-            if ancestor.key is None and not ancestor.children:
-                if i > 0:
-                    parent = path[i - 1][0]
-                    child_ch = path[i - 1][1]
-                    del parent.children[child_ch]
-            else:
-                break
-        return keys
+        return _trie_delete_prefix(self._trie, prefix)
 
     async def clear(self) -> None:
         """Clear all values from cache."""

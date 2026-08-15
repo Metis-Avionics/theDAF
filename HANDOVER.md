@@ -16,17 +16,18 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 170/170 passing |
+| Tests (pytest) | ✅ 172/172 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`, `.kilo/plans/1786799336554-adversarial-hardening-plan.md`, and `.kilo/plans/1786800722008-pr18-red-team-fixes.md` have been addressed:
+All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`, `.kilo/plans/1786799336554-adversarial-hardening-plan.md`, `.kilo/plans/1786800722008-pr18-red-team-fixes.md`, and `.kilo/plans/1786803535993-dp-pickup-plan.md` have been addressed:
 
 - **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files
 - **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant
+- **No inline `_public`**: `test_no_barrel_defines_own_public` asserts all barrel `__init__.py` files import `_public` from `daf._barrel`
 - **Namespace cache**: `DataAccess._namespace_cache` removed; `_resource_namespace` computes SHA-256 inline (unbounded dict was a memory-growth risk)
 - **Prefix trie root-key tracking**: `MemoryCache._trie_insert` and `_trie_delete` now include root node in key tracking, fixing `shake("")` / `delete_prefix("")` semantics
 - **Trie empty-branch pruning**: `_trie_delete` prunes child nodes where both `keys` and `children` are empty, preventing unbounded structural memory growth
@@ -58,8 +59,27 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 - **LRU edge-case tests (P2)**: `test_memory_cache_lru_eviction_prefix_sharing`, `test_memory_cache_lru_eviction_near_duplicate`, `test_memory_cache_set_after_prefix_delete`
 - **Graphify adversarial tests (P2)**: `test_canonical_node_id_returns_lexicographically_first_when_no_exact_match`, `test_graphify_schema_validation_*` (5 tests), `test_changed_files_raises_on_git_diff_failure`
 - **A* regression and property tests (P1)**: `test_astar_collect_regression_mismatching_prefix`, `test_astar_collect_property_based_random`
+- **DP extraction and cleanup**:
+  - `src/daf/utils/__init__.py` barrel pattern added
+  - `src/daf/cache/_trie.py` standalone trie extracted; unused `heapq` import removed
+  - `src/daf/utils/_memoize.py` dead code removed (`memoize`, `PureMemo`, `_make_key`); docstring and lint issues fixed
+  - `src/daf/utils/_recursion.py` broken `astar` strategy removed; `heapq` import and `_astar` method deleted; `Iterable[Any]` and `deque[Any]` type args added
+  - `src/daf/algorithms/dynamic_programming.py` `memo.get(n)` return annotated with `# type: ignore[no-any-return]`
+- **New direct primitive tests**: `tests/unit/test_memoize.py` (10 tests), `tests/unit/test_recursion.py` (8 tests)
 - **R1-R26, R19b, R19c, R3b, R21b, R22, R23, R24, R25, R26, superedge collapse, AST tree shaking, graphifyy CI**: All implemented and merged in PR #17
 - **Architecture docs**: `scripts/graphify_report.py` and `scripts/graphify_affected.py` automate graphify suite; CI uploads `GRAPH_TREE.html` and `theDAF-callflow.html` artifacts
+- **PR18 Round 2 (red-team adversarial hardening)**:
+  - `_generation_locks` bounded with fixed-size lock striping (N=16) via `ResourceMemo`
+  - `GenerationKeyError` added; missing generation key forces cache miss instead of serving stale data
+  - `_execute_cache_miss` writes generation key on first query to prevent repeated misses
+  - `_bfs` uses `collections.deque` + `popleft()` for O(1) queue operations
+  - `_bfs_collect` and `_astar_collect` marked experimental in docstrings
+  - `_canonical_node_id` fail-closed: calls `_validate_graph_schema`, returns `None` on malformed input
+  - `graphify_affected.py` docstring documents `.py`-only scope and CI full-suite guarantee
+  - Cache-correctness invariant documented in `DataAccess` concurrency model
+  - `test_generation_eviction_forces_cache_miss` verifies bounded LRU eviction of generation metadata
+  - `test_malformed_graph_schema_returns_none` verifies fail-closed canonicalization
+  - `test_missing_nodes_key` updated to expect `None` (fail-closed) instead of warning + fallback
 
 ### Key Facts
 
@@ -70,7 +90,7 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 170/170 passing
+- **Test Count**: 191/191 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 - **Architecture Docs**: `graphify-out/GRAPH_TREE.html`, `graphify-out/theDAF-callflow.html`
@@ -82,9 +102,14 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 ├── src/daf/
 │   ├── __init__.py              # Public API barrel (_public helper)
 │   ├── py.typed                 # PEP 561 typed package marker
+│   ├── _barrel.py               # Shared _public() barrel helper
+│   ├── utils/
+│   │   ├── __init__.py          # Utils barrel (_public helper)
+│   │   ├── _memoize.py          # Memo and ResourceMemo primitives
+│   │   └── _recursion.py        # TreeCollector and walk_tree primitives
 │   ├── core/
 │   │   ├── __init__.py          # Internal barrel (_public helper)
-│   │   ├── access.py            # DataAccess orchestration (no namespace cache)
+│   │   ├── access.py            # DataAccess orchestration (ResourceMemo for generation locks)
 │   │   ├── factory.py           # DataAccessFactory (composition)
 │   │   ├── protocols.py         # Repository, Cache, Algorithm protocols
 │   │   └── errors.py            # Domain exceptions
@@ -96,10 +121,11 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 │   │   └── memory.py            # MemoryRepository reference impl
 │   ├── cache/
 │   │   ├── __init__.py          # Cache barrel (_public helper)
+│   │   ├── _trie.py             # Standalone trie data structure
 │   │   └── memory.py            # MemoryCache with prefix trie (root-key tracking + pruning)
 │   ├── algorithms/
 │   │   ├── __init__.py          # Algorithms barrel (_public helper)
-│   │   └── dynamic_programming.py  # FibonacciDP
+│   │   └── dynamic_programming.py  # FibonacciDP (uses Memo)
 │   └── adapters/
 │       ├── __init__.py          # Adapters barrel (_public helper)
 │       └── fastapi.py           # FastAPI adapter with rate limiting
@@ -108,7 +134,9 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 │   │   ├── test_contracts.py    # 14 tests
 │   │   ├── test_components.py   # 97 tests (LRU/trie/BFS/A*/graphify adversarial tests)
 │   │   ├── test_graphify.py     # 18 tests (canonical ID, changed_files, schema validation)
-│   │   └── test_barrels.py      # 2 tests (barrel consistency)
+│   │   ├── test_memoize.py      # 10 tests (Memo and ResourceMemo direct tests)
+│   │   ├── test_recursion.py    # 8 tests (TreeCollector and walk_tree direct tests)
+│   │   └── test_barrels.py      # 3 tests (barrel consistency + no inline _public)
 │   └── integration/
 │       ├── test_data_access.py  # 18 tests
 │       ├── test_authorization.py  # 15 tests

@@ -5,8 +5,10 @@ from typing import Any
 
 import pytest
 
+from daf import DataAccessFactory
 from daf.algorithms import FibonacciDP
 from daf.cache import MemoryCache
+from daf.contracts.query import PostInfo, QueryInfo
 from daf.core.errors import AuthorizationError
 from daf.core.protocols import Authorizer
 from daf.repositories import MemoryRepository
@@ -423,6 +425,31 @@ class TestMemoryCache:
         assert await cache.get("prefix:1") is None
         assert await cache.get("prefix:2") == "v2"
         assert await cache.get("prefix:3") == "v3"
+
+    @pytest.mark.asyncio
+    async def test_generation_eviction_forces_cache_miss(self) -> None:
+        """Evicting a _daf_gen:* key must not allow serving stale cached query data."""
+        repo = MemoryRepository()
+        cache = MemoryCache(max_size=2)
+        factory = DataAccessFactory(repository=repo, cache=cache)
+        daf = factory.create()
+
+        post_result = await daf.post(
+            PostInfo(resource_type="item", data={"name": "alice"})
+        )
+        resource_id = post_result.resource_id
+
+        result1 = await daf.query(QueryInfo(resource_id=resource_id))
+        assert result1.cache_hit is False
+        assert result1.data == {"name": "alice"}
+
+        result2 = await daf.query(QueryInfo(resource_id=resource_id))
+        assert result2.cache_hit is True
+
+        await daf.post(PostInfo(resource_type="item", data={"name": "bob"}))
+        result3 = await daf.query(QueryInfo(resource_id=resource_id))
+        assert result3.cache_hit is False
+        assert result3.data == {"name": "alice"}
 
     @pytest.mark.asyncio
     async def test_memory_cache_set_after_prefix_delete(self) -> None:

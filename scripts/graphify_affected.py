@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Run graphify affected analysis on changed files from a PR/MR.
+"""Run graphify affected analysis on changed Python source files from a PR/MR.
 
 Usage:
     python scripts/graphify_affected.py [--base BASE_REF] [--depth N]
 
-Reads changed files from git diff against BASE_REF (default: origin/main),
-maps them to graphify node IDs, and runs `affected` for each.
-Outputs a summary of impacted source and test files.
+Only files ending in ``.py`` are analyzed. Non-Python changes (config,
+workflows, docs) are not mapped to test impacts. The CI test job still
+runs the full suite; this script only suggests a pytest subset.
 """
 
 from __future__ import annotations
@@ -53,14 +53,22 @@ def _canonical_node_id(graph_json: Path, path: str) -> str | None:
     Loads ``graph_json`` and searches for a node whose ``source_file``
     matches ``path``. Prefers the one whose ``id`` equals the hand-rolled
     module-level mapping. If no exact match, returns the first graph
-    node's ID (graph-driven). Falls back to ``file_to_node_id()`` with a
-    warning if the graph does not contain a matching node.
+    node's ID (graph-driven, lexicographically sorted). Returns ``None``
+    if the graph is malformed or contains no matching node.
     """
     if not graph_json.exists():
         return None
     try:
-        data = json.loads(graph_json.read_text())
-    except (json.JSONDecodeError, OSError):
+        raw = graph_json.read_text()
+    except OSError:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    try:
+        _validate_graph_schema(data)
+    except RuntimeError:
         return None
     expected_id = file_to_node_id(path)
     if expected_id is None:

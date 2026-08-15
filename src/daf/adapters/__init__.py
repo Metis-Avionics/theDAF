@@ -1,9 +1,7 @@
 """FastAPI and other framework adapters."""
 
 
-def _public(*names: str) -> list[str]:
-    return list(names)
-
+from daf._barrel import _public
 
 __all__ = _public(
     "fastapi",

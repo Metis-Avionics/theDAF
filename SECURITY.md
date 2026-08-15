@@ -163,6 +163,10 @@ pip-audit
 
 Do not use them in production with sensitive data.
 
+### Dead Code Removal
+
+Unused code (`memoize` decorator, `PureMemo`, `_make_key`) has been removed from `daf.utils._memoize`. Dead code expands the attack surface and confuses readers. Git history preserves removed code if needed later.
+
 ### MemoryCache Bounds
 
 `MemoryCache(max_size=0)` (the default) is backwards-compatible and unbounded. It is **not** memory-safe for production deployments. Set a positive `max_size` to enable LRU eviction and bound memory growth.
