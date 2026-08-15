@@ -10,21 +10,21 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 - **Branch**: `refactor/barrel-overlap-optimizations`
 - **Commits**: up to date with origin/refactor/barrel-overlap-optimizations; uncommitted red-team fixes and optimization changes
-- **Uncommitted Work**: trie root-key tracking, trie empty-branch pruning, `_namespace_cache` removal, graphify script fixes, 3 new trie tests, `TestDataAccessNamespaceCache` removal
+- **Uncommitted Work**: trie root-key tracking, trie empty-branch pruning, `_namespace_cache` removal, graphify script fixes, 3 new trie tests, `TestDataAccessNamespaceCache` removal, LRU bounded cache, `_trie_delete_prefix`, adversarial invariant test, `check=True` in graphify_report, canonical node-ID lookup in graphify_affected, base SHA validation in graphify_affected
 - **PR Status**: #18 open for red-team fixes on barrel-overlap-optimizations branch
 
 ### Quality Status
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ✅ 136/136 passing |
+| Tests (pytest) | ✅ 139/139 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, and prior red-team plans have been addressed:
+All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, and `.kilo/plans/1786798481667-pr18-adversarial-fixes.md` have been addressed:
 
 - **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files
 - **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant
@@ -33,8 +33,16 @@ All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans
 - **Trie empty-branch pruning**: `_trie_delete` prunes child nodes where both `keys` and `children` are empty, preventing unbounded structural memory growth
 - **Graphify report deduplication**: Removed silent duplicate `graphify diagnose multigraph` invocation in `scripts/graphify_report.py`
 - **Graphify affected error handling**: `scripts/graphify_affected.py` `affected()` now raises `RuntimeError` on subprocess failure instead of silently returning empty output
+- **LRU bounded cache**: `MemoryCache` supports optional `max_size > 0` with `OrderedDict`-based LRU eviction; default `max_size=0` is unbounded
+- **O(prefix_length) prefix deletion**: `_trie_delete_prefix` detaches subtree in O(prefix_length) instead of looping `_trie_delete` per key
+- **Cache/trie invariant test**: `test_cache_trie_invariant_under_random_mutations` performs 200 random mutations asserting `_cache.keys() == _trie.keys` after each operation
+- **Graphify report check=True**: `graphify_report.py` now propagates `CalledProcessError` with stderr instead of producing `JSONDecodeError`
+- **Canonical node-ID lookup**: `graphify_affected.py` queries `graph.json` for canonical node ID, falling back to `file_to_node_id()` with warning
+- **Base SHA validation**: `graphify_affected.py` verifies base ref exists locally via `git rev-parse --verify` before diffing
 - **3 new trie tests**: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
+- **2 new bounded-cache tests**: `test_memory_cache_bounded_eviction`, `test_memory_cache_unbounded_default`
 - **TestDataAccessNamespaceCache removed**: 2 obsolete tests deleted (namespace caching behavior no longer exists)
+- **Barrel test rename**: `test_daf_is_strict_subset_of_core` → `test_daf_is_subset_of_core`
 - **R1-R26, R19b, R19c, R3b, R21b, R22, R23, R24, R25, R26, superedge collapse, AST tree shaking, graphifyy CI**: All implemented and merged in PR #17
 - **Architecture docs**: `scripts/graphify_report.py` and `scripts/graphify_affected.py` automate graphify suite; CI uploads `GRAPH_TREE.html` and `theDAF-callflow.html` artifacts
 
@@ -127,4 +135,4 @@ The following gate files are maintained and updated after every turn:
 
 - **Repository**: https://github.com/RAliane-REBORN/theDAF
 - **Issues**: https://github.com/RAliane-REBORN/theDAF/issues
-- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/18 (open — red-team fixes)
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/18 (open — adversarial red-team fixes; requesting in-depth adversarial review)

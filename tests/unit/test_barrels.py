@@ -2,7 +2,7 @@ import daf
 import daf.core
 
 
-def test_daf_is_strict_subset_of_core():
+def test_daf_is_subset_of_core():
     public = set(daf.__all__)
     core = set(daf.core.__all__)
     assert public.issubset(core), (

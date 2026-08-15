@@ -31,11 +31,19 @@ def main() -> int:
     )
 
     print("\n=== graphify diagnose multigraph ===")
-    result = subprocess.run(  # noqa: S603
-        ["uv", "run", "python", "-m", "graphify", "diagnose", "multigraph",  # noqa: S607
-         "--graph", str(GRAPH_JSON), "--json"],
-        capture_output=True, text=True
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["uv", "run", "python", "-m", "graphify", "diagnose", "multigraph",  # noqa: S607
+             "--graph", str(GRAPH_JSON), "--json"],
+            capture_output=True, text=True, check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"FAIL: graphify diagnose multigraph failed (exit {exc.returncode})",
+            file=sys.stderr,
+        )
+        print(exc.stderr, file=sys.stderr)
+        return 1
     DIAGNOSE_JSON.write_text(result.stdout)
 
     data = json.loads(result.stdout)

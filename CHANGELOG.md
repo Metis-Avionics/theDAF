@@ -11,12 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 3 new `TestMemoryCache` tests: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
 - `graphify_affected.py` raises `RuntimeError` with stderr context on subprocess failure
+- `MemoryCache(max_size=0)` unbounded default; optional `max_size > 0` enables LRU eviction via `OrderedDict`
+- `MemoryCache._trie_delete_prefix()` for O(prefix_length) subtree detachment
+- `TestMemoryCache.test_memory_cache_bounded_eviction` — LRU eviction at capacity
+- `TestMemoryCache.test_memory_cache_unbounded_default` — default mode retains all entries
+- `TestMemoryCache.test_cache_trie_invariant_under_random_mutations` — adversarial invariant test (200 random mutations)
 
 ### Changed
 
 - `DataAccess._resource_namespace` computes SHA-256 inline (no `_namespace_cache` dict)
 - `MemoryCache._trie_delete` tracks insertion path and prunes empty branches bottom-up
 - `MemoryCache._trie_insert` and `_trie_delete` include root node in key tracking
+- `delete_prefix()` and `shake()` use `_trie_delete_prefix` instead of looping `_trie_delete`
+- `graphify_affected.py` canonical node-ID lookup queries `graph.json` before falling back to `file_to_node_id()`
+- `graphify_affected.py` validates base SHA availability via `git rev-parse --verify` before diffing
 
 ### Removed
 
@@ -31,11 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unbounded `_namespace_cache` dict in `DataAccess` grows without limit (P1)
 - Duplicate `graphify diagnose multigraph` invocation in `graphify_report.py` masks first-call failures (P2)
 - `graphify_affected.py` `affected()` swallows subprocess failures, printing "No impacted test files detected" on error (P2)
+- `graphify_affected.py` `file_to_node_id()` hand-rolls node-ID mapping; canonical lookup now queries graph JSON (P2)
+- `graphify_affected.py` `--base` handling assumes base SHA exists locally; now validates before diffing (P2)
+- Barrel test `test_daf_is_strict_subset_of_core` renamed to `test_daf_is_subset_of_core` to match `issubset()` assertion (P2)
 
 ### Security
 
 - Removed unbounded in-process cache of `resource_id → sha256` mappings (memory-growth / potential DoS vector)
 - Subprocess failures in CI tooling now propagate as errors instead of being silently ignored
+- LRU eviction bounds memory for `MemoryCache` in production deployments
+- Prefix-based subtree detachment is now O(prefix_length) instead of O(N × key_length)
 
 ## [0.2.0] - 2026-08-14
 

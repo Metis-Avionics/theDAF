@@ -1,5 +1,6 @@
 """Unit tests for repository, cache, and algorithm components."""
 
+import random
 from typing import Any
 
 import pytest
@@ -338,6 +339,71 @@ class TestMemoryCache:
         await cache.set("abcxyz", "v3")
         removed = await cache.shake("abc")
         assert removed == 1
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_bounded_eviction(self) -> None:
+        """Bounded cache evicts the least-recently-used entry at capacity."""
+        cache = MemoryCache(max_size=2)
+        await cache.set("a", 1)
+        await cache.set("b", 2)
+        await cache.get("a")
+        await cache.set("c", 3)
+
+        assert await cache.get("b") is None
+        assert await cache.get("a") == 1
+        assert await cache.get("c") == 3
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_unbounded_default(self) -> None:
+        """Default cache is unbounded and does not evict."""
+        cache = MemoryCache()
+        for i in range(100):
+            await cache.set(f"key:{i}", i)
+
+        for i in range(100):
+            assert await cache.get(f"key:{i}") == i
+
+    @pytest.mark.asyncio
+    async def test_cache_trie_invariant_under_random_mutations(self) -> None:
+        """After each mutation, _cache keys and _trie keys must stay synchronized."""
+        await _run_random_mutation_invariant_test()
+
+
+async def _run_random_mutation_invariant_test() -> None:
+    rng = random.Random(42)  # noqa: S311
+    cache = MemoryCache()
+    keys: list[str] = []
+
+    def _filter_prefix(prefix: str) -> list[str]:
+        return [k for k in keys if not k.startswith(prefix)]
+
+    for _ in range(200):
+        op = rng.choice(
+            ["set", "overwrite", "delete", "delete_prefix", "shake", "clear"]
+        )
+        if op == "clear":
+            keys.clear()
+        elif op == "set":
+            key = f"k{rng.randint(0, 999)}"
+            if key not in keys:
+                keys.append(key)
+            await cache.set(keys[-1], rng.randint(0, 1000))
+        elif op == "overwrite" and keys:
+            idx = rng.randint(0, len(keys) - 1)
+            await cache.set(keys[idx], rng.randint(0, 1000))
+        elif op == "delete" and keys:
+            key = keys[-1]
+            keys.remove(key)
+            await cache.delete(key)
+        elif op == "delete_prefix":
+            prefix = f"k{rng.randint(0, 9)}"
+            keys = _filter_prefix(prefix)
+            await cache.delete_prefix(prefix)
+        elif op == "shake":
+            prefix = f"k{rng.randint(0, 9)}"
+            keys = _filter_prefix(prefix)
+            await cache.shake(prefix)
+        assert set(cache._cache.keys()) == cache._trie.keys
 
 
 class TestFibonacciDP:

@@ -12,20 +12,64 @@ Outputs a summary of impacted source and test files.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 GRAPH_JSON = Path("graphify-out/graph.json")
 
 
 def changed_files(base: str) -> list[str]:
+    try:
+        subprocess.run(  # noqa: S603
+            ["git", "rev-parse", "--verify", f"{base}^{{commit}}"],  # noqa: S607
+            capture_output=True, text=True, check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"ERROR: base ref '{base}' not found. "
+            "Ensure full clone or fetch the ref.",
+            file=sys.stderr,
+        )
+        if exc.stderr:
+            print(exc.stderr, file=sys.stderr)
+        return []
     result = subprocess.run(  # noqa: S603
         ["git", "diff", "--name-only", base, "HEAD"],  # noqa: S607
         capture_output=True, text=True, check=True
     )
     return [f for f in result.stdout.strip().splitlines() if f.endswith(".py")]
+
+
+def _canonical_node_id(graph_json: Path, path: str) -> str | None:
+    """Return the canonical graphify node ID for a source file path.
+
+    Loads ``graph_json`` and searches for a node whose ``source_file``
+    matches ``path`` and whose ``id`` equals the hand-rolled module-level
+    mapping. Falls back to ``file_to_node_id()`` with a warning if the
+    graph does not contain a matching node.
+    """
+    if not graph_json.exists():
+        return None
+    try:
+        data = json.loads(graph_json.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    expected_id = file_to_node_id(path)
+    if expected_id is None:
+        return None
+    for node in data.get("nodes", []):
+        if node.get("source_file") == path and node.get("id") == expected_id:
+            return expected_id
+    warnings.warn(
+        f"graphify graph has no node for '{path}'; "
+        f"falling back to hand-rolled node ID '{expected_id}'.",
+        stacklevel=2,
+    )
+    return expected_id
 
 
 def file_to_node_id(path: str) -> str | None:
@@ -93,7 +137,7 @@ def main() -> int:
 
     all_test_files: set[str] = set()
     for path in files:
-        node_id = file_to_node_id(path)
+        node_id = _canonical_node_id(GRAPH_JSON, path)
         if not node_id:
             continue
         output = affected(node_id, args.depth)

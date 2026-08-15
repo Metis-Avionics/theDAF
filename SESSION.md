@@ -584,3 +584,69 @@ Each session entry should include:
 - CI now uploads `diagnose.json`, `GRAPH_TREE.html`, and `theDAF-callflow.html` as artifacts (14-day retention)
 
 ---
+
+## Session 010 - 2026-08-15
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `8ca830b` on branch `refactor/barrel-overlap-optimizations` (PR #18 open) passes 136 tests. Adversarial red-team review of PR18 identified 7 follow-up findings (P1/P2).
+
+**Actions Taken**:
+- Read plan `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`
+- Implemented LRU bounded cache: `MemoryCache(max_size=0)` unbounded default; `OrderedDict` tracks LRU; `set()` evicts oldest when at capacity
+- Implemented `_trie_delete_prefix()` for O(prefix_length) subtree detachment, returning terminal keys for bulk `_cache` cleanup
+- `delete_prefix()` and `shake()` now call `_trie_delete_prefix` instead of looping `_trie_delete`
+- Added adversarial invariant test `test_cache_trie_invariant_under_random_mutations` (200 random mutations)
+- Added `test_memory_cache_bounded_eviction` and `test_memory_cache_unbounded_default`
+- Added `check=True` + `CalledProcessError` propagation to `graphify_report.py`
+- Added `_canonical_node_id()` to `graphify_affected.py` with `graph.json` lookup and fallback warning
+- Added base SHA availability check via `git rev-parse --verify {base}^{commit}` to `graphify_affected.py`
+- Renamed barrel test `test_daf_is_strict_subset_of_core` → `test_daf_is_subset_of_core`
+- Updated living docs: CHANGELOG.md, HANDOVER.md, SESSION.md
+- Ran full validation: 139 tests passing, mypy --strict clean, ruff clean, Power of Ten clean
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/cache/memory.py | Modified | LRU bounded cache (`max_size`, `OrderedDict`, `_evict_oldest`); `_trie_delete_prefix` for O(prefix_length) deletion |
+| tests/unit/test_components.py | Modified | Added 3 new tests: bounded eviction, unbounded default, random-mutation invariant |
+| scripts/graphify_report.py | Modified | Added `check=True` + `CalledProcessError` propagation with stderr output |
+| scripts/graphify_affected.py | Modified | Added `_canonical_node_id()` with graph JSON lookup; added base SHA validation |
+| tests/unit/test_barrels.py | Modified | Renamed `test_daf_is_strict_subset_of_core` → `test_daf_is_subset_of_core` |
+| CHANGELOG.md | Modified | Added adversarial fix entries (findings 1-7) |
+| HANDOVER.md | Modified | Updated uncommitted work list, test count, PR description |
+| SESSION.md | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `refactor/barrel-overlap-optimizations`
+- **Version**: 0.2.0
+- **Tests**: 139/139 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Power of Ten**: All checks pass
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/18 (requesting adversarial red-team in-depth review)
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch to origin (updates PR #18)
+- [ ] Request adversarial red-team in-depth review on PR #18
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.0`
+- [ ] Publish to PyPI
+
+### Notes
+
+- All 7 adversarial findings from the PR18 red-team review are implemented and validated
+- 139 tests pass (up from 136)
+- LRU bounded cache preserves unbounded backward compatibility (`max_size=0` default)
+- `_trie_delete_prefix` is O(prefix_length) instead of O(N × key_length) for broad prefixes
+- Adversarial invariant test exercises 200 random mutations including prefix deletion and shake
+- graphify scripts now fail-fast with clear error messages instead of silent failures
+
+---
