@@ -5,6 +5,167 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- 3 new `TestMemoryCache` tests: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
+- `graphify_affected.py` raises `RuntimeError` with stderr context on subprocess failure
+- `MemoryCache(max_size=0)` unbounded default; optional `max_size > 0` enables LRU eviction via `OrderedDict`
+- `MemoryCache._trie_delete_prefix()` for O(prefix_length) subtree detachment
+- `TestMemoryCache.test_memory_cache_bounded_eviction` — LRU eviction at capacity
+- `TestMemoryCache.test_memory_cache_unbounded_default` — default mode retains all entries
+- `TestMemoryCache.test_cache_trie_invariant_under_random_mutations` — adversarial invariant test (200 random mutations)
+- `MemoryCache` terminal-only prefix trie: only terminal nodes store a key, intermediate nodes carry only `children`
+- `MemoryCache._dfs_collect()` DFS helper for terminal key collection
+- `MemoryCache._bfs_collect()` BFS helper for level-order terminal key collection
+- `MemoryCache._astar_collect(target)` A* best-first helper returning keys matching longest prefix with target
+- `test_bfs_collect_matches_bruteforce_prefix`, `test_astar_collect_matches_bruteforce_prefix` reference-model tests
+- `httpx>=0.27` upgraded to `httpx2>=0.27` in dev and optional-dependencies
+- `test_memory_cache_rejects_negative_max_size`, `test_memory_cache_max_size_one`
+- `test_memory_cache_lru_delete_after_promotion`, `test_memory_cache_lru_prefix_delete_after_promotion`
+- `test_memory_cache_shake_empty_prefix_bounded`, `test_memory_cache_empty_key_bounded`
+- `test_trie_collect_matches_bruteforce_prefix` reference-model test
+- `test_canonical_node_id_*` and `test_changed_files_raises_on_missing_base` in `tests/unit/test_graphify.py`
+- `test_main_exits_one_on_missing_base`, `test_graphify_schema_validation_*`
+- `test_astar_collect_regression_mismatching_prefix` — A* depth-tracking regression test
+- `test_astar_collect_property_based_random` — property-based A* LCP test (200 random instances)
+- `test_memory_cache_lru_eviction_prefix_sharing`, `test_memory_cache_lru_eviction_near_duplicate`
+- `test_memory_cache_set_after_prefix_delete` — set after prefix deletion under bounded LRU
+- `test_canonical_node_id_returns_lexicographically_first_when_no_exact_match` — deterministic canonical ID
+- `test_graphify_schema_validation_*` — type, non-empty, uniqueness, non-dict entry validation
+- `test_changed_files_raises_on_git_diff_failure` — git diff failure normalized to RuntimeError
+- `test_non_dict_root_raises` — verifies `RuntimeError` when graph JSON root is not a dict
+- `ResourceMemo(max_size=N)` bounded with `OrderedDict`-based LRU eviction on insertion
+
+### Changed
+
+- `DataAccess._resource_namespace` computes SHA-256 inline (no `_namespace_cache` dict)
+- `MemoryCache._trie_delete` tracks insertion path and prunes empty branches bottom-up
+- `MemoryCache._trie_insert` and `_trie_delete` include root node in key tracking
+- `delete_prefix()` and `shake()` use `_trie_delete_prefix` instead of looping `_trie_delete`
+- `graphify_affected.py` canonical node-ID lookup queries `graph.json` before falling back to `file_to_node_id()`
+- `graphify_affected.py` validates base SHA availability via `git rev-parse --verify` before diffing
+- `MemoryCache._TrieNode` stores only terminal `key`; intermediate nodes carry only `children`
+- `MemoryCache._trie_collect` uses `_dfs_collect` DFS over terminal keys
+- `MemoryCache._trie_delete_prefix` returns collected keys; callers remove from `_cache`/`_lru` directly
+- `MemoryCache` complexity updated to O(prefix_length + subtree_nodes) for prefix operations
+- `MemoryCache` added `_bfs_collect` and `_astar_collect` traversal helpers for prefix-key enumeration
+- `graphify_affected.py` `changed_files()` raises `RuntimeError` on missing base instead of returning `[]`
+- `graphify_affected.py` `main()` validates graph JSON schema before processing
+- `httpx>=0.27` upgraded to `httpx2>=0.27` in both dependency sections
+- `graphify_affected.py` `_canonical_node_id` sorts matching nodes by `id` for deterministic selection
+- `graphify_affected.py` `_validate_graph_schema` validates node types, non-empty strings, and uniqueness
+- `graphify_affected.py` `changed_files()` wraps `git diff` in try/except and raises `RuntimeError` on failure
+- CI graphify job uses `fetch-depth: 0` checkout and single `graphify_report.py` invocation
+
+### Removed
+
+- `DataAccess._namespace_cache` (unbounded dict eliminated as P1 memory-growth risk)
+- `TestDataAccessNamespaceCache` (2 tests; cached-namespace behavior no longer exists)
+- Duplicate silent `graphify diagnose multigraph` invocation from `scripts/graphify_report.py`
+
+### Fixed
+
+- Empty-prefix semantic regression in `MemoryCache` prefix trie: `shake("")` and `delete_prefix("")` now operate on entire cache (P0)
+- Trie never pruned empty branches after key deletion, causing unbounded structural memory growth (P1)
+- Unbounded `_namespace_cache` dict in `DataAccess` grows without limit (P1)
+- Duplicate `graphify diagnose multigraph` invocation in `graphify_report.py` masks first-call failures (P2)
+- `graphify_affected.py` `affected()` swallows subprocess failures, printing "No impacted test files detected" on error (P2)
+- `graphify_affected.py` `file_to_node_id()` hand-rolls node-ID mapping; canonical lookup now queries graph JSON (P2)
+- `graphify_affected.py` `--base` handling assumes base SHA exists locally; now validates before diffing (P2)
+- Barrel test `test_daf_is_strict_subset_of_core` renamed to `test_daf_is_subset_of_core` to match `issubset()` assertion (P2)
+- `_canonical_node_id()` returns hand-rolled ID even when graph has matching node with different ID (P1)
+- `changed_files()` returns `[]` on missing base SHA, causing silent "No Python files changed" exit 0 (P1)
+- `graphify_affected.py` `main()` does not validate graph JSON schema; malformed output causes misleading "no impacted tests" (P2)
+- `MemoryCache.__init__()` accepts negative `max_size` without complaint (P2)
+- `_trie_collect()` does not match brute-force prefix scan for all key sets (P2)
+- `_astar_collect()` does not reset match score on mismatch, causing post-mismatch child characters to incorrectly extend the LCP (P1)
+- `_canonical_node_id()` returns non-deterministic node ID when multiple graph nodes share `source_file` and none matches hand-rolled ID (P2)
+- `graphify_affected.py` `changed_files()` wraps only `git rev-parse` in try/except; `git diff` failure raises raw `CalledProcessError` (P2)
+
+### Added
+
+- `GenerationKeyError(CacheError)` raised when `_daf_gen:<namespace>` key is absent
+- `test_generation_eviction_forces_cache_miss` — bounded LRU eviction of generation metadata forces cache miss
+- `test_malformed_graph_schema_returns_none` — `_canonical_node_id` returns `None` on malformed graph JSON
+- `TreeCollector._bfs` uses `collections.deque` + `popleft()` for O(1) queue operations
+- `_bfs_collect` and `_astar_collect` docstrings note "**Experimental** — no production consumer yet."
+- `graphify_affected.py` module docstring documents `.py`-only scope and CI full-suite guarantee
+- `_validate_graph_schema` validates that the JSON root is a `dict` before structural checks
+- `test_non_dict_root_raises` — verifies `RuntimeError` on non-dict graph JSON root
+
+### Changed
+
+- `_current_generation` raises `GenerationKeyError` instead of silently returning 0 for missing generation keys
+- `_execute_query` catches `GenerationKeyError` → delegates to `_execute_cache_miss`
+- `_execute_cache_miss` catches `GenerationKeyError` → treats as gen=0 and writes generation key
+- `_advance_generation` raises `GenerationKeyError` when generation key is present but not `int`
+- `_superedge_invalidate` raises `GenerationKeyError` when generation key is present but not `int`
+- `DataAccess` concurrency docstring replaced with formal cache-correctness invariant
+- `_canonical_node_id` calls `_validate_graph_schema` after `json.loads`; returns `None` on validation failure
+- `test_missing_nodes_key` updated: fail-closed behavior returns `None` instead of warning + fallback
+- `ResourceMemo` accepts `max_size: int = 0` with `OrderedDict`-based LRU eviction on insertion
+- `DataAccess` configures `_generation_locks_memo` with `max_size=256` for bounded lock striping
+- `_validate_graph_schema` validates that the JSON root is a `dict` before structural checks
+
+### Fixed
+
+- Unbounded `_generation_locks: dict` replaced with fixed-size `ResourceMemo` lock striping (N=16)
+- Bounded LRU eviction of `_daf_gen:*` could serve stale data; missing generation now forces cache miss
+- `_canonical_node_id` fell back to hand-rolled ID on malformed graph; now fail-closed returns `None`
+- `graphify_affected.py` scope implied "changed files" without `.py`-only filter; docstring now explicit
+- `ResourceMemo` was unbounded despite PR docs claiming bounded lock striping; now bounded with `max_size=256`
+- `graphify_affected.py` accepted non-dict JSON roots (arrays, strings, numbers); now validates root type
+- `_advance_generation` and `_superedge_invalidate` silently defaulted malformed generation keys to 0; now raise `GenerationKeyError`
+- `ResourceMemo` was unbounded despite PR docs claiming bounded lock striping; now bounded with `max_size=256`
+- `graphify_affected.py` accepted non-dict JSON roots (arrays, strings, numbers); now validates root type
+- `_advance_generation` and `_superedge_invalidate` silently defaulted malformed generation keys to 0; now raise `GenerationKeyError`
+
+### Security
+
+- Generation metadata shares cache namespace with query entries; eviction forces correct cache miss rather than serving stale data
+- Fail-closed canonicalization prevents malformed graph JSON from producing plausible but unverified node IDs
+
+### Security
+
+- Removed unbounded in-process cache of `resource_id → sha256` mappings (memory-growth / potential DoS vector)
+- Subprocess failures in CI tooling now propagate as errors instead of being silently ignored
+- LRU eviction bounds memory for `MemoryCache` in production deployments
+- Prefix-based subtree detachment is now O(prefix_length + K) instead of O(N × key_length)
+- Terminal-only trie eliminates O(N × L) redundant key-string references across trie nodes
+- `MemoryCache` BFS and A* traversal helpers enable ordered and best-first prefix-key enumeration
+- Missing base SHA no longer produces false-green CI (green from invalid baseline)
+- Malformed graphify JSON now fails fast instead of producing misleading "no impacted tests" output
+- Negative `max_size` rejected explicitly; invalid configuration cannot create unbounded cache silently
+- `httpx2` replaces `httpx` as the test HTTP client (starlette deprecation fix)
+
+### Added
+
+- `test_memoize.py` — 10 direct tests for `Memo` (6) and `ResourceMemo` (4)
+- `test_recursion.py` — 8 direct tests for `TreeCollector` (5) and `walk_tree` (3)
+- `test_no_barrel_defines_own_public` — asserts no barrel `__init__.py` defines its own `_public`
+
+### Changed
+
+- `daf/utils/__init__.py` barrel pattern added: imports `_public` from `daf._barrel`
+- `FibonacciDP._compute_fib` uses `Memo` for explicit memoization with iteration and hit tracking
+- `MemoryCache._dfs_collect` delegates to `TreeCollector` with `strategy="dfs"`
+- `DataAccess._generation_locks` replaced with `ResourceMemo` for bounded lazy-init lock striping
+
+### Removed
+
+- Broken `astar` strategy from `TreeCollector`; `_astar` method and `heapq` import deleted
+- Unused `memoize` decorator and `PureMemo`/`_make_key` from `daf/utils/_memoize.py`
+- Unused `heapq` import from `daf/cache/_trie.py`
+
+### Fixed
+
+- `TreeCollector` type args: `Iterable[Any]` and `deque[Any]` added in `_recursion.py`
+- `memo.get(n)` return annotated with `# type: ignore[no-any-return]` in `dynamic_programming.py`
+- `ResourceMemo.get()` `no-any-return` returns annotated with `# type: ignore[no-any-return]`
+- `_memoize.py` docstring rewritten to list only `Memo` and `ResourceMemo`
+
 ## [0.2.0] - 2026-08-14
 
 ### Added
@@ -59,6 +220,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `graphifyy>=0.9.42` runtime dependency for graph extraction and multigraph diagnostics
 - GitHub Actions `graphify` CI job running `graphify extract` and `graphify diagnose multigraph --json`
 - `graphify-out/` and `graph.json` in `.gitignore`
+- `_public(*names)` helper added to all 7 barrel `__init__.py` files for mechanical consistency
+- `tests/unit/test_barrels.py` with subset and import-invariant assertions
+- `DataAccess._namespace_cache` for cached SHA-256 namespace hashing
+- `MemoryCache._TrieNode` prefix trie for O(prefix_len) prefix collection
+- `scripts/graphify_report.py` automates graphify extract → diagnose → tree → callflow pipeline
+- `scripts/graphify_affected.py` maps changed files to impacted test files using graphify `affected`
+- CI graphify job uploads `diagnose.json`, `GRAPH_TREE.html`, and `theDAF-callflow.html` as artifacts
 
 ### Changed
 
@@ -99,6 +267,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mutation invalidation uses atomic `_superedge_invalidate` instead of two-step `delete_prefix + _advance_generation`
 - `_advance_generation` read-modify-write moved inside `_superedge_invalidate` under per-resource lock to prevent lost increments when generation key is absent
 - 6 new tests: `shake` unit tests (4) and `_superedge_invalidate` integration tests (2); 127 tests total
+- All 7 barrel `__init__.py` files use `_public` helper instead of raw `__all__ = [...]`
+- `daf/__init__.py` documents design intent: curated public subset of `daf.core`
+- `_resource_namespace` caches SHA-256 hashes for repeated calls
+- `MemoryCache` uses prefix trie for O(prefix_len) prefix collection
+- 9 new tests: 5 trie tests, 2 namespace-cache tests, 2 barrel-consistency tests; 136 tests total
 
 ### Fixed
 
@@ -143,6 +316,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Global generation counter advances on any mutation, invalidating unrelated resource caches (R19c)
 - `_advance_generation` read-modify-write is non-atomic; concurrent mutations can lose increments (R22)
 - Query/mutation interleaving untested; stale query can repopulate cache after mutation (R23)
+- Empty-prefix semantic regression in `MemoryCache` prefix trie: `shake("")` and `delete_prefix("")` return empty set instead of all keys (P0)
+- Trie never prunes empty branches after key deletion, causing unbounded structural memory growth (P1)
+- Unbounded `_namespace_cache` dict in `DataAccess` grows without limit (P1)
+- Duplicate silent `graphify diagnose multigraph` invocation in `graphify_report.py` masks failures (P2)
+- `graphify_affected.py` `affected()` swallows subprocess failures, printing "No impacted test files detected" on error (P2)
 
 ### Security
 

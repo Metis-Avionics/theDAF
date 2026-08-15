@@ -1,11 +1,14 @@
 """Unit tests for repository, cache, and algorithm components."""
 
+import random
 from typing import Any
 
 import pytest
 
+from daf import DataAccessFactory
 from daf.algorithms import FibonacciDP
 from daf.cache import MemoryCache
+from daf.contracts.query import PostInfo, QueryInfo
 from daf.core.errors import AuthorizationError
 from daf.core.protocols import Authorizer
 from daf.repositories import MemoryRepository
@@ -229,6 +232,384 @@ class TestMemoryCache:
         removed = await cache.shake("b:")
         assert removed == 0
         assert await cache.get("a:1") == "v1"
+
+    @pytest.mark.asyncio
+    async def test_trie_delete_prefix_matches_all_keys(self) -> None:
+        """Test that delete_prefix removes all keys with the given prefix."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:a:2", "v2")
+        await cache.set("ns:a:3", "v3")
+        await cache.set("ns:b:1", "v4")
+        await cache.set("other:x", "v5")
+
+        await cache.delete_prefix("ns:a:")
+
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:a:2") is None
+        assert await cache.get("ns:a:3") is None
+        assert await cache.get("ns:b:1") == "v4"
+        assert await cache.get("other:x") == "v5"
+
+    @pytest.mark.asyncio
+    async def test_trie_delete_prefix_matches_subset(self) -> None:
+        """Test that delete_prefix removes only keys matching the prefix."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("p:x", "v2")
+        await cache.set("p:y", "v3")
+
+        await cache.delete_prefix("p:")
+
+        assert await cache.get("ns:a:1") == "v1"
+        assert await cache.get("p:x") is None
+        assert await cache.get("p:y") is None
+
+    @pytest.mark.asyncio
+    async def test_trie_delete_removes_key_from_index(self) -> None:
+        """Test that delete removes the key from the trie index."""
+        cache = MemoryCache()
+        await cache.set("key:1", "v1")
+        await cache.set("key:2", "v2")
+
+        await cache.delete("key:1")
+
+        assert await cache.get("key:1") is None
+        assert await cache.get("key:2") == "v2"
+
+        removed = await cache.shake("key:")
+        assert removed == 1
+
+    @pytest.mark.asyncio
+    async def test_trie_clear_resets_index(self) -> None:
+        """Test that clear resets the trie index."""
+        cache = MemoryCache()
+        await cache.set("a:1", "v1")
+        await cache.set("b:2", "v2")
+
+        await cache.clear()
+
+        assert await cache.get("a:1") is None
+        assert await cache.get("b:2") is None
+
+        removed = await cache.shake("a:")
+        assert removed == 0
+
+    @pytest.mark.asyncio
+    async def test_shake_empty_prefix_removes_all_keys(self) -> None:
+        """shake('') must remove every key — preserves original linear semantics."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:b:2", "v2")
+        await cache.set("other:x", "v3")
+
+        removed = await cache.shake("")
+
+        assert removed == 3
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:b:2") is None
+        assert await cache.get("other:x") is None
+
+    @pytest.mark.asyncio
+    async def test_delete_prefix_empty_removes_all_keys(self) -> None:
+        """delete_prefix('') must remove every key — preserves original semantics."""
+        cache = MemoryCache()
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:b:2", "v2")
+        await cache.set("other:x", "v3")
+
+        await cache.delete_prefix("")
+
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:b:2") is None
+        assert await cache.get("other:x") is None
+
+    @pytest.mark.asyncio
+    async def test_trie_prunes_empty_branches_after_delete(self) -> None:
+        """After deleting all keys sharing a path, the trie collapses the
+        branch rather than retaining structural garbage."""
+        cache = MemoryCache()
+        await cache.set("abcdef", "v1")
+        await cache.set("abcghi", "v2")
+
+        await cache.delete("abcdef")
+        await cache.delete("abcghi")
+
+        removed = await cache.shake("abc")
+        assert removed == 0
+
+        await cache.set("abcxyz", "v3")
+        removed = await cache.shake("abc")
+        assert removed == 1
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_bounded_eviction(self) -> None:
+        """Bounded cache evicts the least-recently-used entry at capacity."""
+        cache = MemoryCache(max_size=2)
+        await cache.set("a", 1)
+        await cache.set("b", 2)
+        await cache.get("a")
+        await cache.set("c", 3)
+
+        assert await cache.get("b") is None
+        assert await cache.get("a") == 1
+        assert await cache.get("c") == 3
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_unbounded_default(self) -> None:
+        """Default cache is unbounded and does not evict."""
+        cache = MemoryCache()
+        for i in range(100):
+            await cache.set(f"key:{i}", i)
+
+        for i in range(100):
+            assert await cache.get(f"key:{i}") == i
+
+    @pytest.mark.asyncio
+    async def test_cache_trie_invariant_under_random_mutations(self) -> None:
+        """After each mutation, _cache keys and _trie keys must stay synchronized."""
+        await _run_random_mutation_invariant_test()
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_rejects_negative_max_size(self) -> None:
+        with pytest.raises(ValueError, match="max_size must be non-negative"):
+            MemoryCache(max_size=-1)
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_max_size_one(self) -> None:
+        cache = MemoryCache(max_size=1)
+        await cache.set("a", 1)
+        assert await cache.get("a") == 1
+        await cache.set("b", 2)
+        assert await cache.get("a") is None
+        assert await cache.get("b") == 2
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_lru_delete_after_promotion(self) -> None:
+        cache = MemoryCache(max_size=2)
+        await cache.set("a", 1)
+        await cache.set("b", 2)
+        await cache.get("a")
+        await cache.delete("a")
+        assert await cache.get("a") is None
+        assert await cache.get("b") == 2
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_lru_prefix_delete_after_promotion(self) -> None:
+        cache = MemoryCache(max_size=2)
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:b:1", "v2")
+        await cache.get("ns:a:1")
+        await cache.delete_prefix("ns:a:")
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:b:1") == "v2"
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_lru_eviction_prefix_sharing(self) -> None:
+        """Evicting a key that is a prefix of another must not break the longer key."""
+        cache = MemoryCache(max_size=2)
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:a:1:b", "v2")
+        await cache.set("ns:a:1:c", "v3")
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:a:1:b") == "v2"
+        assert await cache.get("ns:a:1:c") == "v3"
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_lru_eviction_near_duplicate(self) -> None:
+        """Keys sharing a common prefix but differing later must evict the true LRU."""
+        cache = MemoryCache(max_size=2)
+        await cache.set("prefix:1", "v1")
+        await cache.set("prefix:2", "v2")
+        await cache.set("prefix:3", "v3")
+        assert await cache.get("prefix:1") is None
+        assert await cache.get("prefix:2") == "v2"
+        assert await cache.get("prefix:3") == "v3"
+
+    @pytest.mark.asyncio
+    async def test_generation_eviction_forces_cache_miss(self) -> None:
+        """Evicting a _daf_gen:* key must not allow serving stale cached query data."""
+        repo = MemoryRepository()
+        cache = MemoryCache(max_size=2)
+        factory = DataAccessFactory(repository=repo, cache=cache)
+        daf = factory.create()
+
+        post_result = await daf.post(
+            PostInfo(resource_type="item", data={"name": "alice"})
+        )
+        resource_id = post_result.resource_id
+
+        result1 = await daf.query(QueryInfo(resource_id=resource_id))
+        assert result1.cache_hit is False
+        assert result1.data == {"name": "alice"}
+
+        result2 = await daf.query(QueryInfo(resource_id=resource_id))
+        assert result2.cache_hit is True
+
+        await daf.post(PostInfo(resource_type="item", data={"name": "bob"}))
+        result3 = await daf.query(QueryInfo(resource_id=resource_id))
+        assert result3.cache_hit is False
+        assert result3.data == {"name": "alice"}
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_set_after_prefix_delete(self) -> None:
+        """Setting new entries after prefix delete must not resurrect deleted keys."""
+        cache = MemoryCache(max_size=3)
+        await cache.set("ns:a:1", "v1")
+        await cache.set("ns:a:2", "v2")
+        await cache.set("other:x", "v3")
+        await cache.delete_prefix("ns:a:")
+        await cache.set("ns:a:3", "v4")
+        await cache.set("ns:b:1", "v5")
+        await cache.set("ns:b:2", "v6")
+        assert await cache.get("ns:a:1") is None
+        assert await cache.get("ns:a:2") is None
+        assert await cache.get("ns:a:3") == "v4"
+        assert await cache.get("ns:b:1") == "v5"
+        assert await cache.get("ns:b:2") == "v6"
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_shake_empty_prefix_bounded(self) -> None:
+        cache = MemoryCache(max_size=3)
+        await cache.set("a", 1)
+        await cache.set("b", 2)
+        await cache.set("c", 3)
+        removed = await cache.shake("")
+        assert removed == 3
+        assert await cache.get("a") is None
+        assert await cache.get("b") is None
+        assert await cache.get("c") is None
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_empty_key_bounded(self) -> None:
+        cache = MemoryCache(max_size=2)
+        await cache.set("", "empty")
+        await cache.set("x", 1)
+        assert await cache.get("") == "empty"
+        assert await cache.get("x") == 1
+
+    @pytest.mark.asyncio
+    async def test_trie_collect_matches_bruteforce_prefix(self) -> None:
+        cache = MemoryCache()
+        keys = ["alpha", "alb", "beta", "b", "gamma", "ga:1"]
+        for k in keys:
+            await cache.set(k, k)
+        for prefix in ["", "a", "b", "g", "ga", "al", "be", "z"]:
+            trie_result = cache._trie_collect(prefix)
+            brute = {k for k in keys if k.startswith(prefix)}
+            assert trie_result == brute, (
+                f"prefix={prefix!r}: trie={trie_result}, brute={brute}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_bfs_collect_matches_dfs_collect(self) -> None:
+        cache = MemoryCache()
+        keys = ["alpha", "alb", "beta", "b", "gamma", "ga:1"]
+        for k in keys:
+            await cache.set(k, k)
+        bfs_result = cache._bfs_collect(cache._trie)
+        dfs_result = cache._dfs_collect(cache._trie)
+        assert bfs_result == dfs_result
+
+    @pytest.mark.asyncio
+    async def test_astar_collect_matches_longest_common_prefix(self) -> None:
+        cache = MemoryCache()
+        keys = ["alpha", "alb", "beta", "b", "gamma", "ga:1"]
+        for k in keys:
+            await cache.set(k, k)
+        for target in ["alb", "ga", "bet", "z"]:
+            astar_result = cache._astar_collect(cache._trie, target)
+            expected = _astar_expected(keys, target)
+            assert astar_result == expected, (
+                f"target={target!r}: astar={astar_result}, expected={expected}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_astar_collect_regression_mismatching_prefix(self) -> None:
+        """A* must not score post-mismatch child characters as a longer LCP.
+
+        With keys ["xabc", "abc", "xabd"] and target "abc", the path
+        x->a->b->c must not score match_len=3 because the root mismatch
+        at depth 1 must reset the LCP for all descendants.
+        """
+        cache = MemoryCache()
+        keys = ["xabc", "abc", "xabd"]
+        for k in keys:
+            await cache.set(k, k)
+        astar_result = cache._astar_collect(cache._trie, "abc")
+        assert astar_result == {"abc"}
+
+    @pytest.mark.asyncio
+    async def test_astar_collect_property_based_random(self) -> None:
+        """A* result must match brute-force LCP model over 200 random instances."""
+        rng = random.Random(123)  # noqa: S311
+        for _ in range(200):
+            keys = [f"k{rng.randint(0, 99)}" for _ in range(rng.randint(1, 10))]
+            target = f"t{rng.randint(0, 99)}"
+            cache = MemoryCache()
+            for k in keys:
+                await cache.set(k, k)
+            astar_result = cache._astar_collect(cache._trie, target)
+            expected = _astar_expected(keys, target)
+            assert astar_result == expected, (
+                f"keys={keys}, target={target}: "
+                f"astar={astar_result}, expected={expected}"
+            )
+
+
+def _astar_expected(keys: list[str], target: str) -> set[str]:
+    best = 0
+    result: set[str] = set()
+    for k in keys:
+        lcp = 0
+        for a, b in zip(k, target, strict=False):
+            if a == b:
+                lcp += 1
+            else:
+                break
+        if lcp > best:
+            best = lcp
+            result = {k}
+        elif lcp == best and best > 0:
+            result.add(k)
+    return result
+
+
+async def _run_random_mutation_invariant_test() -> None:
+    rng = random.Random(42)  # noqa: S311
+    cache = MemoryCache()
+    keys: list[str] = []
+
+    def _filter_prefix(prefix: str) -> list[str]:
+        return [k for k in keys if not k.startswith(prefix)]
+
+    for _ in range(200):
+        op = rng.choice(
+            ["set", "overwrite", "delete", "delete_prefix", "shake", "clear"]
+        )
+        if op == "clear":
+            keys.clear()
+        elif op == "set":
+            key = f"k{rng.randint(0, 999)}"
+            if key not in keys:
+                keys.append(key)
+            await cache.set(keys[-1], rng.randint(0, 1000))
+        elif op == "overwrite" and keys:
+            idx = rng.randint(0, len(keys) - 1)
+            await cache.set(keys[idx], rng.randint(0, 1000))
+        elif op == "delete" and keys:
+            key = keys[-1]
+            keys.remove(key)
+            await cache.delete(key)
+        elif op == "delete_prefix":
+            prefix = f"k{rng.randint(0, 9)}"
+            keys = _filter_prefix(prefix)
+            await cache.delete_prefix(prefix)
+        elif op == "shake":
+            prefix = f"k{rng.randint(0, 9)}"
+            keys = _filter_prefix(prefix)
+            await cache.shake(prefix)
+        assert set(cache._cache.keys()) == cache._trie_collect("")
 
 
 class TestFibonacciDP:

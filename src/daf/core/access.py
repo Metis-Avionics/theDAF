@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import warnings
+from functools import cache
 from typing import Any
 
 from daf.contracts.query import (
@@ -21,10 +22,35 @@ from daf.contracts.query import (
     QueryInfo,
     QueryResult,
 )
-from daf.core.errors import NotFoundError, ValidationError
+from daf.core.errors import GenerationKeyError, NotFoundError, ValidationError
 from daf.core.protocols import Algorithm, Authorizer, Cache, Repository
+from daf.utils._memoize import ResourceMemo
 
 logger = logging.getLogger(__name__)
+
+
+@cache
+def _cached_key(
+    resource_id: str,
+    filters: tuple[tuple[str, Any], ...],
+    algorithm: str,
+    user_id: str,
+    resource_namespace: str,
+) -> str:
+    payload = {
+        "resource_id": resource_id,
+        "filters": dict(filters),
+        "algorithm": algorithm,
+        "user_id": user_id,
+    }
+    try:
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        raise ValidationError(
+            "Filters contain non-JSON-serializable values"
+        ) from None
+    digest = hashlib.sha256(canonical.encode()).hexdigest()
+    return f"query:{resource_namespace}:{digest}"
 
 
 class DataAccess:
@@ -57,8 +83,13 @@ class DataAccess:
     - Across processes, generation advancement is best-effort
       (read-modify-write). Concurrent mutations may observe a temporarily
       stale generation value, but stale cache entries are always rejected
-      by generation comparison on the next read. The system never serves
-      stale data to callers.
+      by generation comparison on the next read.
+
+      Cache-correctness invariant: a query result is served from cache
+      only if its stored generation equals the current generation for
+      that resource. The generation key is correctness metadata and
+      must not be silently defaulted; missing generation state forces
+      a cache miss and repository read.
     - For distributed cache backends, atomic generation advancement
       requires cache-level CAS or compare-and-set primitives (out of
       scope for the current Cache protocol).
@@ -83,8 +114,11 @@ class DataAccess:
         self._cache = cache
         self._algorithms = algorithms or {}
         self._authorizer = authorizer
-        self._generation_locks: dict[str, asyncio.Lock] = {}
-        self._generation_locks_lock = asyncio.Lock()
+        self._generation_locks_memo = ResourceMemo(
+            key_fn=lambda resource_id: self._resource_namespace(resource_id),
+            factory=lambda _: asyncio.Lock(),
+            max_size=256,
+        )
 
     async def _check_authorization(
         self,
@@ -122,16 +156,12 @@ class DataAccess:
     async def _generation_lock(self, resource_id: str) -> asyncio.Lock:
         """Return the per-resource asyncio lock for generation advancement.
 
-        Locks are lazily created and cached in ``_generation_locks``.
-        Access to the dict itself is serialized via ``_generation_locks_lock``
-        to avoid races where two coroutines create duplicate Lock objects
-        for the same namespace.
+        Locks are lazily created and cached by ResourceMemo.
+        Access is serialised via the ResourceMemo's internal lock so
+        two coroutines requesting the same namespace receive the same
+        lock object.
         """
-        namespace = self._resource_namespace(resource_id)
-        async with self._generation_locks_lock:
-            if namespace not in self._generation_locks:
-                self._generation_locks[namespace] = asyncio.Lock()
-            return self._generation_locks[namespace]
+        return await self._generation_locks_memo.get(resource_id)
 
     def _resource_namespace(self, resource_id: str) -> str:
         """Return a fixed-width namespace for a resource_id.
@@ -147,7 +177,11 @@ class DataAccess:
         async with lock:
             namespace = self._resource_namespace(resource_id)
             value = await self._cache.get(f"_daf_gen:{namespace}")
-            return value if isinstance(value, int) else 0
+            if not isinstance(value, int):
+                raise GenerationKeyError(
+                    f"Generation key '_daf_gen:{namespace}' is absent or not an int"
+                )
+            return value
 
     async def _advance_generation(self, resource_id: str) -> None:
         """Increment the generation counter for a resource in the cache.
@@ -160,9 +194,11 @@ class DataAccess:
         async with lock:
             namespace = self._resource_namespace(resource_id)
             current = await self._cache.get(f"_daf_gen:{namespace}")
-            if not isinstance(current, int):
-                current = 0
-            await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+            if current is not None and not isinstance(current, int):
+                raise GenerationKeyError(
+                    f"Generation key '_daf_gen:{namespace}' is not an int"
+                )
+            await self._cache.set(f"_daf_gen:{namespace}", (current or 0) + 1)
 
     async def _superedge_invalidate(self, resource_id: str) -> None:
         """Atomically invalidate all cached projections for a resource.
@@ -182,33 +218,28 @@ class DataAccess:
         lock = await self._generation_lock(resource_id)
         async with lock:
             current = await self._cache.get(f"_daf_gen:{namespace}")
-            if not isinstance(current, int):
-                current = 0
+            if current is not None and not isinstance(current, int):
+                raise GenerationKeyError(
+                    f"Generation key '_daf_gen:{namespace}' is not an int"
+                )
             await self._cache.delete_prefix(f"query:{namespace}:")
             await self._cache.delete(f"_daf_gen:{namespace}")
             await self._cache.shake(f"_daf_gen:{namespace}")
-            await self._cache.set(f"_daf_gen:{namespace}", current + 1)
+            await self._cache.set(f"_daf_gen:{namespace}", (current or 0) + 1)
 
     def _cache_key(self, info: QueryInfo, user: Any) -> str:
         """Build cache key from full query semantics."""
         user_id = self._user_id(user)
-        payload = {
-            "resource_id": info.resource_id,
-            "filters": info.filters or {},
-            "algorithm": info.algorithm or "",
-            "user_id": user_id,
-        }
-        try:
-            canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        except (TypeError, ValueError):
-            raise ValidationError(
-                "Filters contain non-JSON-serializable values"
-            ) from None
-        digest = hashlib.sha256(canonical.encode()).hexdigest()
-        namespace = self._resource_namespace(info.resource_id)
-        return f"query:{namespace}:{digest}"
+        return _cached_key(
+            resource_id=info.resource_id,
+            filters=tuple(sorted((info.filters or {}).items())),
+            algorithm=info.algorithm or "",
+            user_id=user_id,
+            resource_namespace=self._resource_namespace(info.resource_id),
+        )
 
-    def _apply_filters(self, data: Any, filters: dict[str, Any] | None) -> Any:
+    @staticmethod
+    def _apply_filters(data: Any, filters: dict[str, Any] | None) -> Any:
         """Apply in-memory filters to retrieved data."""
         if not filters:
             return data
@@ -268,7 +299,10 @@ class DataAccess:
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
-            current_gen = await self._current_generation(info.resource_id)
+            try:
+                current_gen = await self._current_generation(info.resource_id)
+            except GenerationKeyError:
+                return await self._execute_cache_miss(cache_key, info, user)
             if cached.get("generation") == current_gen:
                 return await self._handle_cache_hit(
                     cache_key, info.resource_id, user, cached
@@ -300,7 +334,12 @@ class DataAccess:
         self, cache_key: str, info: QueryInfo, user: Any
     ) -> QueryResult:
         """Execute a full query on cache miss and populate the cache."""
-        current_generation = await self._current_generation(info.resource_id)
+        try:
+            current_generation = await self._current_generation(info.resource_id)
+        except GenerationKeyError:
+            current_generation = 0
+            namespace = self._resource_namespace(info.resource_id)
+            await self._cache.set(f"_daf_gen:{namespace}", 0)
         data = await self._repository.get(info.resource_id)
         if data is None:
             logger.info("repository miss", extra={"resource_id": info.resource_id})

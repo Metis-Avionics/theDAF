@@ -234,7 +234,7 @@ class TestCacheKeyCanonicalization:
             QueryInfo(resource_id="123"), user=FakeUser("user-2")
         )
         
-        keys = list(cache._cache.keys())
+        keys = [k for k in cache._cache if k.startswith("query:")]
         assert len(keys) == 3
         
         user1_no_filter = _expected_cache_key("123", {}, None, "user-1")
@@ -467,7 +467,7 @@ class TestPrefixCacheInvalidation:
             QueryInfo(resource_id="123", filters={"status": "active"}), user=user
         )
         
-        keys_before = set(cache._cache.keys())
+        keys_before = {k for k in cache._cache if k.startswith("query:")}
         assert len(keys_before) == 2
         
         await daf.put(
@@ -498,7 +498,7 @@ class TestPrefixCacheInvalidation:
         await daf.query(QueryInfo(resource_id="fib_5"))
         await daf.query(QueryInfo(resource_id="fib_5", algorithm="fibonacci"))
         
-        keys_before = set(cache._cache.keys())
+        keys_before = {k for k in cache._cache if k.startswith("query:")}
         assert len(keys_before) == 2
         
         await daf.delete(DeleteInfo(resource_id="fib_5"))

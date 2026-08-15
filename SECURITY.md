@@ -122,7 +122,7 @@ except DataAccessError as e:
 
 ### Cache Invalidation
 
-Be aware that `POST` performs global cache invalidation. In high-throughput systems, this can cause cache stampedes. Consider implementing per-resource invalidation at the repository or cache layer until this is fixed in the framework.
+Be aware that mutations use per-resource prefix invalidation (`delete_prefix`). In high-throughput systems, prefix invalidation can still cause cache stampedes. Consider implementing per-key invalidation or TTL-based expiration at the repository or cache layer if your workload requires it.
 
 ### Rate Limiting
 
@@ -163,6 +163,14 @@ pip-audit
 
 Do not use them in production with sensitive data.
 
+### Dead Code Removal
+
+Unused code (`memoize` decorator, `PureMemo`, `_make_key`) has been removed from `daf.utils._memoize`. Dead code expands the attack surface and confuses readers. Git history preserves removed code if needed later.
+
+### MemoryCache Bounds
+
+`MemoryCache(max_size=0)` (the default) is backwards-compatible and unbounded. It is **not** memory-safe for production deployments. Set a positive `max_size` to enable LRU eviction and bound memory growth.
+
 ### Rate Limiting
 
 Rate limiting is implemented at the FastAPI adapter layer only. If you expose `DataAccess` directly (without the adapter), you must implement your own rate limiting.
@@ -174,6 +182,22 @@ Custom `Algorithm` implementations execute arbitrary code. Only use trusted algo
 ### Authorization Model
 
 The built-in authorizer is a simple ownership check (`owner_id == user.id`). It does not support roles, scopes, tenant boundaries, or administrative access. Implement a custom `Authorizer` for production use.
+
+### HTTP Test Client
+
+The test suite uses `httpx2` (the actively maintained successor to `httpx`) for HTTP integration tests. `httpx2` resolves `StarletteDeprecationWarning` seen with older `httpx` versions in combination with Starlette's `TestClient`.
+
+### Trie Traversal Complexity
+
+`MemoryCache._trie_delete_prefix()` and `_trie_collect()` operate in O(prefix_length + K) time where K is the number of matching entries. The internal prefix trie stores keys only at terminal nodes, eliminating the O(N × L) memory amplification present in naive implementations that store key references at every node along each key's path.
+
+### Base SHA Validation
+
+`scripts/graphify_affected.py` validates the base ref exists locally via `git rev-parse --verify` before running `git diff`. This prevents CI from producing false-green results when the base ref is missing or the clone is shallow.
+
+### Graph JSON Schema Validation
+
+`scripts/graphify_affected.py` validates the loaded graph JSON contains a top-level `nodes` list and that each node has `source_file` and `id` fields. Malformed graph output now produces a clear error instead of silently producing "no impacted test files detected".
 
 ## Security Updates
 

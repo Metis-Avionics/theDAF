@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from daf.utils._memoize import Memo
+
 
 class FibonacciDP:
     """Fibonacci algorithm using dynamic programming with explicit memoization.
@@ -12,9 +14,7 @@ class FibonacciDP:
 
     def __init__(self) -> None:
         """Initialize the algorithm with empty memoization cache."""
-        self._memo: dict[int, int] = {}
-        self._iterations: int = 0
-        self._cache_hits: int = 0
+        self._memo: Memo | None = None
 
     async def execute(self, input_data: Any) -> int:
         """Execute the Fibonacci algorithm.
@@ -31,11 +31,7 @@ class FibonacciDP:
         if not isinstance(input_data, int) or input_data < 0:
             raise ValueError(f"Expected non-negative integer, got {input_data}")
 
-        # Reset counters for this execution
-        self._iterations = 0
-        self._cache_hits = 0
-        self._memo.clear()
-
+        self._memo = Memo()
         return await self._compute_fib(input_data)
 
     async def _compute_fib(self, n: int) -> int:
@@ -47,25 +43,21 @@ class FibonacciDP:
         Returns:
             The Nth Fibonacci number.
         """
-        # Check memo first
-        if n in self._memo:
-            self._cache_hits += 1
-            return self._memo[n]
+        memo = self._memo
+        if memo is None:
+            raise RuntimeError("execute() must be called before _compute_fib()")
 
-        # Count iteration
-        self._iterations += 1
+        if memo.has(n):
+            return memo.get(n)  # type: ignore[no-any-return]
 
-        # Base cases
         if n <= 1:
-            result = n
-        else:
-            # Recursive case: decompose problem
-            fib_n_minus_1 = await self._compute_fib(n - 1)
-            fib_n_minus_2 = await self._compute_fib(n - 2)
-            result = fib_n_minus_1 + fib_n_minus_2
+            return n
 
-        # Memoize result
-        self._memo[n] = result
+        fib_n_minus_1 = await self._compute_fib(n - 1)
+        fib_n_minus_2 = await self._compute_fib(n - 2)
+        result = fib_n_minus_1 + fib_n_minus_2
+
+        memo.set(n, result)
         return result
 
     async def get_stats(self) -> dict[str, Any]:
@@ -74,8 +66,6 @@ class FibonacciDP:
         Returns:
             Dictionary with iteration count and cache hits.
         """
-        return {
-            "iterations": self._iterations,
-            "cache_hits": self._cache_hits,
-            "memo_size": len(self._memo),
-        }
+        if self._memo is not None:
+            return self._memo.stats()
+        return {"iterations": 0, "cache_hits": 0, "memo_size": 0}

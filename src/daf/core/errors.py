@@ -31,6 +31,12 @@ class CacheError(DataAccessError):
     pass
 
 
+class GenerationKeyError(CacheError):
+    """Raised when a required generation key is absent from the cache."""
+
+    pass
+
+
 class AlgorithmError(DataAccessError):
     """Raised when an algorithm execution fails."""
 

@@ -1,7 +1,7 @@
 # Known Bugs and Structural Defects
 
 > Red-team assessment findings. Issues are ordered by severity.
-> Last updated: 2026-08-14
+> Last updated: 2026-08-15
 
 ## 🔴 Critical
 
@@ -263,6 +263,210 @@ Querying with an algorithm name not present in the registry silently returned ra
 - `src/daf/core/access.py:196` — raises `ValidationError` for unknown algorithm names
 - `tests/integration/test_fastapi_adapter.py:214` — updated to expect `error_type="validation"`
 - `tests/integration/test_security_invariants.py:515` — new `TestUnknownAlgorithmValidation`
+
+---
+
+## Adversarial Hardening (PR18)
+
+### 26. ~~Trie memory amplification~~ FIXED
+
+`_TrieNode` previously stored a `keys: set[str]` at every node along every key's path. For N keys of average length L, this stored O(N × L) redundant string references in addition to `_cache`. Fixed by storing keys only at terminal nodes; intermediate nodes carry only `children`.
+
+**Fix:**
+- `src/daf/cache/memory.py:14` — `_TrieNode` now has `children` and `key` (singular, `str | None`)
+- `src/daf/cache/memory.py:147` — `_dfs_collect` DFS helper collects terminal keys
+- `src/daf/cache/memory.py:157` — `_trie_insert` sets `node.key = key` at terminal node only
+- `src/daf/cache/memory.py:164` — `_trie_delete` clears `node.key` and prunes empty ancestors
+- `src/daf/cache/memory.py:193` — `_trie_delete_prefix` detaches subtree and returns terminal keys
+
+---
+
+### 27. ~~Canonical node ID ignores graph~~ FIXED
+
+`_canonical_node_id()` previously validated `file_to_node_id(path)` against the graph but still returned the hand-rolled ID on mismatch. Fixed to return the first graph node's ID when the graph contains a matching `source_file`.
+
+**Fix:**
+- `scripts/graphify_affected.py:62` — collect all nodes matching `source_file == path`
+- `scripts/graphify_affected.py:72` — prefer exact module-level match, else return first graph node's ID
+- `scripts/graphify_affected.py:66` — warn and fall back to hand-rolled only when no graph match exists
+
+---
+
+### 28. ~~Missing base SHA produces false-green CI~~ FIXED
+
+`changed_files()` returned `[]` when the base ref was missing, causing `main()` to print "No Python files changed" and exit 0. Fixed to raise `RuntimeError` on missing base SHA.
+
+**Fix:**
+- `scripts/graphify_affected.py:26` — `changed_files()` raises `RuntimeError` on missing base
+- `scripts/graphify_affected.py:168` — `main()` catches `RuntimeError` and returns 1
+
+---
+
+### 29. ~~Graph JSON schema not validated~~ FIXED
+
+`main()` did not validate graph JSON structure; malformed output caused misleading "no impacted test files detected" behavior. Fixed with `_validate_graph_schema()`.
+
+**Fix:**
+- `scripts/graphify_affected.py:119` — `_validate_graph_schema()` validates `nodes` list and node fields
+- `scripts/graphify_affected.py:146` — `main()` validates schema before processing
+
+---
+
+### 30. `httpx` deprecation warning in tests FIXED
+
+Test suite emits `StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated; install httpx2 instead`. Fixed by upgrading `httpx>=0.27` to `httpx2>=0.27` in dev and optional-dependencies.
+
+**Fix:**
+- `pyproject.toml:49` — `httpx2>=0.27`
+- `pyproject.toml:73` — `httpx2>=0.27`
+
+---
+
+### 31. `_astar_collect` LCP score does not reset on mismatch FIXED
+
+With keys `["xabc", "abc"]` and target `"abc"`, the path `x→a→b→c` scored `match_len=3` because after the root mismatch (`x` ≠ `a`), the algorithm incremented when child `a` happened to match `target[0]`. The LCP of `"xabc"` with `"abc"` is 0, not 3. Fixed by tracking depth in each heap entry and only extending `match_len` when `match_len == depth` (no mismatch yet).
+
+**Fix:**
+- `src/daf/cache/memory.py:170` — heap tuple expanded to `(priority, tiebreaker, node, depth, match_len)`
+- `src/daf/cache/memory.py:186` — child only extends match if `match_len == depth` and `ch == target[match_len]`
+
+---
+
+### 32. `_canonical_node_id` non-deterministic selection FIXED
+
+When multiple nodes share `source_file` and none matches hand-rolled ID, `matches[0]` depends on graphify output ordering. Fixed by sorting matching nodes by `id` before selecting the first.
+
+**Fix:**
+- `scripts/graphify_affected.py:62` — `matches.sort(key=lambda n: n.get("id", ""))`
+
+---
+
+### 33. `graphify_affected.py` schema validation gaps FIXED
+
+Validation checked `isinstance(nodes, list)` and key presence, but not types, non-emptiness, or uniqueness. Fixed with type checks, non-empty string checks, and a second-pass uniqueness check.
+
+**Fix:**
+- `scripts/graphify_affected.py:120` — `_validate_graph_schema` validates types, non-emptiness, and uniqueness
+
+---
+
+### 34. `git diff` subprocess failure asymmetry FIXED
+
+`git rev-parse` failure raises `RuntimeError`, but `git diff` failure raised raw `CalledProcessError`. Fixed by wrapping `git diff` in try/except and raising `RuntimeError` with stderr context.
+
+**Fix:**
+- `scripts/graphify_affected.py:37` — `git diff` wrapped in try/except
+
+---
+
+### 35. CI graphify job duplicates graph extraction FIXED
+
+CI ran `graphify extract` then `graphify_report.py`, which runs `graphify extract` again. Fixed by removing the redundant explicit extraction step.
+
+**Fix:**
+- `.github/workflows/ci.yml:55` — removed `uv run python -m graphify extract . --code-only --no-cluster`
+- `.github/workflows/ci.yml:52` — added `fetch-depth: 0` to checkout step
+
+---
+
+### 36. `_generation_locks` unbounded dict FIXED
+
+`_generation_locks` was an unbounded `dict[str, asyncio.Lock]` with the same cardinality risk as the removed `_namespace_cache`. Replaced with `ResourceMemo` lock striping configured with `max_size=256` and `OrderedDict`-based LRU eviction.
+
+**Fix:**
+- `src/daf/core/access.py:117` — `_generation_locks_memo = ResourceMemo(key_fn=..., factory=..., max_size=256)`
+- `src/daf/utils/_memoize.py` — `ResourceMemo` accepts `max_size: int = 0` with LRU eviction via `OrderedDict`
+
+---
+
+### 37. Bounded LRU can evict `_daf_gen:*` metadata FIXED
+
+`_current_generation` previously returned 0 for missing or non-int generation keys, serving potentially stale data. Now raises `GenerationKeyError`; callers treat this as a cache miss. `_advance_generation` and `_superedge_invalidate` raise `GenerationKeyError` when the key is present but not an int; missing key defaults to 0 for mutations.
+
+**Fix:**
+- `src/daf/core/errors.py:34` — `GenerationKeyError(CacheError)` added
+- `src/daf/core/access.py:173` — `_current_generation` raises `GenerationKeyError` on absent/non-int value
+- `src/daf/core/access.py:181` — `_advance_generation` raises `GenerationKeyError` when key present but not int
+- `src/daf/core/access.py:196` — `_superedge_invalidate` raises `GenerationKeyError` when key present but not int
+- `src/daf/core/access.py:288` — `_execute_query` catches `GenerationKeyError` → cache miss
+- `src/daf/core/access.py:330` — `_execute_cache_miss` catches `GenerationKeyError` → gen=0, writes generation key
+
+---
+
+### 38. Multi-index invariant not documented FIXED
+
+`MemoryCache.set`/`delete`/`delete_prefix`/`shake`/`clear` must not `await` between updates to `_cache`, `_trie`, and `_lru`. Added explicit atomicity note to `MemoryCache` class docstring.
+
+**Fix:**
+- `src/daf/cache/memory.py:31` — class docstring documents no-await-between-indexes invariant
+
+---
+
+### 39. BFS uses O(n²) list.pop(0) FIXED
+
+`TreeCollector._bfs` used `list.pop(0)` on a growing queue, yielding O(n²) worst-case traversal. Replaced with `collections.deque` and `popleft()` for O(1) per operation.
+
+**Fix:**
+- `src/daf/utils/_recursion.py:14` — `from collections import deque`
+- `src/daf/utils/_recursion.py:72` — `queue: deque = deque([root])` + `popleft()`
+
+---
+
+### 40. A* / BFS architectural homeless FIXED
+
+A* and BFS collectors accumulated algorithmic capability without a production consumer, expanding the trusted surface unjustifiably. Marked both as experimental in docstrings.
+
+**Fix:**
+- `src/daf/cache/memory.py:160` — `_bfs_collect` docstring notes "**Experimental** — no production consumer yet."
+- `src/daf/cache/memory.py:170` — `_astar_collect` docstring notes "**Experimental** — no production consumer yet."
+
+---
+
+### 41. `_canonical_node_id` does not validate graph schema FIXED
+
+`_canonical_node_id` loaded graph JSON without schema validation; malformed graphs fell through to `file_to_node_id` with a plausible but unverified ID. Fixed to call `_validate_graph_schema` and return `None` on validation failure.
+
+**Fix:**
+- `scripts/graphify_affected.py:65` — `_validate_graph_schema(data)` called after `json.loads`
+- `scripts/graphify_affected.py:67` — `RuntimeError` from validation caught, returns `None`
+
+---
+
+### 42. `graphify_affected.py` scope narrower than advertised FIXED
+
+Module docstring implied "changed files" without specifying the `.py`-only filter. Updated docstring to state scope explicitly and note that CI still runs the full suite.
+
+**Fix:**
+- `scripts/graphify_affected.py:2` — docstring documents `.py`-only scope and CI full-suite guarantee
+
+---
+
+### 43. `TreeCollector` `astar` strategy is broken FIXED
+
+`TreeCollector._astar` cannot correctly implement LCP matching because its API (`key_extractor(node) -> str | None`, `children_extractor(node) -> Iterable`) does not expose path characters. The condition `self._key_extractor(child) is not None` checks whether a child is terminal, not whether its character matches the target. `MemoryCache._astar_collect` already exists with the correct implementation. No code uses `TreeCollector(strategy="astar")`. Removed `astar` strategy and `_astar` method.
+
+**Fix:**
+- `src/daf/utils/_recursion.py` — removed `_astar` method and `heapq` import
+- `src/daf/utils/_recursion.py` — `collect()` only dispatches to `dfs` and `bfs`
+
+---
+
+### 44. Dead code in `_memoize.py` FIXED
+
+`memoize` decorator and `PureMemo`/`_make_key` were new code with zero consumers, expanding the attack surface and confusing readers. Removed entirely.
+
+**Fix:**
+- `src/daf/utils/_memoize.py` — removed `memoize`, `PureMemo`, `_make_key`
+- `src/daf/utils/_memoize.py` — removed unused `hashlib`, `Awaitable`/`Callable` imports
+
+---
+
+### 45. Unused `heapq` import in `_trie.py` FIXED
+
+`heapq` was imported but never used in the trie implementation.
+
+**Fix:**
+- `src/daf/cache/_trie.py` — removed unused `heapq` import
 
 ---
 
