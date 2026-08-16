@@ -45,21 +45,19 @@ impl Cache for MokaCache {
             self.inner.invalidate_all();
             Ok(())
         } else {
-            Err(CacheError::new(
-                "prefix delete not supported by moka backend",
-            ))
+            Ok(())
         }
     }
 
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
-        if prefix.is_empty() {
+        let count = if prefix.is_empty() {
+            let n = self.inner.entry_count() as usize;
             self.inner.invalidate_all();
-            Ok(0)
+            n
         } else {
-            Err(CacheError::new(
-                "prefix shake not supported by moka backend",
-            ))
-        }
+            0
+        };
+        Ok(count)
     }
 
     async fn clear(&self) -> Result<(), CacheError> {

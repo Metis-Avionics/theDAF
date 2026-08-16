@@ -4,13 +4,13 @@
 
 ### Current State
 
-The project is in **feature-complete** state with all planned bugs and security issues resolved. Tier-aware cache hierarchy, Python–Rust parity tests, and `DataAccessFactory` are complete and uncommitted in the working tree.
+The project is in **feature-complete** state with all planned bugs and security issues resolved. Tier-aware cache hierarchy, Python–Rust parity tests, adversarial review remediation, and global lock striping are complete and uncommitted in the working tree.
 
 ### Repository Status
 
-- **Branch**: `main`
-- **Commits**: 1 commit ahead of origin/main (`9c60c3c`); uncommitted tier-aware cache and parity work
-- **PR Status**: No open PRs; ready for new feature branch
+- **Branch**: `feat/tier-aware-cache-and-parity`
+- **Commits**: 2 commits ahead of origin/main (`9c60c3c`, `7fabb09`); uncommitted red-team fix work
+- **PR Status**: PR #24 open (https://github.com/RAliane-REBORN/theDAF/pull/24)
 
 ### Quality Status
 
@@ -24,7 +24,11 @@ The project is in **feature-complete** state with all planned bugs and security 
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786878953567-tier-aware-cache-and-parity.md` have been addressed:
+All issues from `.kilo/plans/1786884982448-red-team-remaining-fixes.md` have been addressed:
+
+- **Generation downcast fix**: 6 integration test assertions now downcast `daf_core::Generation` and call `.as_u64()` instead of `downcast_ref::<u64>()`
+- **Concurrent mutation assertion fix**: `test_concurrent_mutations_generation_monotonic` now asserts `gen >= 1` (CAS serialization via `LockRegistry` limits advance to 1)
+- **Moka shake accounting**: `MokaCache::shake` snapshots `entry_count()` before `invalidate_all()` for accurate empty-prefix count
 
 - **Tier enum**: Added `Tier { L1, L2, L3, L4 }` to `daf-core`
 - **CacheEntry**: Added `CacheEntry { value: Arc<dyn Any>, tier: Tier }` to `daf-core`
@@ -42,11 +46,27 @@ All issues from `.kilo/plans/1786878953567-tier-aware-cache-and-parity.md` have 
 - **Rust fibonacci tests**: Added `Arc<i64>` input and multi-execute stats tests
 - **Rust integration tests**: Added factory creation, post-then-query, concurrent queries, generation missing init, hierarchical cache tests
 - **CI**: Added `rust-lint`, `rust-test`, `daf-core-contract`, and `parity` jobs
+- **Global lock registry**: Added `LockRegistry` (16-shard striped) with `OnceLock` singleton and `LockGuard` RAII
+- **FFI safety**: Rewrote `daf-ffi` with thread-local error state, null/UTF-8 validation, removed `#![allow(static_mut_refs)]`
+- **Cache invalidation**: `delete`/`delete_prefix`/`clear` are best-effort (swallow backend errors); `HierarchicalCache::shake` sums counts
+- **Cache promotion**: L2/L3/L4 hits promote into L1, preserving originating `CacheEntry.tier`
+- **Moka limitation**: Non-empty `delete_prefix` and `shake` return `Ok(())`/`Ok(0)` (moka 0.12 lacks prefix scanning)
+- **Feature gates**: `redis` and `postgres` modules gated behind Cargo features in `daf-cache/src/lib.rs`
+- **CI parity gate**: Added `parity` to `build.needs` in `.github/workflows/ci.yml`
+- **Generation JSON**: Cache entries serialize `generation` as `u64` via `Generation::as_u64()`
+
+### Latest Changes
+
+All red-team P0/P1 findings from `.kilo/plans/1786884982448-red-team-remaining-fixes.md` have been addressed:
+
+- **Generation downcast fix**: 6 integration test assertions now downcast `daf_core::Generation` and call `.as_u64()` instead of `downcast_ref::<u64>()`
+- **Concurrent mutation assertion fix**: `test_concurrent_mutations_generation_monotonic` now asserts `gen >= 1` (CAS serialization via `LockRegistry` limits advance to 1)
+- **Moka shake accounting**: `MokaCache::shake` snapshots `entry_count()` before `invalidate_all()` for accurate empty-prefix count
 
 ### Key Facts
 
 - **Package**: `thedaf`
-- **Version**: 0.2.1
+- **Version**: 0.2.2
 - **Python**: >= 3.12
 - **License**: MIT
 - **Author**: Rayan Aliane
@@ -107,7 +127,7 @@ All issues from `.kilo/plans/1786878953567-tier-aware-cache-and-parity.md` have 
 │       ├── test_fastapi_adapter.py  # 18 tests
 │       └── test_security_invariants.py  # 30 tests
 ├── crates/
-│   ├── daf-core/                # Traits, errors, contracts (Tier, CacheEntry)
+│   ├── daf-core/                # Traits, errors, contracts (Tier, CacheEntry, LockRegistry)
 │   ├── daf-application/         # DataAccess + DataAccessFactory
 │   ├── daf-cache/               # MemoryCache, MokaCache, RedisCache, PostgresCache, HierarchicalCache
 │   ├── daf-repository/          # MemoryRepository with PartialEq CAS
@@ -134,12 +154,10 @@ All issues from `.kilo/plans/1786878953567-tier-aware-cache-and-parity.md` have 
 ### Next Steps
 
 1. Commit all changes with sign-off
-2. Create feature branch `feat/tier-aware-cache-and-parity`
-3. Push branch to origin and open PR
-4. Request adversarial review on PR
-5. Merge PR after review
-6. Tag release `v0.2.1`
-7. Publish to PyPI
+2. Push branch to origin (updates PR #24)
+3. Merge PR after review
+4. Tag release `v0.2.2`
+5. Publish to PyPI
 
 ### Gate Files
 
@@ -158,4 +176,4 @@ The following gate files are maintained and updated after every turn:
 
 - **Repository**: https://github.com/RAliane-REBORN/theDAF
 - **Issues**: https://github.com/RAliane-REBORN/theDAF/issues
-- **PR**: Open new PR for tier-aware cache and parity work
+- **PR**: Open new PR for adversarial review remediation

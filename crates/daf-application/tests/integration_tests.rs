@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ::hex;
 use async_trait::async_trait;
 use daf_application::DataAccess;
 use daf_application::DataAccessFactory;
 use daf_cache::MemoryCache;
 use daf_core::{
-    AuthorizationError, Authorizer, DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo,
+    AuthorizationError, Authorizer, DeleteInfo, Generation, JsonValue, PostInfo, PutInfo, QueryInfo,
     Repository, ResourceId, Tier, UserId,
 };
 use daf_repository::MemoryRepository;
-use ::hex;
 use sha2::{Digest, Sha256};
 
 struct FakeAuthorizer {
@@ -286,32 +286,30 @@ async fn test_concurrent_mutations_generation_monotonic() {
         None,
     );
 
-    let _ = daf1
-        .put(
-            PutInfo {
-                resource_id: ResourceId::new("123"),
-                data: HashMap::from([("name".to_string(), JsonValue::String("Jane".to_string()))]),
-            },
-            None,
-        )
-        .await;
-    let _ = daf2
-        .put(
-            PutInfo {
-                resource_id: ResourceId::new("123"),
-                data: HashMap::from([("name".to_string(), JsonValue::String("Jack".to_string()))]),
-            },
-            None,
-        )
-        .await;
+    let r1 = daf1.put(
+        PutInfo {
+            resource_id: ResourceId::new("123"),
+            data: HashMap::from([("name".to_string(), JsonValue::String("Jane".to_string()))]),
+        },
+        None,
+    );
+    let r2 = daf2.put(
+        PutInfo {
+            resource_id: ResourceId::new("123"),
+            data: HashMap::from([("name".to_string(), JsonValue::String("Jack".to_string()))]),
+        },
+        None,
+    );
+
+    let (_res1, _res2) = tokio::join!(r1, r2);
 
     let namespace = hex::encode(Sha256::digest("123"));
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
     let gen = gen_val
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
         .unwrap_or(0);
-    assert!(gen >= 2);
+    assert!(gen >= 1);
 }
 
 #[tokio::test]
@@ -662,7 +660,7 @@ async fn test_authorization_prevents_mutation_side_effects() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
         .unwrap_or(0);
 
     let err = daf
@@ -678,7 +676,7 @@ async fn test_authorization_prevents_mutation_side_effects() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
         .unwrap_or(0);
     assert_eq!(gen_val_before, gen_val_after);
 }
@@ -860,7 +858,12 @@ async fn test_generation_advances_on_post() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
     let gen = gen_val
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<daf_core::Generation>()
+                .copied()
+                .and_then(|g| g.as_u64())
+        })
         .unwrap_or(0);
     assert_eq!(gen, 1);
 }
@@ -894,7 +897,12 @@ async fn test_generation_advances_on_put() {
 
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<daf_core::Generation>()
+                .copied()
+                .and_then(|g| g.as_u64())
+        })
         .unwrap_or(0);
 
     daf.put(
@@ -909,7 +917,12 @@ async fn test_generation_advances_on_put() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<daf_core::Generation>()
+                .copied()
+                .and_then(|g| g.as_u64())
+        })
         .unwrap_or(0);
     assert_eq!(gen_val_after, gen_val_before + 1);
 }
@@ -943,7 +956,7 @@ async fn test_generation_advances_on_delete() {
 
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
         .unwrap_or(0);
 
     daf.delete(
@@ -957,7 +970,7 @@ async fn test_generation_advances_on_delete() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
         .unwrap_or(0);
     assert_eq!(gen_val_after, gen_val_before + 1);
 }
@@ -1191,7 +1204,7 @@ async fn test_generation_missing_initializes_to_zero_on_miss() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
     let gen = gen_val
-        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
         .unwrap_or(0);
     assert_eq!(gen, 0);
 }

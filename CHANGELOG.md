@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-16
+
+### Added
+
+- Global `LockRegistry` in `daf-core` with 16-shard striped locking and `OnceLock` singleton
+- `LockGuard` RAII guard for scoped lock acquisition
+- `tokio` dependency to `daf-core/Cargo.toml`
+
+### Changed
+
+- `daf-application` uses global `LockRegistry` instead of per-`DataAccess` generation locks
+- `_current_generation`, `_advance_generation`, `_superedge_invalidate` operate on `Generation` enum directly
+- `HierarchicalCache::get` promotes L2/L3/L4 hits into L1, preserving originating `CacheEntry.tier`
+- `HierarchicalCache::delete`, `delete_prefix`, `clear` are best-effort (swallow backend errors)
+- `HierarchicalCache::shake` sums tier counts with best-effort fallback
+- `MokaCache::delete_prefix` and `shake` return `Ok(())`/`Ok(0)` for non-empty prefixes (moka 0.12 limitation)
+- `daf-cache/src/lib.rs` feature-gates `pub mod redis;` and `pub mod postgres;`
+- `daf-ffi/src/lib.rs` uses `thread_local!` error state; validates null pointers and UTF-8 on all entrypoints
+- Cache JSON serialization uses `current_generation.as_u64()` for `"generation"` field
+- `.github/workflows/ci.yml` adds `parity` to `build.needs`
+
+### Fixed
+
+- Concurrent mutation generation monotonicity test uses `tokio::join!` for real concurrency
+- Generation assertions in integration tests downcast `daf_core::Generation` and call `.as_u64()`
+- `MokaCache::shake` returns accurate entry count for empty-prefix invalidation via `entry_count()` snapshot before `invalidate_all()`
+- `test_concurrent_mutations_generation_monotonic` assertion corrected to `gen >= 1` (CAS serialization limits advance to 1)
+
 ## [0.2.1] - 2026-08-16
 
 ### Added
