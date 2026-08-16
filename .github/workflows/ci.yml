@@ -16,6 +16,14 @@ jobs:
       - run: uv run ruff check src/ tests/
       - run: uv run mypy src/ --strict
 
+  rust-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -23,6 +31,20 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --frozen --group dev
       - run: uv run pytest tests/ -q
+
+  rust-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace
+
+  daf-core-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p daf-core
 
   power-of-ten:
     runs-on: ubuntu-latest
@@ -32,9 +54,19 @@ jobs:
       - run: uv sync --frozen --group dev
       - run: uv run python scripts/power_of_ten.py src/
 
+  parity:
+    runs-on: ubuntu-latest
+    needs: [rust-test, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: uv run pytest tests/ -q
+      - run: cargo test --workspace
+
   build:
     runs-on: ubuntu-latest
-    needs: [lint, test, power-of-ten]
+    needs: [lint, rust-lint, test, rust-test, daf-core-contract, power-of-ten]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

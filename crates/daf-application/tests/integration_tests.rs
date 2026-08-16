@@ -3,13 +3,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use daf_application::DataAccess;
+use daf_application::DataAccessFactory;
 use daf_cache::MemoryCache;
 use daf_core::{
     AuthorizationError, Authorizer, DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo,
-    Repository, ResourceId, UserId,
+    Repository, ResourceId, Tier, UserId,
 };
 use daf_repository::MemoryRepository;
-use hex;
+use ::hex;
 use sha2::{Digest, Sha256};
 
 struct FakeAuthorizer {
@@ -308,7 +309,7 @@ async fn test_concurrent_mutations_generation_monotonic() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
     let gen = gen_val
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
     assert!(gen >= 2);
 }
@@ -661,7 +662,7 @@ async fn test_authorization_prevents_mutation_side_effects() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
 
     let err = daf
@@ -677,7 +678,7 @@ async fn test_authorization_prevents_mutation_side_effects() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
     assert_eq!(gen_val_before, gen_val_after);
 }
@@ -859,7 +860,7 @@ async fn test_generation_advances_on_post() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
     let gen = gen_val
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
     assert_eq!(gen, 1);
 }
@@ -893,7 +894,7 @@ async fn test_generation_advances_on_put() {
 
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
 
     daf.put(
@@ -908,7 +909,7 @@ async fn test_generation_advances_on_put() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
     assert_eq!(gen_val_after, gen_val_before + 1);
 }
@@ -942,7 +943,7 @@ async fn test_generation_advances_on_delete() {
 
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
 
     daf.delete(
@@ -956,7 +957,7 @@ async fn test_generation_advances_on_delete() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.downcast_ref::<u64>().copied())
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
         .unwrap_or(0);
     assert_eq!(gen_val_after, gen_val_before + 1);
 }
@@ -1025,4 +1026,212 @@ async fn test_query_with_filters_returns_matching_data() {
         .await
         .unwrap();
     assert_eq!(r_filtered.data, Some(JsonValue::Null));
+}
+
+#[tokio::test]
+async fn test_data_access_factory_creates_data_access() {
+    let repo: Arc<dyn daf_core::Repository<JsonValue>> = Arc::new(MemoryRepository::new());
+    let cache: Arc<dyn daf_core::Cache> = Arc::new(MemoryCache::new(1024));
+    let factory = DataAccessFactory::new(repo.clone(), cache.clone(), None, None);
+    let daf = factory.create();
+    let (repo_out, cache_out, algs_out) = daf.get_components();
+    assert!(Arc::ptr_eq(&repo_out, &repo));
+    assert!(Arc::ptr_eq(&cache_out, &cache));
+    assert!(algs_out.is_empty());
+}
+
+#[tokio::test]
+async fn test_post_then_query_returns_fresh_data() {
+    let repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    let cache = Arc::new(MemoryCache::new(1024));
+    let factory = DataAccessFactory::new(repo.clone(), cache.clone(), None, None);
+    let daf = factory.create();
+
+    let post_result = daf
+        .post(
+            PostInfo {
+                resource_type: "user".to_string(),
+                data: HashMap::from([("name".to_string(), JsonValue::String("Alice".to_string()))]),
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let resource_id = post_result.resource_id.unwrap();
+
+    let r1 = daf
+        .query(
+            QueryInfo {
+                resource_id: resource_id.clone(),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(r1.success);
+    assert!(!r1.cache_hit);
+
+    let r2 = daf
+        .query(
+            QueryInfo {
+                resource_id: resource_id.clone(),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(r2.cache_hit);
+
+    daf.put(
+        PutInfo {
+            resource_id: resource_id.clone(),
+            data: HashMap::from([("name".to_string(), JsonValue::String("Bob".to_string()))]),
+        },
+        None,
+    )
+    .await
+    .unwrap();
+
+    let r3 = daf
+        .query(
+            QueryInfo {
+                resource_id,
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(!r3.cache_hit);
+    assert_eq!(
+        r3.data,
+        Some(JsonValue::Object(
+            [("name".to_string(), JsonValue::String("Bob".to_string()))]
+                .into_iter()
+                .collect()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn test_concurrent_queries_share_cache_hit() {
+    let repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    let cache = Arc::new(MemoryCache::new(1024));
+    let daf1 = DataAccess::new(repo.clone(), cache.clone(), None, None);
+    let daf2 = DataAccess::new(repo.clone(), cache.clone(), None, None);
+
+    save(
+        &repo,
+        "123",
+        HashMap::from([("name".to_string(), JsonValue::String("John".to_string()))]),
+    )
+    .await;
+
+    let r1 = daf1
+        .query(
+            QueryInfo {
+                resource_id: ResourceId::new("123"),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(!r1.cache_hit);
+
+    let r2 = daf2
+        .query(
+            QueryInfo {
+                resource_id: ResourceId::new("123"),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(r2.cache_hit);
+}
+
+#[tokio::test]
+async fn test_generation_missing_initializes_to_zero_on_miss() {
+    let repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    let cache = Arc::new(MemoryCache::new(1024));
+    let factory = DataAccessFactory::new(repo.clone(), cache.clone(), None, None);
+    let daf = factory.create();
+
+    save(
+        &repo,
+        "123",
+        HashMap::from([("name".to_string(), JsonValue::String("John".to_string()))]),
+    )
+    .await;
+
+    let r = daf
+        .query(
+            QueryInfo {
+                resource_id: ResourceId::new("123"),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(r.success);
+    assert!(!r.cache_hit);
+
+    let namespace = hex::encode(Sha256::digest("123"));
+    let gen_key = format!("_daf_gen:{namespace}");
+    let gen_val = cache.get(&gen_key).await.unwrap();
+    let gen = gen_val
+        .and_then(|v| v.value.downcast_ref::<u64>().copied())
+        .unwrap_or(0);
+    assert_eq!(gen, 0);
+}
+
+#[tokio::test]
+async fn test_cache_entry_tier_l1_on_set() {
+    let cache = Arc::new(MemoryCache::new(1024));
+    cache.set("k".to_string(), Arc::new("v")).await.unwrap();
+    let entry = cache.get("k").await.unwrap();
+    assert_eq!(entry.unwrap().tier, Tier::L1);
+}
+
+#[tokio::test]
+async fn test_cache_entry_tier_from_hierarchical() {
+    let repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    let l1 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l2 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l3 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l4 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let hierarchical = Arc::new(daf_cache::HierarchicalCache::new(l1, l2, l3, l4));
+
+    let daf = DataAccessFactory::new(repo.clone(), hierarchical, None, None).create();
+
+    save(
+        &repo,
+        "123",
+        HashMap::from([("name".to_string(), JsonValue::String("John".to_string()))]),
+    )
+    .await;
+
+    let r = daf
+        .query(
+            QueryInfo {
+                resource_id: ResourceId::new("123"),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(r.success);
 }

@@ -25,10 +25,16 @@
   ```
 
 ### Test Coverage
-- ✅ **pytest**: 50/50 tests passing
+- ✅ **pytest**: 212/212 tests passing
   ```bash
   cd /workspaces/theDAF && uv run pytest tests/ -q
-  # Result: 50 passed, 26 warnings (external deps only)
+  # Result: 212 passed
+  ```
+
+- ✅ **cargo test**: 71/71 tests passing
+  ```bash
+  cd /workspaces/theDAF && cargo test --workspace
+  # Result: 71 passed (17 contract + 15 traversal + 8 fibonacci + 31 integration)
   ```
 
 ---

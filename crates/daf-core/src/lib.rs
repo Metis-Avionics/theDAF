@@ -8,6 +8,20 @@ use thiserror::Error;
 
 pub type JsonValue = serde_json::Value;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tier {
+    L1,
+    L2,
+    L3,
+    L4,
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheEntry {
+    pub value: Arc<dyn Any + Send + Sync>,
+    pub tier: Tier,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ResourceId(pub String);
@@ -240,7 +254,7 @@ pub trait Repository<T>: Send + Sync {
 
 #[async_trait]
 pub trait Cache: Send + Sync {
-    async fn get(&self, key: &str) -> Result<Option<Arc<dyn Any + Send + Sync>>, CacheError>;
+    async fn get(&self, key: &str) -> Result<Option<CacheEntry>, CacheError>;
     async fn set(&self, key: String, value: Arc<dyn Any + Send + Sync>) -> Result<(), CacheError>;
     async fn delete(&self, key: &str) -> Result<(), CacheError>;
     async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError>;

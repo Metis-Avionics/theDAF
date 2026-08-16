@@ -5,3 +5,9 @@ impl Messaging {
         Self
     }
 }
+
+impl Default for Messaging {
+    fn default() -> Self {
+        Self::new()
+    }
+}

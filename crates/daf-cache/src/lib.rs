@@ -4,15 +4,23 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub mod hierarchical;
+pub mod moka;
+pub mod postgres;
+pub mod redis;
 pub mod trie;
 
+pub use crate::hierarchical::HierarchicalCache;
+pub use crate::moka::MokaCache;
+pub use crate::postgres::PostgresCache;
+pub use crate::redis::RedisCache;
 pub use crate::trie::{
     astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete, trie_delete_prefix,
     trie_insert, AStarEntry, TrieNode,
 };
 
 use async_trait::async_trait;
-use daf_core::CacheError;
+use daf_core::{CacheEntry, CacheError, Tier};
 
 #[derive(Debug, Clone)]
 pub struct MemoryCache {
@@ -21,7 +29,7 @@ pub struct MemoryCache {
 
 #[derive(Debug)]
 struct MemoryCacheInner {
-    cache: HashMap<String, Arc<dyn Any + Send + Sync>>,
+    cache: HashMap<String, CacheEntry>,
     lru: lru::LruCache<String, ()>,
     trie: TrieNode,
     max_size: usize,
@@ -44,13 +52,13 @@ impl MemoryCache {
         }
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<Arc<dyn Any + Send + Sync>>, CacheError> {
+    pub async fn get(&self, key: &str) -> Result<Option<CacheEntry>, CacheError> {
         let mut inner = self.inner.write().await;
-        if let Some(value) = inner.cache.get(key).cloned() {
+        if let Some(entry) = inner.cache.get(key).cloned() {
             if inner.max_size > 0 {
                 inner.lru.promote(key);
             }
-            return Ok(Some(value));
+            return Ok(Some(entry));
         }
         Ok(None)
     }
@@ -61,6 +69,10 @@ impl MemoryCache {
         value: Arc<dyn Any + Send + Sync>,
     ) -> Result<(), CacheError> {
         let mut inner = self.inner.write().await;
+        let entry = CacheEntry {
+            value,
+            tier: Tier::L1,
+        };
         if inner.cache.contains_key(&key) {
             if inner.max_size > 0 {
                 inner.lru.promote(&key);
@@ -73,7 +85,7 @@ impl MemoryCache {
                 inner.lru.put(key.clone(), ());
             }
         }
-        inner.cache.insert(key.clone(), value);
+        inner.cache.insert(key.clone(), entry);
         trie_insert(&mut inner.trie, &key);
         Ok(())
     }
@@ -162,7 +174,7 @@ impl MemoryCache {
 
 #[async_trait]
 impl daf_core::Cache for MemoryCache {
-    async fn get(&self, key: &str) -> Result<Option<Arc<dyn Any + Send + Sync>>, CacheError> {
+    async fn get(&self, key: &str) -> Result<Option<CacheEntry>, CacheError> {
         MemoryCache::get(self, key).await
     }
 

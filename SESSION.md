@@ -992,3 +992,72 @@ Each session entry should include:
 - `ResourceMemo` LRU eviction uses `OrderedDict.move_to_end` on access and `popitem(last=False)` to evict the LRU entry
 - `_validate_graph_schema` now fails closed on non-dict roots (arrays, strings, numbers, null)
 - ARG005 fix: `factory=lambda _: asyncio.Lock()` silences the unused-argument warning
+
+---
+
+## Session 015 - 2026-08-16
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `9c60c3c` on branch `main`; PR #18 merged previously. Tier-aware cache hierarchy, parity tests, and Rust implementation gap remains per plan `.kilo/plans/1786878953567-tier-aware-cache-and-parity.md`.
+
+**Actions Taken**:
+- Task 1: Added `Tier` enum (`L1`–`L4`) and `CacheEntry` struct to `daf-core`; updated `Cache::get` return type to `Option<CacheEntry>`; updated `MemoryCache` to wrap values with `Tier::L1`; added `MokaCache` (L2), `RedisCache` (L3 stub), `PostgresCache` (L4 stub), `HierarchicalCache` (L1→L2→L3→L4); updated `daf-application` to unwrap `CacheEntry.value`
+- Task 2: Added `DataAccessFactory` to `daf-application` with `new()` and `create()` methods
+- Task 3: Updated `MemoryRepository` equality to use `PartialEq` directly when available, falling back to JSON serialization for non-`PartialEq` types
+- Task 4: Added `tests/unit/test_rust_parity.py` with contract round-trip, trie traversal, Fibonacci parity, generation advancement, and cache invalidation tests
+- Task 5: Updated `.github/workflows/ci.yml` with `rust-lint`, `rust-test`, `daf-core-contract`, and `parity` jobs
+- Task 6: Extended Rust tests: `daf-core/tests/contract_tests.rs` (+4), `daf-cache/tests/traversal_tests.rs` (+3), `daf-algorithms/tests/fibonacci_tests.rs` (+2), `daf-application/tests/integration_tests.rs` (+5), added `daf-application/tests/factory_tests.rs` (+2)
+- Task 7: Added `daf-core-contract` CI job for early field-drift detection
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| crates/daf-core/src/lib.rs | Modified | Added `Tier`, `CacheEntry`; updated `Cache::get` return type |
+| crates/daf-cache/src/lib.rs | Modified | Updated `MemoryCache` to use `CacheEntry` with `Tier::L1` |
+| crates/daf-cache/src/moka.rs | Created | L2 `MokaCache` backend |
+| crates/daf-cache/src/redis.rs | Created | L3 `RedisCache` stub (feature-gated) |
+| crates/daf-cache/src/postgres.rs | Created | L4 `PostgresCache` stub (feature-gated) |
+| crates/daf-cache/src/hierarchical.rs | Created | L1→L2→L3→L4 miss propagation |
+| crates/daf-cache/Cargo.toml | Modified | Added `moka`, `redis`, `postgres` optional deps |
+| crates/daf-application/src/lib.rs | Modified | Added `DataAccessFactory`; unwrap `CacheEntry.value` |
+| crates/daf-repository/src/memory.rs | Modified | `PartialEq` fast path with JSON fallback |
+| crates/daf-application/tests/integration_tests.rs | Modified | +5 tests: factory, post-then-query, concurrent queries, generation missing, hierarchical |
+| crates/daf-application/tests/factory_tests.rs | Created | 2 factory tests |
+| crates/daf-core/tests/contract_tests.rs | Modified | +4 serde round-trip tests |
+| crates/daf-cache/tests/traversal_tests.rs | Modified | +3 CacheEntry/prefix/shake tests |
+| crates/daf-algorithms/tests/fibonacci_tests.rs | Modified | +2 Arc<i64> and multi-execute stats tests |
+| tests/unit/test_rust_parity.py | Created | 20 Python parity tests |
+| .github/workflows/ci.yml | Modified | Added rust-lint, rust-test, daf-core-contract, parity jobs |
+| Cargo.lock | Modified | Added moka, redis, sqlx dependencies |
+
+### Project Status
+
+- **Branch**: `main` (local commit `9c60c3c` + uncommitted parity work)
+- **Version**: 0.2.1
+- **Python Tests**: 212/212 passing
+- **Rust Tests**: 71/71 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Clippy**: `cargo clippy --workspace --all-targets --all-features -- -D warnings` passes
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes matching previous plan patterns
+- [ ] Push to feature branch and open PR
+- [ ] Request adversarial review on PR
+
+### Notes
+
+- `CacheEntry` wrapping is internal; `Cache::get` is the only public API change
+- `HierarchicalCache` propagates `delete`, `delete_prefix`, `clear` to all tiers; `shake` sums counts
+- `MokaCache` supports `delete_prefix` and `shake` only for empty prefix (full invalidation)
+- `RedisCache` / `PostgresCache` return `CacheError` unless their respective Cargo features are enabled
+- `DataAccessFactory` mirrors Python exactly: store deps, single `create()` method
+- `MemoryRepository::values_equal` uses `PartialEq` when `T: PartialEq`, JSON fallback otherwise
+- Python parity tests run against existing Python implementation; Rust parity tests added alongside existing Rust tests
+

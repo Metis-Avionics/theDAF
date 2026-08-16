@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-16
+
+### Added
+
+- Tier-aware cache hierarchy: `Tier` enum (`L1`–`L4`), `CacheEntry` struct with `value` and `tier` fields
+- `Cache::get` returns `Option<CacheEntry>` instead of `Option<Arc<dyn Any>>`
+- `MokaCache` L2 backend wrapping `moka::future::Cache` with `Tier::L2`
+- `RedisCache` L3 stub (feature-gated behind `redis` Cargo feature)
+- `PostgresCache` L4 stub (feature-gated behind `postgres` Cargo feature)
+- `HierarchicalCache` with L1→L2→L3→L4 miss propagation; `set` writes to L1 only
+- `DataAccessFactory` in `daf-application` with `new()` and `create()` methods
+- `MemoryRepository::values_equal` uses `PartialEq` directly when `T: PartialEq`, JSON fallback otherwise
+- Python parity tests: `tests/unit/test_rust_parity.py` with 20 tests (contract round-trip, trie traversal, Fibonacci parity, generation advancement, cache invalidation)
+- Rust contract tests: `AlgorithmStats` serde round-trip, `Generation::Missing`/`Valid` round-trip, `QueryInfo` empty defaults
+- Rust traversal tests: `CacheEntry` round-trip with `Tier::L1`, `delete_prefix` integration, `shake` count
+- Rust fibonacci tests: `Arc<i64>` input, multi-execute stats tests
+- Rust integration tests: factory creation, post-then-query, concurrent queries, generation missing init, hierarchical cache
+- `daf-application/tests/factory_tests.rs` with 2 tests
+- CI jobs: `rust-lint`, `rust-test`, `daf-core-contract`, `parity`
+
+### Changed
+
+- `MemoryCache` wraps stored values in `CacheEntry { value, tier: Tier::L1 }`
+- `DataAccess` unwraps `CacheEntry.value` for generation and cache operations
+- `daf-cache/Cargo.toml` adds optional `moka`, `redis`, `postgres` dependencies
+- `daf-core/src/lib.rs` adds `Tier`, `CacheEntry` types
+- `.github/workflows/ci.yml` `build` job depends on new Rust jobs
+
+### Security
+
+- `PartialEq` fast path in `MemoryRepository` preserves existing CAS semantics; JSON fallback maintains compatibility for non-`PartialEq` types
+- `HierarchicalCache` miss propagation does not bypass authorization; `DataAccess` handles auth independently per tier
+
 ## [Unreleased]
 
 ### Added

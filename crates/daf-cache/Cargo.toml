@@ -12,3 +12,20 @@ thiserror.workspace = true
 lru.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+moka = { version = "0.12", features = ["future"] }
+
+[features]
+redis = ["dep:redis"]
+postgres = ["dep:sqlx"]
+
+[dependencies.redis]
+version = "0.27"
+optional = true
+default-features = false
+features = ["tokio-comp", "connection-manager"]
+
+[dependencies.sqlx]
+version = "0.8"
+optional = true
+default-features = false
+features = ["runtime-tokio", "postgres"]

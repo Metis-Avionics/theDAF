@@ -1,4 +1,4 @@
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(clippy::not_unsafe_ptr_arg_deref, static_mut_refs)]
 
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};

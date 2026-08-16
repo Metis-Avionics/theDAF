@@ -9,7 +9,9 @@ pub struct MemoryRepository<T> {
     store: Arc<tokio::sync::RwLock<HashMap<String, T>>>,
 }
 
-impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug> MemoryRepository<T> {
+impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug + PartialEq>
+    MemoryRepository<T>
+{
     pub fn new() -> Self {
         Self {
             store: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
@@ -18,8 +20,8 @@ impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug> Memo
 }
 
 #[async_trait::async_trait]
-impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug> Repository<T>
-    for MemoryRepository<T>
+impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug + PartialEq>
+    Repository<T> for MemoryRepository<T>
 {
     async fn get(&self, key: &ResourceId) -> Result<Option<Arc<T>>, RepositoryError> {
         let store = self.store.read().await;
@@ -40,7 +42,7 @@ impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug> Repo
     }
 
     async fn create(&self, value: T) -> Result<ResourceId, RepositoryError> {
-        let resource_id = ResourceId::new(ulid::Ulid::generate().to_string());
+        let resource_id = ResourceId::new(::ulid::Ulid::generate().to_string());
         let mut store = self.store.write().await;
         store.insert(resource_id.0.clone(), value);
         Ok(resource_id)
@@ -83,13 +85,10 @@ impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug> Repo
     }
 }
 
-impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug> MemoryRepository<T> {
+impl<T: Clone + Send + Sync + 'static + serde::Serialize + std::fmt::Debug + PartialEq>
+    MemoryRepository<T>
+{
     fn values_equal(a: &T, b: &T) -> bool {
-        if let (Some(a_json), Some(b_json)) =
-            (serde_json::to_value(a).ok(), serde_json::to_value(b).ok())
-        {
-            return a_json == b_json;
-        }
-        format!("{:?}", a) == format!("{:?}", b)
+        a == b
     }
 }

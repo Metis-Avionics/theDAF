@@ -63,6 +63,7 @@ impl DataAccess {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn get_components(
         &self,
     ) -> (
@@ -136,9 +137,10 @@ impl DataAccess {
         let _guard = lock.lock().await;
         let namespace = self.resource_namespace(resource_id);
         let key = format!("_daf_gen:{namespace}");
-        let value = self.cache.get(&key).await?;
-        match value {
-            Some(v) => v
+        let entry = self.cache.get(&key).await?;
+        match entry {
+            Some(e) => e
+                .value
                 .downcast_ref::<u64>()
                 .copied()
                 .ok_or(DataAccessError::GenerationKeyError),
@@ -152,7 +154,7 @@ impl DataAccess {
         let namespace = self.resource_namespace(resource_id);
         let key = format!("_daf_gen:{namespace}");
         let current = match self.cache.get(&key).await? {
-            Some(v) => v.downcast_ref::<u64>().copied(),
+            Some(e) => e.value.downcast_ref::<u64>().copied(),
             None => None,
         };
         let next = current.unwrap_or(0) + 1;
@@ -166,7 +168,7 @@ impl DataAccess {
         let namespace = self.resource_namespace(resource_id);
         let gen_key = format!("_daf_gen:{namespace}");
         let current = match self.cache.get(&gen_key).await? {
-            Some(v) => v.downcast_ref::<u64>().copied(),
+            Some(e) => e.value.downcast_ref::<u64>().copied(),
             None => None,
         };
         self.cache
@@ -240,12 +242,12 @@ impl DataAccess {
             (JsonValue::Null, None)
         };
 
-        let cache_entry = serde_json::json!({
+        let cache_value = serde_json::json!({
             "raw": raw_data,
             "transformed": final_data.clone(),
             "generation": current_generation,
         });
-        self.cache.set(cache_key, Arc::new(cache_entry)).await?;
+        self.cache.set(cache_key, Arc::new(cache_value)).await?;
 
         Ok(QueryResult {
             success: true,
@@ -301,10 +303,10 @@ impl DataAccess {
         let user_id = self.user_id(user);
         let cache_key = self.cache_key(&info, &user_id);
 
-        let cached = self.cache.get(&cache_key).await?;
-        if let Some(cached_any) = cached {
+        let entry = self.cache.get(&cache_key).await?;
+        if let Some(cached_entry) = entry {
             if let Ok(current_gen) = self._current_generation(&info.resource_id.0).await {
-                if let Some(cached_value) = cached_any.downcast_ref::<serde_json::Value>() {
+                if let Some(cached_value) = cached_entry.value.downcast_ref::<serde_json::Value>() {
                     if let Some(cached_map) = cached_value.as_object() {
                         let cached_gen = cached_map.get("generation").and_then(|g| g.as_u64());
                         if cached_gen == Some(current_gen) {
@@ -474,5 +476,37 @@ impl DataAccess {
             error_type: None,
             timestamp: Utc::now(),
         })
+    }
+}
+
+pub struct DataAccessFactory {
+    repository: Arc<dyn Repository<JsonValue>>,
+    cache: Arc<dyn Cache>,
+    algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
+    authorizer: Option<Arc<dyn Authorizer>>,
+}
+
+impl DataAccessFactory {
+    pub fn new(
+        repository: Arc<dyn Repository<JsonValue>>,
+        cache: Arc<dyn Cache>,
+        algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
+        authorizer: Option<Arc<dyn Authorizer>>,
+    ) -> Self {
+        Self {
+            repository,
+            cache,
+            algorithms,
+            authorizer,
+        }
+    }
+
+    pub fn create(self) -> DataAccess {
+        DataAccess::new(
+            self.repository,
+            self.cache,
+            self.algorithms,
+            self.authorizer,
+        )
     }
 }

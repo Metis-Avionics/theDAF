@@ -226,3 +226,24 @@ The built-in authorizer is a simple ownership check (`owner_id == user.id`). It 
 ### Rust FFI Safety
 
 `daf-ffi` uses `extern "C"` with opaque pointers. Callers must not free returned pointers; the FFI layer owns all allocations. Error codes are `i32`; a return value of `0` indicates success, non-zero indicates failure.
+
+### Tier-Aware Cache Hierarchy
+
+The Rust backend implements a tier-aware cache hierarchy:
+
+- **L1**: `MemoryCache` (in-process, fastest, bounded by `max_size`)
+- **L2**: `MokaCache` (optional, thread-local, bounded by `max_capacity`)
+- **L3**: `RedisCache` (optional, remote, feature-gated)
+- **L4**: `PostgresCache` (optional, persistent, feature-gated)
+
+`HierarchicalCache` propagates `get` misses down the hierarchy and `set` writes to L1 only (write-through policy). `delete`, `delete_prefix`, and `clear` propagate to all tiers. `shake` sums removed counts across all tiers.
+
+The `Cache::get` return type changed from `Option<Arc<dyn Any>>` to `Option<CacheEntry>` where `CacheEntry { value, tier }` carries the originating tier. This is an internal API change; `DataAccess` unwraps `CacheEntry.value` transparently.
+
+### Cache Backend Feature Gates
+
+`RedisCache` and `PostgresCache` are optional and return `CacheError` unless their respective Cargo features (`redis`, `postgres`) are enabled. Do not enable these features in environments where the corresponding services are not configured, as missing dependencies will cause runtime errors rather than graceful fallbacks.
+
+### PartialEq CAS Semantics
+
+`MemoryRepository::try_update` and `try_delete` now use `PartialEq` directly when `T: PartialEq`, falling back to JSON serialization only when `T` does not implement `PartialEq`. This preserves existing semantics for `JsonValue` (which implements `PartialEq`) while maintaining compatibility for custom types that only implement `Serialize`.
