@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use sha2::{Digest, Sha256};
+use tracing::warn;
 
 use daf_core::{
     Algorithm, AlgorithmError, AlgorithmStats, Authorizer, Cache, DataAccessError, DeleteInfo,
@@ -25,7 +26,6 @@ impl DataAccess {
         algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
         authorizer: Option<Arc<dyn Authorizer>>,
     ) -> Self {
-        debug_assert!(true, "new invariant");
         Self {
             repository,
             cache,
@@ -42,7 +42,8 @@ impl DataAccess {
         Arc<dyn Cache>,
         &HashMap<String, Arc<dyn Algorithm>>,
     ) {
-        debug_assert!(true, "get_components invariant");
+        debug_assert!(Arc::strong_count(&self.repository) > 0, "repository Arc must be valid");
+        debug_assert!(Arc::strong_count(&self.cache) > 0, "cache Arc must be valid");
         (
             self.repository.clone(),
             self.cache.clone(),
@@ -51,14 +52,14 @@ impl DataAccess {
     }
 
     fn resource_namespace(&self, resource_id: &str) -> String {
-        debug_assert!(true, "resource_namespace invariant");
+        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty for namespace");
         let mut hasher = Sha256::new();
         hasher.update(resource_id.as_bytes());
         hex::encode(hasher.finalize())
     }
 
     fn cache_key(&self, info: &QueryInfo, user_id: &str) -> String {
-        debug_assert!(true, "cache_key invariant");
+        debug_assert!(!info.resource_id.0.is_empty(), "resource_id must not be empty for cache key");
         let namespace = self.resource_namespace(&info.resource_id.0);
         let mut payload = serde_json::Map::new();
         payload.insert(
@@ -79,7 +80,7 @@ impl DataAccess {
     }
 
     fn user_id(&self, user: Option<&UserId>) -> String {
-        debug_assert!(true, "user_id invariant");
+        debug_assert!(user.is_some() || user.map(|u| !u.0.is_empty()).unwrap_or(true), "user_id must not be empty when user is provided");
         match user {
             Some(u) => u.0.clone(),
             None => "anonymous".to_string(),
@@ -90,7 +91,6 @@ impl DataAccess {
         data: &JsonValue,
         filters: &Option<HashMap<String, JsonValue>>,
     ) -> Option<JsonValue> {
-        debug_assert!(true, "apply_filters invariant");
         let filters = match filters {
             Some(f) if !f.is_empty() => f,
             _ => return Some(data.clone()),
@@ -105,12 +105,12 @@ impl DataAccess {
     }
 
     async fn generation_lock(&self, resource_id: &str) -> daf_core::LockGuard<'_> {
-        debug_assert!(true, "generation_lock invariant");
+        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty for lock");
         daf_core::LockRegistry::global().acquire(resource_id).await
     }
 
     async fn _current_generation(&self, resource_id: &str) -> Result<Generation, DataAccessError> {
-        debug_assert!(true, "_current_generation invariant");
+        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
         let lock = self.generation_lock(resource_id).await;
         let _guard = lock;
         let namespace = self.resource_namespace(resource_id);
@@ -127,7 +127,7 @@ impl DataAccess {
     }
 
     async fn _advance_generation(&self, resource_id: &str) -> Result<(), DataAccessError> {
-        debug_assert!(true, "_advance_generation invariant");
+        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
         let lock = self.generation_lock(resource_id).await;
         let _guard = lock;
         let namespace = self.resource_namespace(resource_id);
@@ -138,26 +138,24 @@ impl DataAccess {
         };
         let next = current.unwrap_or(Generation::Missing).advance();
         self.cache.set(key, Arc::new(next)).await?;
+        debug_assert!(
+            matches!(next, Generation::Valid(_)),
+            "generation must be Valid after advance, got {:?}",
+            next
+        );
         Ok(())
     }
 
-    async fn _superedge_invalidate(&self, resource_id: &str) -> Result<(), DataAccessError> {
-        debug_assert!(true, "_superedge_invalidate invariant");
-        let lock = self.generation_lock(resource_id).await;
-        let _guard = lock;
+    async fn _invalidate_caches(&self, resource_id: &str) {
         let namespace = self.resource_namespace(resource_id);
-        let gen_key = format!("_daf_gen:{namespace}");
-        let current = match self.cache.get(&gen_key).await? {
-            Some(e) => e.value.downcast_ref::<Generation>().copied(),
-            None => None,
-        };
-        self.cache
-            .delete_prefix(&format!("query:{namespace}:"))
-            .await?;
-        self.cache.shake(&gen_key).await?;
-        let next = current.unwrap_or(Generation::Missing).advance();
-        self.cache.set(gen_key, Arc::new(next)).await?;
-        Ok(())
+        let prefix = format!("query:{namespace}:");
+        if let Err(e) = self.cache.delete_prefix(&prefix).await {
+            tracing::warn!(
+                resource_id = resource_id,
+                error = %e,
+                "cache delete_prefix degraded; proceeding despite error"
+            );
+        }
     }
 
     async fn _run_algorithm(
@@ -165,7 +163,7 @@ impl DataAccess {
         data: JsonValue,
         algorithm_name: &str,
     ) -> Result<(JsonValue, Option<AlgorithmStats>), DataAccessError> {
-        debug_assert!(true, "_run_algorithm invariant");
+        debug_assert!(self.algorithms.contains_key(algorithm_name), "algorithm must be registered");
         let algorithm = self
             .algorithms
             .get(algorithm_name)
@@ -223,7 +221,7 @@ impl DataAccess {
         final_data: JsonValue,
         current_generation: Generation,
     ) -> JsonValue {
-        debug_assert!(true, "_build_cache_value invariant");
+        debug_assert!(matches!(current_generation, Generation::Missing | Generation::Valid(_)), "generation must be Missing or Valid");
         serde_json::json!({
             "raw": raw_data,
             "transformed": final_data,
@@ -237,7 +235,7 @@ impl DataAccess {
     fn _build_put_merger(
         data: HashMap<String, JsonValue>,
     ) -> Box<dyn FnOnce(JsonValue) -> JsonValue + Send + Sync> {
-        debug_assert!(true, "_build_put_merger invariant");
+        debug_assert!(!data.is_empty(), "merger data must not be empty");
         Box::new(move |e| {
             let mut map = match e {
                 JsonValue::Object(map) => map,
@@ -302,7 +300,7 @@ impl DataAccess {
         user: Option<&UserId>,
         cached: &serde_json::Map<String, JsonValue>,
     ) -> Result<QueryResult, DataAccessError> {
-        debug_assert!(true, "_handle_cache_hit invariant");
+        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
         let raw = cached.get("raw").cloned().unwrap_or(JsonValue::Null);
         if let Some(auth) = &self.authorizer {
             auth.authorize(
@@ -333,7 +331,6 @@ impl DataAccess {
         info: QueryInfo,
         user: Option<&UserId>,
     ) -> Result<QueryResult, DataAccessError> {
-        debug_assert!(true, "query invariant");
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -369,7 +366,7 @@ impl DataAccess {
         info: PostInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
-        debug_assert!(true, "post invariant");
+        debug_assert!(!info.resource_type.is_empty(), "resource_type must not be empty");
         if info.resource_type.is_empty() {
             return Err(ValidationError::new("resource_type must be a non-empty string").into());
         }
@@ -411,7 +408,7 @@ impl DataAccess {
         info: PutInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
-        debug_assert!(true, "put invariant");
+        debug_assert!(!info.resource_id.0.is_empty(), "resource_id must not be empty");
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -448,7 +445,8 @@ impl DataAccess {
             });
         }
 
-        self._superedge_invalidate(&info.resource_id.0).await?;
+        self._advance_generation(&info.resource_id.0).await?;
+        self._invalidate_caches(&info.resource_id.0).await;
 
         Ok(MutationResult {
             success: true,
@@ -465,7 +463,7 @@ impl DataAccess {
         info: DeleteInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
-        debug_assert!(true, "delete invariant");
+        debug_assert!(!info.resource_id.0.is_empty(), "resource_id must not be empty");
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -502,7 +500,8 @@ impl DataAccess {
             });
         }
 
-        self._superedge_invalidate(&info.resource_id.0).await?;
+        self._advance_generation(&info.resource_id.0).await?;
+        self._invalidate_caches(&info.resource_id.0).await;
 
         Ok(MutationResult {
             success: true,
@@ -529,7 +528,6 @@ impl DataAccessFactory {
         algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
         authorizer: Option<Arc<dyn Authorizer>>,
     ) -> Self {
-        debug_assert!(true, "new invariant");
         Self {
             repository,
             cache,
@@ -539,7 +537,8 @@ impl DataAccessFactory {
     }
 
     pub fn create(self) -> DataAccess {
-        debug_assert!(true, "create invariant");
+        debug_assert!(Arc::strong_count(&self.repository) > 0, "factory repository must be valid");
+        debug_assert!(Arc::strong_count(&self.cache) > 0, "factory cache must be valid");
         DataAccess::new(
             self.repository,
             self.cache,

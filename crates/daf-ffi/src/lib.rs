@@ -1,7 +1,6 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref, clippy::assertions_on_constants)]
 
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::panic;
@@ -20,28 +19,30 @@ thread_local! {
     static LAST_ERROR: std::cell::RefCell<Option<CString>> = const { std::cell::RefCell::new(None) };
 }
 
-static LIVE_HANDLES: OnceLock<Mutex<HashSet<usize>>> = OnceLock::new();
+static LIVE_HANDLES: OnceLock<Mutex<HashMap<usize, u64>>> = OnceLock::new();
 
-fn live_handles() -> &'static Mutex<HashSet<usize>> {
-    debug_assert!(true, "live_handles invariant");
-    LIVE_HANDLES.get_or_init(|| Mutex::new(HashSet::new()))
+fn live_handles() -> &'static Mutex<HashMap<usize, u64>> {
+    let handles = LIVE_HANDLES.get_or_init(|| Mutex::new(HashMap::new()));
+    debug_assert!(!handles.is_poisoned(), "LIVE_HANDLES mutex must not be poisoned");
+    handles
 }
 
 fn set_last_error(msg: &str) {
-    debug_assert!(true, "set_last_error invariant");
+    debug_assert!(!msg.is_empty(), "error message must not be empty");
     LAST_ERROR.with(|slot| {
         *slot.borrow_mut() = Some(CString::new(msg).unwrap());
     });
 }
 
 fn clear_last_error() {
-    debug_assert!(true, "clear_last_error invariant");
+    debug_assert!(LAST_ERROR.with(|s| s.borrow().is_none()), "LAST_ERROR already set before clear");
     LAST_ERROR.with(|slot| {
         *slot.borrow_mut() = None;
     });
 }
 
 #[repr(C)]
+#[derive(PartialEq)]
 pub enum DafErrorCode {
     Ok = 0,
     InvalidArgument = 1,
@@ -52,19 +53,20 @@ pub enum DafErrorCode {
 }
 
 fn map_data_access_error(err: DataAccessError) -> DafErrorCode {
-    debug_assert!(true, "map_data_access_error invariant");
-    match err {
+    let code = match err {
         DataAccessError::NotFound(_) => DafErrorCode::NotFound,
         DataAccessError::Authorization(_) => DafErrorCode::AuthorizationFailed,
         DataAccessError::Validation(_) => DafErrorCode::ValidationFailed,
         _ => DafErrorCode::InternalError,
-    }
+    };
+    debug_assert!(code != DafErrorCode::InternalError || !matches!(err, DataAccessError::NotFound(_) | DataAccessError::Authorization(_) | DataAccessError::Validation(_)), "known error variant must not map to InternalError");
+    code
 }
 
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 fn runtime() -> &'static tokio::runtime::Runtime {
-    debug_assert!(true, "runtime invariant");
+    debug_assert!(RUNTIME.get().is_some(), "tokio runtime not initialised");
     RUNTIME.get_or_init(|| tokio::runtime::Runtime::new().expect("failed to create tokio runtime"))
 }
 
@@ -72,12 +74,12 @@ fn block_on<F>(f: F) -> F::Output
 where
     F: std::future::Future,
 {
-    debug_assert!(true, "block_on invariant");
+    debug_assert!(RUNTIME.get().is_some(), "tokio runtime not initialised");
     runtime().block_on(f)
 }
 
 fn validate_utf8_cstr(ptr: *const c_char, label: &str) -> Result<&'static str, DataAccessError> {
-    debug_assert!(true, "validate_utf8_cstr invariant");
+    debug_assert!(!ptr.is_null(), "null ptr must be caught before validate_utf8_cstr");
     if ptr.is_null() {
         set_last_error(&format!("null pointer: {label}"));
         return Err(ValidationError::new(format!("null pointer: {label}")).into());
@@ -101,7 +103,7 @@ pub extern "C" fn daf_data_access_new() -> *mut DataAccess {
         );
         let daf = DataAccess::new(repo, cache, Some(algorithms), None);
         let raw = Box::into_raw(Box::new(daf));
-        live_handles().lock().unwrap().insert(raw as usize);
+        live_handles().lock().unwrap().insert(raw as usize, 0);
         raw
     }) {
         Ok(ptr) => ptr,
@@ -119,9 +121,10 @@ pub extern "C" fn daf_data_access_free(ptr: *mut DataAccess) -> c_int {
     }
     let handle = ptr as usize;
     let mut handles = live_handles().lock().unwrap();
-    if !handles.remove(&handle) {
+    if !handles.contains_key(&handle) {
         return DafErrorCode::InvalidArgument as c_int;
     }
+    handles.remove(&handle);
     drop(handles);
     unsafe { drop(Box::from_raw(ptr)) };
     DafErrorCode::Ok as c_int
@@ -131,7 +134,6 @@ fn catch_panic<F, T>(f: F) -> Result<T, DafErrorCode>
 where
     F: FnOnce() -> T,
 {
-    debug_assert!(true, "catch_panic invariant");
     match panic::catch_unwind(panic::AssertUnwindSafe(f)) {
         Ok(v) => Ok(v),
         Err(_) => {

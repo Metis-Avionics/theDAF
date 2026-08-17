@@ -346,6 +346,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -387,6 +388,8 @@ dependencies = [
  "daf-core",
  "daf-repository",
  "libc",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]

@@ -7,7 +7,6 @@ pub struct TrieNode {
 }
 
 pub fn trie_insert(root: &mut TrieNode, key: &str) {
-    debug_assert!(true, "trie_insert invariant");
     debug_assert!(!key.is_empty(), "trie key must not be empty");
     let mut node = root;
     for ch in key.chars() {
@@ -17,7 +16,6 @@ pub fn trie_insert(root: &mut TrieNode, key: &str) {
 }
 
 pub fn trie_delete(root: &mut TrieNode, key: &str) {
-    debug_assert!(true, "trie_delete invariant");
     debug_assert!(!key.is_empty(), "trie key must not be empty");
     let chars: Vec<char> = key.chars().collect();
     if chars.is_empty() {
@@ -38,7 +36,6 @@ pub fn trie_delete(root: &mut TrieNode, key: &str) {
 }
 
 pub fn trie_collect(root: &TrieNode, prefix: &str) -> std::collections::HashSet<String> {
-    debug_assert!(true, "trie_collect invariant");
     debug_assert!(
         !prefix.is_empty() || root.key.is_none(),
         "empty prefix requires root key to be None"
@@ -51,7 +48,6 @@ pub fn trie_collect(root: &TrieNode, prefix: &str) -> std::collections::HashSet<
 }
 
 pub fn trie_delete_prefix(root: &mut TrieNode, prefix: &str) -> std::collections::HashSet<String> {
-    debug_assert!(true, "trie_delete_prefix invariant");
     debug_assert!(
         !prefix.is_empty() || root.key.is_none(),
         "empty prefix requires root key to be None"
@@ -82,7 +78,6 @@ pub fn trie_delete_prefix(root: &mut TrieNode, prefix: &str) -> std::collections
 }
 
 pub fn dfs_collect(node: Option<&TrieNode>) -> std::collections::HashSet<String> {
-    debug_assert!(true, "dfs_collect invariant");
     debug_assert!(node.is_some() || true, "dfs_collect on None is valid");
     let mut result = std::collections::HashSet::new();
     if let Some(node) = node {
@@ -97,7 +92,6 @@ pub fn dfs_collect(node: Option<&TrieNode>) -> std::collections::HashSet<String>
 }
 
 pub fn bfs_collect(root: &TrieNode) -> std::collections::HashSet<String> {
-    debug_assert!(true, "bfs_collect invariant");
     debug_assert!(
         root.key.is_none() || !root.children.is_empty(),
         "bfs root invariant"
@@ -125,7 +119,6 @@ pub struct AStarEntry {
 
 impl Ord for AStarEntry {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        debug_assert!(true, "cmp invariant");
         self.match_len
             .cmp(&other.match_len)
             .then(self.counter.cmp(&other.counter))
@@ -135,13 +128,12 @@ impl Ord for AStarEntry {
 #[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for AStarEntry {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        debug_assert!(true, "partial_cmp invariant");
+        debug_assert!(self.match_len == other.match_len || self.counter != other.counter, "AStarEntry cmp total order");
         Some(self.cmp(other))
     }
 }
 
 pub fn astar_collect(root: &TrieNode, target: &str) -> std::collections::HashSet<String> {
-    debug_assert!(true, "astar_collect invariant");
     debug_assert!(!target.is_empty(), "astar target must not be empty");
     let target_chars: Vec<char> = target.chars().collect();
     let mut best_keys: std::collections::HashSet<String> = std::collections::HashSet::new();

@@ -149,7 +149,7 @@ async fn memory_cache_set_get_round_trip_with_tier() {
     let entry = cache.get("key:1").await.unwrap();
     assert!(entry.is_some());
     let entry = entry.unwrap();
-    assert_eq!(entry.tier, Tier::L1);
+    assert_eq!(entry.origin_tier, Tier::L1);
     assert_eq!(*entry.value.downcast_ref::<i64>().unwrap(), 42);
 }
 

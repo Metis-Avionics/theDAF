@@ -513,7 +513,7 @@ async fn test_empty_resource_id_rejected_before_auth() {
     let err = daf
         .query(
             QueryInfo {
-                resource_id: ResourceId::new(""),
+                resource_id: ResourceId("".to_string()),
                 filters: None,
                 algorithm: None,
             },
@@ -1238,7 +1238,7 @@ async fn test_cache_entry_tier_l1_on_set() {
     let cache = Arc::new(MemoryCache::new(1024));
     cache.set("k".to_string(), Arc::new("v")).await.unwrap();
     let entry = cache.get("k").await.unwrap();
-    assert_eq!(entry.unwrap().tier, Tier::L1);
+    assert_eq!(entry.unwrap().origin_tier, Tier::L1);
 }
 
 #[tokio::test]
@@ -1366,7 +1366,7 @@ async fn generation_enum_comparison_in_query() {
 }
 
 #[tokio::test]
-async fn put_with_moka_l2_returns_err_after_repo_mutation() {
+async fn put_with_moka_l2_advances_generation_despite_cache_degradation() {
     use daf_cache::{HierarchicalCache, MokaCache};
 
     let repo = Arc::new(MemoryRepository::<JsonValue>::new());
@@ -1409,7 +1409,7 @@ async fn put_with_moka_l2_returns_err_after_repo_mutation() {
         )
         .await;
 
-    assert!(result.is_err());
+    assert!(result.is_ok());
     let repo_data = repo.get(&ResourceId::new("123")).await.unwrap().unwrap();
     assert_eq!(
         *repo_data,

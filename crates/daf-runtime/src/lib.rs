@@ -1,5 +1,8 @@
 #![allow(clippy::assertions_on_constants)]
+use std::sync::OnceLock;
 use tokio::runtime::Runtime as TokioRuntime;
+
+static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub struct Handle {
@@ -8,7 +11,7 @@ pub struct Handle {
 
 impl Handle {
     pub fn current() -> Self {
-        debug_assert!(true, "current runtime handle created");
+        debug_assert!(RUNTIME.get().is_some(), "tokio runtime not initialised");
         Self {
             inner: tokio::runtime::Handle::current(),
         }
@@ -19,7 +22,7 @@ impl Handle {
         F: std::future::Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        debug_assert!(true, "spawn on runtime handle");
+        debug_assert!(RUNTIME.get().is_some(), "tokio runtime not initialised");
         self.inner.spawn(future);
     }
 }
@@ -31,12 +34,11 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new() -> Result<Self, std::io::Error> {
-        debug_assert!(true, "tokio runtime created");
         TokioRuntime::new().map(|inner| Self { inner })
     }
 
     pub fn handle(&self) -> Handle {
-        debug_assert!(true, "runtime handle requested");
+        debug_assert!(RUNTIME.get().is_some(), "tokio runtime not initialised");
         Handle {
             inner: self.inner.handle().clone(),
         }
@@ -46,7 +48,7 @@ impl Runtime {
     where
         F: std::future::Future,
     {
-        debug_assert!(true, "block_on invoked");
+        debug_assert!(RUNTIME.get().is_some(), "tokio runtime not initialised");
         self.inner.block_on(future)
     }
 }

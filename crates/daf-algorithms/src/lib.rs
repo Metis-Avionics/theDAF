@@ -20,7 +20,6 @@ pub struct FibonacciDP {
 
 impl FibonacciDP {
     pub fn new() -> Self {
-        debug_assert!(true, "new invariant");
         Self {
             state: tokio::sync::Mutex::new(FibonacciState::default()),
         }
@@ -39,6 +38,7 @@ impl FibonacciDP {
             return Ok(n);
         }
 
+        state.iterations += 1;
         let fib_n_minus_1 = Self::compute_fib(state, n - 1)?;
         let fib_n_minus_2 = Self::compute_fib(state, n - 2)?;
         let result = fib_n_minus_1 + fib_n_minus_2;
@@ -50,7 +50,6 @@ impl FibonacciDP {
 
 impl Default for FibonacciDP {
     fn default() -> Self {
-        debug_assert!(true, "default invariant");
         Self::new()
     }
 }
@@ -61,27 +60,28 @@ impl daf_core::Algorithm for FibonacciDP {
         &self,
         input: Arc<dyn Any + Send + Sync>,
     ) -> Result<Arc<dyn Any + Send + Sync>, AlgorithmError> {
-        debug_assert!(true, "execute invariant");
         let n = *input
             .downcast_ref::<i64>()
             .ok_or_else(|| AlgorithmError::new("Expected i64 input for FibonacciDP"))?;
-
+        debug_assert!(n >= 0, "fibonacci input must be non-negative, got {}", n);
         let mut state = self.state.lock().await;
         state.memo.clear();
         state.iterations = 0;
         state.cache_hits = 0;
 
         let result = Self::compute_fib(&mut state, n)?;
+        debug_assert!(result >= 0, "fibonacci result must be non-negative");
         Ok(Arc::new(result))
     }
 
     async fn get_stats(&self) -> Result<AlgorithmStats, AlgorithmError> {
-        debug_assert!(true, "get_stats invariant");
         let state = self.state.lock().await;
-        Ok(AlgorithmStats::new(
+        let stats = AlgorithmStats::new(
             state.iterations,
             state.cache_hits,
             state.memo.len(),
-        ))
+        );
+        debug_assert!(stats.iterations >= stats.cache_hits, "iterations must be >= cache_hits");
+        Ok(stats)
     }
 }

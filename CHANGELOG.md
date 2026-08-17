@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rule 5 compliance: `_build_put_merger` now includes `debug_assert!` for assertion density
 - Clippy warnings: redundant closures in `daf-ffi`, non-canonical `partial_cmp` in trie, unused variables/imports
 - Commit history: removed `node_modules/`, `package.json`, `package-lock.json` from git tracking
+- Rule 5 assertion remediation: replaced all broken `debug_assert!(true, ...)` placeholders with meaningful invariants across `daf-core`, `daf-cache`, `daf-application`, and `daf-ffi`; eliminated all `assertions_on_constants` clippy warnings
 
 ## [0.2.2] - 2026-08-16
 

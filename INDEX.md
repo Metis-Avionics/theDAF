@@ -67,7 +67,18 @@ Linting Issues:  0
 - Protocol/trait methods: 15/15 (100%)
 - DataAccess orchestration: 16/16 (100%)
 - Contracts/types: 6/6 (100%)
-- Behavioral semantics: ~95%
+- Behavioral semantics: differential parity tests in progress (see `tests/unit/test_differential_parity.py`)
+
+### L3/L4 Cache Status
+- RedisCache and PostgresCache are **stub implementations** behind Cargo feature flags (`redis`, `postgres`).
+- All operations return `CacheError::new("redis/postgres feature not enabled")`.
+- Feature compilation (verified by `--all-features clippy`) proves stub compilation, not backend behavior.
+- Only MemoryCache (L1) and MokaCache (L2) have working implementations.
+
+### PR24 Scope
+- PR24 is the **Rust architectural milestone**: translates the Python DAF to Rust across all 9 crates.
+- Components: core traits (`daf-core`), DataAccess orchestration (`daf-application`), cache hierarchy (`daf-cache`), FFI (`daf-ffi`), HTTP runtime (`daf-http`), CI/parity, and Power-of-Ten compliance.
+- The tier-aware cache hierarchy is one component of PR24, not the entire PR.
 
 ---
 
