@@ -1,6 +1,6 @@
-# FastAPI Data Access Factory (DAF)
+# theDAF — Data Access Factory (Python + theDAF-LLVM)
 
-A production-quality Python package that implements a reusable **data-access abstraction layer** with an optional **FastAPI integration**. The architecture cleanly separates data access logic from HTTP transport, enabling the core abstraction to be used in any context (HTTP, MCP, workers, tests, etc.).
+A production-quality **data-access abstraction layer** with a reference implementation in Python (FastAPI) and a standalone, LLVM-backed Rust backend ([theDAF-LLVM](https://github.com/Metis-Avionics/theDAF-LLVM)) exposing a C-compatible ABI for reverse compatibility with Python and other language bindings.
 
 > ⚠️ **Red-team assessment available:** see [BUGS.md](./BUGS.md) and [SECURITY.md](./SECURITY.md).
 
@@ -8,9 +8,9 @@ A production-quality Python package that implements a reusable **data-access abs
 
 ### The Problem
 
-FastAPI applications often conflate three distinct concerns:
+Applications often conflate three distinct concerns:
 
-- **HTTP Transport** – How data arrives and leaves
+- **Transport** – How data arrives and leaves
 - **Data Access** – How data is retrieved, cached, and manipulated
 - **Business Logic** – The computation and validation that governs behavior
 
@@ -18,7 +18,7 @@ This leads to:
 
 - Route handlers bloated with repository logic
 - Cache decisions scattered throughout endpoint code
-- Inability to reuse data access patterns outside HTTP
+- Inability to reuse data access patterns outside transport
 - Testing that requires HTTP clients instead of direct function calls
 - Framework coupling preventing code portability
 
@@ -27,16 +27,113 @@ This leads to:
 DAF separates these concerns into independent layers:
 
 ```
-HTTP Transport (FastAPI)
+Transport (FastAPI / Axum / FFI)
         ↓
-    FastAPI Adapter
+    Adapter
         ↓
     DataAccess Layer
       ↙  ↓  ↘
-Repository  Cache  Algorithm
+ Repository  Cache  Algorithm
 ```
 
-**Key invariant:** The core `DataAccess` layer does not depend on FastAPI, HTTP requests, or any web framework. It's pure Python.
+**Key invariant:** The core `DataAccess` layer does not depend on any transport framework. It is pure logic.
+
+## theDAF-LLVM (Standalone Rust Backend)
+
+`theDAF-LLVM` is a separate repository and crate family. It reimplements the same data-access semantics in Rust with:
+
+- **Ownership-safe concurrency** via Tokio, `Arc`, and `Mutex`
+- **C-compatible ABI** (`extern "C"`, opaque pointers, `i32` error codes) so Python and other hosts can call into the Rust backend without FFI safety hazards
+- **LLVM integration** for compiled query paths and optimized algorithm execution
+- **Reverse compatibility** with the Python contract: `QueryResult`, `MutationResult`, and error envelopes preserve the externally observable shape so existing Python adapters can switch backends without breaking
+
+### theDAF-LLVM crate map
+
+| Crate | Responsibility |
+|-------|----------------|
+| `daf-core` | Traits, errors, contracts (`Repository`, `Cache`, `Algorithm`, `Authorizer`) |
+| `daf-application` | `DataAccess` orchestrator with generation tracking, prefix invalidation, re-auth on cache hit |
+| `daf-cache` | `MemoryCache` with terminal-only prefix trie, LRU eviction, DFS/BFS/A* traversal; `MokaCache` (L2), `RedisCache` (L3 stub), `PostgresCache` (L4 stub), `HierarchicalCache` (L1→L2→L3→L4 miss propagation) |
+| `daf-repository` | `MemoryRepository` with CAS (`try_update` / `try_delete`) |
+| `daf-algorithms` | `FibonacciDP` demonstrating memoization and stats |
+| `daf-runtime` | Tokio runtime configuration |
+| `daf-messaging` | Async message processing |
+| `daf-http` | Axum router translating HTTP to `DataAccess` |
+| `daf-ffi` | C-compatible ABI with opaque pointers and stable error codes |
+
+### Rust invariants enforced by the type system
+
+- `Generation` is an explicit enum (`Missing` / `Valid(u64)`), preventing the Python sentinel-`0` conflation.
+- Cache keys are a pure function of canonical JSON + SHA-256 + user context.
+- `QueryResult` / `MutationResult` carry typed error envelopes while preserving the external `Option<String>` shape for ABI compatibility.
+- Per-resource `tokio::sync::Mutex` lock striping bounds concurrency state.
+- No `static mut`, no `unsafe` outside `daf-cache`’s trie, no panics across FFI.
+
+## Python Implementation (Reference)
+
+The Python implementation in this repository remains the semantic reference. It provides:
+
+- FastAPI adapter with rate limiting
+- `MemoryRepository` and `MemoryCache`
+- `DataAccessFactory` composition
+- `FibonacciDP` algorithm
+
+For details, see the sections below.
+
+### Building and testing (Rust)
+
+The Rust backend lives in the [theDAF-LLVM](https://github.com/Metis-Avionics/theDAF-LLVM) repository. From that workspace:
+
+```bash
+cargo fmt -- --check
+cargo clippy --workspace
+cargo test --workspace
+```
+
+### Rust integration test coverage
+
+- Authorization × cache isolation (different users get different entries)
+- Re-authorization on cache hit (stale grants rejected)
+- Prefix invalidation clears all derived projections
+- Stale cache entry rejection after mutation (generation comparison)
+- Concurrent mutation generation monotonicity
+- Cache isolation between different resources
+- Authorization prevents mutation side effects (no generation advance on denied mutation)
+- Empty `resource_id` rejected before auth
+- No authorizer allows all operations
+- Query filters return matching data / Null on mismatch
+- POST creates unique resource IDs
+- Query after successful POST roundtrips
+- PUT / DELETE conflict behavior on concurrent updates
+- Generation advances on POST / PUT / DELETE
+
+## Python ↔ Rust Parity
+
+| Dimension | Status | Notes |
+|-----------|--------|-------|
+| **Public API surface** | 85% | 22 of 26 Python symbols have Rust equivalents. Missing: `DataAccessFactory`, `Memo`, `ResourceMemo`, `TreeCollector`, `walk_tree`, `collect_tree`. Rust-only additions: `ResourceId`/`UserId` newtypes, `Generation` enum, `AlgorithmStats`. |
+| **Protocol / trait methods** | 100% | `Repository` (6), `Cache` (6), `Algorithm` (2), `Authorizer` (1) — all methods mirrored in Rust traits. |
+| **DataAccess orchestration** | 100% | All 4 public methods (`query`, `post`, `put`, `delete`) and all 12 private helpers mirrored. Rust inlines `_execute_query`, `_execute_put`, `_execute_delete` into public methods for reduced call overhead. |
+| **Contracts / types** | 100% | `QueryInfo`, `PostInfo`, `PutInfo`, `DeleteInfo`, `QueryResult`, `MutationResult` all have structurally equivalent Rust structs with serde. |
+| **Behavioral semantics** | ~95% | Cache invalidation, generation tracking, authorization boundaries, and single-read invariant are identical. Divergences: Python uses `copy.deepcopy()` for ownership; Rust uses `Arc<T>`. Python `try_update` uses identity/dict equality; Rust serializes to JSON for equality. |
+| **Test coverage parity** | ~90% | Rust: 71 tests (17 contract + 15 traversal + 8 fibonacci + 31 integration). Python: 212 tests. Gap narrowed: Python-only tests are memoization, recursion, barrel, and graphify primitives without direct Rust equivalents. |
+
+### Parity details
+
+**Matched (26 symbols):**
+- Core: `DataAccess`, `DataAccessFactory`, `DataAccessError`, `NotFoundError`, `ValidationError`, `RepositoryError`, `CacheError`, `AlgorithmError`, `AuthorizationError`
+- Protocols: `Repository`, `Cache`, `Algorithm`, `Authorizer`
+- Contracts: `QueryInfo`, `PostInfo`, `PutInfo`, `DeleteInfo`, `QueryResult`, `MutationResult`
+- Implementations: `MemoryRepository`, `MemoryCache`, `FibonacciDP`, `DataAccessRouter`
+
+**Python-only (4 symbols):**
+- `Memo` / `ResourceMemo` — algorithm memoization and lazy-init caches; Rust uses inline `HashMap` / `LruCache`
+- `TreeCollector`, `walk_tree`, `collect_tree` — generic tree walkers; covered by Rust trie traversal functions
+
+**Rust-only additions (4 symbols):**
+- `ResourceId` / `UserId` — newtype wrappers replacing bare `str` / `Any` for type safety
+- `Generation` — explicit `Missing` / `Valid(u64)` enum preventing sentinel-`0` bugs
+- `AlgorithmStats` — dedicated struct replacing `dict[str, Any]`
 
 ## Architecture
 

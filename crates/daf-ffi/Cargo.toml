@@ -1,0 +1,22 @@
+[package]
+name = "daf-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "daf-parity"
+path = "src/bin/parity.rs"
+
+[dependencies]
+daf-core = { path = "../daf-core" }
+daf-application = { path = "../daf-application" }
+daf-cache = { path = "../daf-cache" }
+daf-repository = { path = "../daf-repository" }
+daf-algorithms = { path = "../daf-algorithms" }
+async-trait.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
