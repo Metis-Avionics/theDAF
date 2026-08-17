@@ -14,6 +14,7 @@ serde.workspace = true
 serde_json.workspace = true
 moka = { version = "0.12", features = ["future"] }
 tracing = "0.1"
+tracing = "0.1"
 
 [features]
 redis = ["dep:redis"]
