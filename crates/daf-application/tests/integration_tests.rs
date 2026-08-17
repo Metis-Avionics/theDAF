@@ -7,8 +7,8 @@ use daf_application::DataAccess;
 use daf_application::DataAccessFactory;
 use daf_cache::MemoryCache;
 use daf_core::{
-    AuthorizationError, Authorizer, DeleteInfo, Generation, JsonValue, PostInfo, PutInfo, QueryInfo,
-    Repository, ResourceId, Tier, UserId,
+    AuthorizationError, Authorizer, Cache, DeleteInfo, Generation, JsonValue, PostInfo, PutInfo,
+    QueryInfo, Repository, ResourceId, Tier, UserId,
 };
 use daf_repository::MemoryRepository;
 use sha2::{Digest, Sha256};
@@ -307,7 +307,11 @@ async fn test_concurrent_mutations_generation_monotonic() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
     let gen = gen_val
-        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<Generation>()
+                .and_then(Generation::as_u64)
+        })
         .unwrap_or(0);
     assert!(gen >= 1);
 }
@@ -660,7 +664,11 @@ async fn test_authorization_prevents_mutation_side_effects() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<Generation>()
+                .and_then(Generation::as_u64)
+        })
         .unwrap_or(0);
 
     let err = daf
@@ -676,7 +684,11 @@ async fn test_authorization_prevents_mutation_side_effects() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<Generation>()
+                .and_then(Generation::as_u64)
+        })
         .unwrap_or(0);
     assert_eq!(gen_val_before, gen_val_after);
 }
@@ -956,7 +968,11 @@ async fn test_generation_advances_on_delete() {
 
     let gen_before = cache.get(&gen_key).await.unwrap();
     let gen_val_before = gen_before
-        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<Generation>()
+                .and_then(Generation::as_u64)
+        })
         .unwrap_or(0);
 
     daf.delete(
@@ -970,7 +986,11 @@ async fn test_generation_advances_on_delete() {
 
     let gen_after = cache.get(&gen_key).await.unwrap();
     let gen_val_after = gen_after
-        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<Generation>()
+                .and_then(Generation::as_u64)
+        })
         .unwrap_or(0);
     assert_eq!(gen_val_after, gen_val_before + 1);
 }
@@ -1204,7 +1224,11 @@ async fn test_generation_missing_initializes_to_zero_on_miss() {
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
     let gen = gen_val
-        .and_then(|v| v.value.downcast_ref::<Generation>().and_then(Generation::as_u64))
+        .and_then(|v| {
+            v.value
+                .downcast_ref::<Generation>()
+                .and_then(Generation::as_u64)
+        })
         .unwrap_or(0);
     assert_eq!(gen, 0);
 }
@@ -1247,4 +1271,152 @@ async fn test_cache_entry_tier_from_hierarchical() {
         .await
         .unwrap();
     assert!(r.success);
+}
+
+#[tokio::test]
+async fn hierarchical_delete_prefix_propagates_moka_error() {
+    use daf_cache::{HierarchicalCache, MokaCache};
+
+    let _repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    let l1 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l2 = Arc::new(MokaCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l3 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l4 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let cache = Arc::new(HierarchicalCache::new(l1, l2, l3, l4));
+
+    let result = cache.delete_prefix("ns:").await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn generation_enum_comparison_in_query() {
+    let repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    let cache = Arc::new(MemoryCache::new(1024));
+    let daf = make_daf(repo.clone(), cache.clone(), None);
+
+    save(
+        &repo,
+        "123",
+        HashMap::from([("name".to_string(), JsonValue::String("John".to_string()))]),
+    )
+    .await;
+
+    let r1 = daf
+        .query(
+            QueryInfo {
+                resource_id: ResourceId::new("123"),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(r1.success);
+    assert!(!r1.cache_hit);
+
+    daf.put(
+        PutInfo {
+            resource_id: ResourceId::new("123"),
+            data: HashMap::from([("name".to_string(), JsonValue::String("Jane".to_string()))]),
+        },
+        None,
+    )
+    .await
+    .unwrap();
+
+    let namespace = hex::encode(Sha256::digest("123"));
+    let mut payload = serde_json::Map::new();
+    payload.insert("algorithm".to_string(), serde_json::Value::Null);
+    payload.insert("filters".to_string(), serde_json::Value::Null);
+    payload.insert("resource_id".to_string(), serde_json::json!("123"));
+    payload.insert("user_id".to_string(), serde_json::json!("anonymous"));
+    let canonical = serde_json::to_string(&payload).unwrap();
+    let digest = hex::encode(Sha256::digest(canonical.as_bytes()));
+    let cache_key = format!("query:{namespace}:{digest}");
+
+    let stale_value = serde_json::json!({
+        "raw": JsonValue::Object([("name".to_string(), JsonValue::String("Stale".to_string()))].into_iter().collect()),
+        "transformed": JsonValue::Object([("name".to_string(), JsonValue::String("Stale".to_string()))].into_iter().collect()),
+        "generation": 1,
+    });
+    cache.set(cache_key, Arc::new(stale_value)).await.unwrap();
+
+    let r2 = daf
+        .query(
+            QueryInfo {
+                resource_id: ResourceId::new("123"),
+                filters: None,
+                algorithm: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(r2.success);
+    assert!(!r2.cache_hit);
+    assert_eq!(
+        r2.data,
+        Some(JsonValue::Object(
+            [("name".to_string(), JsonValue::String("Jane".to_string()))]
+                .into_iter()
+                .collect()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn put_with_moka_l2_returns_err_after_repo_mutation() {
+    use daf_cache::{HierarchicalCache, MokaCache};
+
+    let repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    let l1 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l2 = Arc::new(MokaCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l3 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let l4 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
+    let cache = Arc::new(HierarchicalCache::new(l1, l2, l3, l4));
+    let daf = make_daf(
+        repo.clone() as Arc<dyn Repository<JsonValue>>,
+        cache.clone(),
+        None,
+    );
+
+    save(
+        &repo,
+        "123",
+        HashMap::from([("name".to_string(), JsonValue::String("John".to_string()))]),
+    )
+    .await;
+
+    daf.query(
+        QueryInfo {
+            resource_id: ResourceId::new("123"),
+            filters: None,
+            algorithm: None,
+        },
+        None,
+    )
+    .await
+    .unwrap();
+
+    let result = daf
+        .put(
+            PutInfo {
+                resource_id: ResourceId::new("123"),
+                data: HashMap::from([("name".to_string(), JsonValue::String("Jane".to_string()))]),
+            },
+            None,
+        )
+        .await;
+
+    assert!(result.is_err());
+    let repo_data = repo.get(&ResourceId::new("123")).await.unwrap().unwrap();
+    assert_eq!(
+        *repo_data,
+        JsonValue::Object(
+            [("name".to_string(), JsonValue::String("Jane".to_string()))]
+                .into_iter()
+                .collect()
+        )
+    );
 }

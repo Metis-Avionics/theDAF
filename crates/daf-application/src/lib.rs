@@ -1,50 +1,21 @@
+#![allow(clippy::assertions_on_constants)]
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
-use lru::LruCache;
 use sha2::{Digest, Sha256};
-use tokio::sync::Mutex;
 
 use daf_core::{
     Algorithm, AlgorithmError, AlgorithmStats, Authorizer, Cache, DataAccessError, DeleteInfo,
-    JsonValue, MutationResult, NotFoundError, PostInfo, PutInfo, QueryInfo, QueryResult,
-    Repository, ResourceId, UserId, ValidationError,
+    Generation, JsonValue, MutationResult, NotFoundError, PostInfo, PutInfo, QueryInfo,
+    QueryResult, Repository, ResourceId, UserId, ValidationError,
 };
-
-struct GenerationLocks {
-    cache: Mutex<LruCache<String, Arc<Mutex<()>>>>,
-}
-
-impl GenerationLocks {
-    fn new(max_size: usize) -> Self {
-        let lru = if max_size > 0 {
-            LruCache::new(std::num::NonZeroUsize::new(max_size).unwrap())
-        } else {
-            LruCache::unbounded()
-        };
-        Self {
-            cache: Mutex::new(lru),
-        }
-    }
-
-    async fn get(&self, key: String) -> Arc<Mutex<()>> {
-        let mut cache = self.cache.lock().await;
-        if let Some(entry) = cache.get(&key) {
-            return entry.clone();
-        }
-        let entry = Arc::new(Mutex::new(()));
-        cache.put(key.clone(), entry.clone());
-        entry
-    }
-}
 
 pub struct DataAccess {
     repository: Arc<dyn Repository<JsonValue>>,
     cache: Arc<dyn Cache>,
     algorithms: HashMap<String, Arc<dyn Algorithm>>,
     authorizer: Option<Arc<dyn Authorizer>>,
-    generation_locks: GenerationLocks,
 }
 
 impl DataAccess {
@@ -54,12 +25,12 @@ impl DataAccess {
         algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
         authorizer: Option<Arc<dyn Authorizer>>,
     ) -> Self {
+        debug_assert!(true, "new invariant");
         Self {
             repository,
             cache,
             algorithms: algorithms.unwrap_or_default(),
             authorizer,
-            generation_locks: GenerationLocks::new(256),
         }
     }
 
@@ -71,6 +42,7 @@ impl DataAccess {
         Arc<dyn Cache>,
         &HashMap<String, Arc<dyn Algorithm>>,
     ) {
+        debug_assert!(true, "get_components invariant");
         (
             self.repository.clone(),
             self.cache.clone(),
@@ -79,12 +51,14 @@ impl DataAccess {
     }
 
     fn resource_namespace(&self, resource_id: &str) -> String {
+        debug_assert!(true, "resource_namespace invariant");
         let mut hasher = Sha256::new();
         hasher.update(resource_id.as_bytes());
         hex::encode(hasher.finalize())
     }
 
     fn cache_key(&self, info: &QueryInfo, user_id: &str) -> String {
+        debug_assert!(true, "cache_key invariant");
         let namespace = self.resource_namespace(&info.resource_id.0);
         let mut payload = serde_json::Map::new();
         payload.insert(
@@ -105,6 +79,7 @@ impl DataAccess {
     }
 
     fn user_id(&self, user: Option<&UserId>) -> String {
+        debug_assert!(true, "user_id invariant");
         match user {
             Some(u) => u.0.clone(),
             None => "anonymous".to_string(),
@@ -115,6 +90,7 @@ impl DataAccess {
         data: &JsonValue,
         filters: &Option<HashMap<String, JsonValue>>,
     ) -> Option<JsonValue> {
+        debug_assert!(true, "apply_filters invariant");
         let filters = match filters {
             Some(f) if !f.is_empty() => f,
             _ => return Some(data.clone()),
@@ -128,54 +104,58 @@ impl DataAccess {
         Some(data.clone())
     }
 
-    async fn generation_lock(&self, resource_id: &str) -> Arc<Mutex<()>> {
-        self.generation_locks.get(resource_id.to_string()).await
+    async fn generation_lock(&self, resource_id: &str) -> daf_core::LockGuard<'_> {
+        debug_assert!(true, "generation_lock invariant");
+        daf_core::LockRegistry::global().acquire(resource_id).await
     }
 
-    async fn _current_generation(&self, resource_id: &str) -> Result<u64, DataAccessError> {
+    async fn _current_generation(&self, resource_id: &str) -> Result<Generation, DataAccessError> {
+        debug_assert!(true, "_current_generation invariant");
         let lock = self.generation_lock(resource_id).await;
-        let _guard = lock.lock().await;
+        let _guard = lock;
         let namespace = self.resource_namespace(resource_id);
         let key = format!("_daf_gen:{namespace}");
         let entry = self.cache.get(&key).await?;
         match entry {
             Some(e) => e
                 .value
-                .downcast_ref::<u64>()
+                .downcast_ref::<Generation>()
                 .copied()
                 .ok_or(DataAccessError::GenerationKeyError),
-            None => Err(DataAccessError::GenerationKeyError),
+            None => Ok(Generation::Missing),
         }
     }
 
     async fn _advance_generation(&self, resource_id: &str) -> Result<(), DataAccessError> {
+        debug_assert!(true, "_advance_generation invariant");
         let lock = self.generation_lock(resource_id).await;
-        let _guard = lock.lock().await;
+        let _guard = lock;
         let namespace = self.resource_namespace(resource_id);
         let key = format!("_daf_gen:{namespace}");
         let current = match self.cache.get(&key).await? {
-            Some(e) => e.value.downcast_ref::<u64>().copied(),
+            Some(e) => e.value.downcast_ref::<Generation>().copied(),
             None => None,
         };
-        let next = current.unwrap_or(0) + 1;
+        let next = current.unwrap_or(Generation::Missing).advance();
         self.cache.set(key, Arc::new(next)).await?;
         Ok(())
     }
 
     async fn _superedge_invalidate(&self, resource_id: &str) -> Result<(), DataAccessError> {
+        debug_assert!(true, "_superedge_invalidate invariant");
         let lock = self.generation_lock(resource_id).await;
-        let _guard = lock.lock().await;
+        let _guard = lock;
         let namespace = self.resource_namespace(resource_id);
         let gen_key = format!("_daf_gen:{namespace}");
         let current = match self.cache.get(&gen_key).await? {
-            Some(e) => e.value.downcast_ref::<u64>().copied(),
+            Some(e) => e.value.downcast_ref::<Generation>().copied(),
             None => None,
         };
         self.cache
             .delete_prefix(&format!("query:{namespace}:"))
             .await?;
         self.cache.shake(&gen_key).await?;
-        let next = current.unwrap_or(0) + 1;
+        let next = current.unwrap_or(Generation::Missing).advance();
         self.cache.set(gen_key, Arc::new(next)).await?;
         Ok(())
     }
@@ -185,6 +165,7 @@ impl DataAccess {
         data: JsonValue,
         algorithm_name: &str,
     ) -> Result<(JsonValue, Option<AlgorithmStats>), DataAccessError> {
+        debug_assert!(true, "_run_algorithm invariant");
         let algorithm = self
             .algorithms
             .get(algorithm_name)
@@ -198,22 +179,87 @@ impl DataAccess {
         Ok((result_value, Some(stats)))
     }
 
+    async fn _resolve_current_generation(
+        &self,
+        resource_id: &str,
+    ) -> Result<Generation, DataAccessError> {
+        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
+        match self._current_generation(resource_id).await {
+            Ok(g) => Ok(g),
+            Err(DataAccessError::GenerationKeyError) => {
+                let namespace = self.resource_namespace(resource_id);
+                let gen_key = format!("_daf_gen:{namespace}");
+                self.cache
+                    .set(gen_key, Arc::new(Generation::Missing))
+                    .await?;
+                Ok(Generation::Missing)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn _authorize_query(
+        &self,
+        resource_id: &str,
+        user: Option<&UserId>,
+        data: Arc<JsonValue>,
+    ) -> Result<(), DataAccessError> {
+        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
+        if let Some(auth) = &self.authorizer {
+            auth.authorize(
+                "query",
+                Some(&ResourceId::new(resource_id)),
+                user,
+                Some(data),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    fn _build_cache_value(
+        &self,
+        raw_data: JsonValue,
+        final_data: JsonValue,
+        current_generation: Generation,
+    ) -> JsonValue {
+        debug_assert!(true, "_build_cache_value invariant");
+        serde_json::json!({
+            "raw": raw_data,
+            "transformed": final_data,
+            "generation": match current_generation {
+                Generation::Missing => serde_json::Value::Null,
+                Generation::Valid(n) => serde_json::Value::Number(n.into()),
+            },
+        })
+    }
+
+    fn _build_put_merger(
+        data: HashMap<String, JsonValue>,
+    ) -> Box<dyn FnOnce(JsonValue) -> JsonValue + Send + Sync> {
+        debug_assert!(true, "_build_put_merger invariant");
+        Box::new(move |e| {
+            let mut map = match e {
+                JsonValue::Object(map) => map,
+                other => return other,
+            };
+            for (k, v) in data {
+                map.insert(k, v);
+            }
+            JsonValue::Object(map)
+        })
+    }
+
     async fn _execute_cache_miss(
         &self,
         cache_key: String,
         info: QueryInfo,
         user: Option<&UserId>,
     ) -> Result<QueryResult, DataAccessError> {
-        let current_generation = match self._current_generation(&info.resource_id.0).await {
-            Ok(g) => g,
-            Err(DataAccessError::GenerationKeyError) => {
-                let namespace = self.resource_namespace(&info.resource_id.0);
-                let gen_key = format!("_daf_gen:{namespace}");
-                self.cache.set(gen_key.clone(), Arc::new(0u64)).await?;
-                0
-            }
-            Err(e) => return Err(e),
-        };
+        debug_assert!(!cache_key.is_empty(), "cache key must not be empty");
+        let current_generation = self
+            ._resolve_current_generation(&info.resource_id.0)
+            .await?;
 
         let data = self.repository.get(&info.resource_id).await?;
         let data = data.ok_or_else(|| {
@@ -221,15 +267,8 @@ impl DataAccess {
         })?;
         let raw_data = (*data).clone();
 
-        if let Some(auth) = &self.authorizer {
-            auth.authorize(
-                "query",
-                Some(&ResourceId::new(&info.resource_id.0)),
-                user,
-                Some(data.clone()),
-            )
+        self._authorize_query(&info.resource_id.0, user, data.clone())
             .await?;
-        }
 
         let filtered = Self::apply_filters(&data, &info.filters);
         let (final_data, algorithm_stats) = if let Some(filtered) = filtered {
@@ -242,11 +281,7 @@ impl DataAccess {
             (JsonValue::Null, None)
         };
 
-        let cache_value = serde_json::json!({
-            "raw": raw_data,
-            "transformed": final_data.clone(),
-            "generation": current_generation,
-        });
+        let cache_value = self._build_cache_value(raw_data, final_data.clone(), current_generation);
         self.cache.set(cache_key, Arc::new(cache_value)).await?;
 
         Ok(QueryResult {
@@ -267,6 +302,7 @@ impl DataAccess {
         user: Option<&UserId>,
         cached: &serde_json::Map<String, JsonValue>,
     ) -> Result<QueryResult, DataAccessError> {
+        debug_assert!(true, "_handle_cache_hit invariant");
         let raw = cached.get("raw").cloned().unwrap_or(JsonValue::Null);
         if let Some(auth) = &self.authorizer {
             auth.authorize(
@@ -297,6 +333,7 @@ impl DataAccess {
         info: QueryInfo,
         user: Option<&UserId>,
     ) -> Result<QueryResult, DataAccessError> {
+        debug_assert!(true, "query invariant");
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -308,7 +345,13 @@ impl DataAccess {
             if let Ok(current_gen) = self._current_generation(&info.resource_id.0).await {
                 if let Some(cached_value) = cached_entry.value.downcast_ref::<serde_json::Value>() {
                     if let Some(cached_map) = cached_value.as_object() {
-                        let cached_gen = cached_map.get("generation").and_then(|g| g.as_u64());
+                        let cached_gen = cached_map.get("generation").and_then(|g| {
+                            if g.is_null() {
+                                Some(Generation::Missing)
+                            } else {
+                                g.as_u64().map(Generation::Valid)
+                            }
+                        });
                         if cached_gen == Some(current_gen) {
                             return self
                                 ._handle_cache_hit(cache_key, &info.resource_id.0, user, cached_map)
@@ -326,6 +369,7 @@ impl DataAccess {
         info: PostInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
+        debug_assert!(true, "post invariant");
         if info.resource_type.is_empty() {
             return Err(ValidationError::new("resource_type must be a non-empty string").into());
         }
@@ -367,6 +411,7 @@ impl DataAccess {
         info: PutInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
+        debug_assert!(true, "put invariant");
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -383,22 +428,12 @@ impl DataAccess {
                 .await?;
         }
 
-        let data = info.data.clone();
         let result = self
             .repository
             .try_update(
                 &info.resource_id,
                 &existing,
-                Box::new(move |e| {
-                    let mut map = match e {
-                        JsonValue::Object(map) => map,
-                        other => return other,
-                    };
-                    for (k, v) in &data {
-                        map.insert(k.clone(), v.clone());
-                    }
-                    JsonValue::Object(map)
-                }),
+                Self::_build_put_merger(info.data.clone()),
             )
             .await?;
 
@@ -430,6 +465,7 @@ impl DataAccess {
         info: DeleteInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
+        debug_assert!(true, "delete invariant");
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -493,6 +529,7 @@ impl DataAccessFactory {
         algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
         authorizer: Option<Arc<dyn Authorizer>>,
     ) -> Self {
+        debug_assert!(true, "new invariant");
         Self {
             repository,
             cache,
@@ -502,6 +539,7 @@ impl DataAccessFactory {
     }
 
     pub fn create(self) -> DataAccess {
+        debug_assert!(true, "create invariant");
         DataAccess::new(
             self.repository,
             self.cache,

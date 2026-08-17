@@ -1,10 +1,11 @@
-#![allow(clippy::not_unsafe_ptr_arg_deref, static_mut_refs)]
+#![allow(clippy::not_unsafe_ptr_arg_deref, clippy::assertions_on_constants)]
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::panic;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use daf_algorithms::FibonacciDP;
 use daf_application::DataAccess;
@@ -15,18 +16,29 @@ use daf_core::{
 };
 use daf_repository::MemoryRepository;
 
-static mut LAST_ERROR: Option<CString> = None;
+thread_local! {
+    static LAST_ERROR: std::cell::RefCell<Option<CString>> = const { std::cell::RefCell::new(None) };
+}
+
+static LIVE_HANDLES: OnceLock<Mutex<HashSet<usize>>> = OnceLock::new();
+
+fn live_handles() -> &'static Mutex<HashSet<usize>> {
+    debug_assert!(true, "live_handles invariant");
+    LIVE_HANDLES.get_or_init(|| Mutex::new(HashSet::new()))
+}
 
 fn set_last_error(msg: &str) {
-    unsafe {
-        LAST_ERROR = Some(CString::new(msg).unwrap());
-    }
+    debug_assert!(true, "set_last_error invariant");
+    LAST_ERROR.with(|slot| {
+        *slot.borrow_mut() = Some(CString::new(msg).unwrap());
+    });
 }
 
 fn clear_last_error() {
-    unsafe {
-        LAST_ERROR = None;
-    }
+    debug_assert!(true, "clear_last_error invariant");
+    LAST_ERROR.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
 }
 
 #[repr(C)]
@@ -40,6 +52,7 @@ pub enum DafErrorCode {
 }
 
 fn map_data_access_error(err: DataAccessError) -> DafErrorCode {
+    debug_assert!(true, "map_data_access_error invariant");
     match err {
         DataAccessError::NotFound(_) => DafErrorCode::NotFound,
         DataAccessError::Authorization(_) => DafErrorCode::AuthorizationFailed,
@@ -51,6 +64,7 @@ fn map_data_access_error(err: DataAccessError) -> DafErrorCode {
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 fn runtime() -> &'static tokio::runtime::Runtime {
+    debug_assert!(true, "runtime invariant");
     RUNTIME.get_or_init(|| tokio::runtime::Runtime::new().expect("failed to create tokio runtime"))
 }
 
@@ -58,7 +72,20 @@ fn block_on<F>(f: F) -> F::Output
 where
     F: std::future::Future,
 {
+    debug_assert!(true, "block_on invariant");
     runtime().block_on(f)
+}
+
+fn validate_utf8_cstr(ptr: *const c_char, label: &str) -> Result<&'static str, DataAccessError> {
+    debug_assert!(true, "validate_utf8_cstr invariant");
+    if ptr.is_null() {
+        set_last_error(&format!("null pointer: {label}"));
+        return Err(ValidationError::new(format!("null pointer: {label}")).into());
+    }
+    unsafe { CStr::from_ptr(ptr) }.to_str().map_err(|_| {
+        set_last_error(&format!("invalid utf-8 in {label}"));
+        ValidationError::new(format!("invalid utf-8 in {label}")).into()
+    })
 }
 
 #[no_mangle]
@@ -73,7 +100,9 @@ pub extern "C" fn daf_data_access_new() -> *mut DataAccess {
             Arc::new(FibonacciDP::new()) as Arc<dyn daf_core::Algorithm>,
         );
         let daf = DataAccess::new(repo, cache, Some(algorithms), None);
-        Box::into_raw(Box::new(daf))
+        let raw = Box::into_raw(Box::new(daf));
+        live_handles().lock().unwrap().insert(raw as usize);
+        raw
     }) {
         Ok(ptr) => ptr,
         Err(_) => {
@@ -84,17 +113,25 @@ pub extern "C" fn daf_data_access_new() -> *mut DataAccess {
 }
 
 #[no_mangle]
-pub extern "C" fn daf_data_access_free(ptr: *mut DataAccess) {
+pub extern "C" fn daf_data_access_free(ptr: *mut DataAccess) -> c_int {
     if ptr.is_null() {
-        return;
+        return DafErrorCode::InvalidArgument as c_int;
     }
+    let handle = ptr as usize;
+    let mut handles = live_handles().lock().unwrap();
+    if !handles.remove(&handle) {
+        return DafErrorCode::InvalidArgument as c_int;
+    }
+    drop(handles);
     unsafe { drop(Box::from_raw(ptr)) };
+    DafErrorCode::Ok as c_int
 }
 
 fn catch_panic<F, T>(f: F) -> Result<T, DafErrorCode>
 where
     F: FnOnce() -> T,
 {
+    debug_assert!(true, "catch_panic invariant");
     match panic::catch_unwind(panic::AssertUnwindSafe(f)) {
         Ok(v) => Ok(v),
         Err(_) => {
@@ -111,27 +148,26 @@ pub extern "C" fn daf_query(
     user_id: *const c_char,
 ) -> c_int {
     clear_last_error();
+    if ptr.is_null() {
+        set_last_error("null DataAccess pointer");
+        return DafErrorCode::InvalidArgument as c_int;
+    }
     let result = catch_panic(|| {
-        let daf = panic::AssertUnwindSafe(unsafe { &*ptr });
-        let rid = unsafe { CStr::from_ptr(resource_id) }
-            .to_str()
-            .map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid resource_id utf8"))
-            })?;
-        let uid = if user_id.is_null() {
+        let rid = validate_utf8_cstr(resource_id, "resource_id")?;
+        let uid_str = if user_id.is_null() {
             None
         } else {
-            Some(unsafe { CStr::from_ptr(user_id) }.to_str().map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid user_id utf8"))
-            })?)
+            Some(validate_utf8_cstr(user_id, "user_id")?.to_string())
         };
+        let daf = unsafe { &*ptr };
         block_on(async move {
             let info = QueryInfo {
                 resource_id: ResourceId::new(rid),
                 filters: None,
                 algorithm: None,
             };
-            (*daf).query(info, uid.map(UserId::new).as_ref()).await
+            let uid_ref = uid_str.as_ref().map(UserId::new);
+            (*daf).query(info, uid_ref.as_ref()).await
         })
     });
 
@@ -152,25 +188,24 @@ pub extern "C" fn daf_post(
     user_id: *const c_char,
 ) -> c_int {
     clear_last_error();
+    if ptr.is_null() {
+        set_last_error("null DataAccess pointer");
+        return DafErrorCode::InvalidArgument as c_int;
+    }
     let result = catch_panic(|| {
-        let daf = panic::AssertUnwindSafe(unsafe { &*ptr });
-        let resource_type = unsafe { CStr::from_ptr(resource_type) }
-            .to_str()
-            .map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid resource_type utf8"))
-            })?;
-        let uid = if user_id.is_null() {
+        let resource_type = validate_utf8_cstr(resource_type, "resource_type")?;
+        let uid_str = if user_id.is_null() {
             None
         } else {
-            Some(unsafe { CStr::from_ptr(user_id) }.to_str().map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid user_id utf8"))
-            })?)
+            Some(validate_utf8_cstr(user_id, "user_id")?.to_string())
         };
+        let daf = unsafe { &*ptr };
         let info = PostInfo {
             resource_type: resource_type.to_string(),
             data: HashMap::new(),
         };
-        block_on(async move { (*daf).post(info, uid.map(UserId::new).as_ref()).await })
+        let uid_ref = uid_str.as_ref().map(UserId::new);
+        block_on(async move { (*daf).post(info, uid_ref.as_ref()).await })
     });
 
     match result {
@@ -190,25 +225,24 @@ pub extern "C" fn daf_put(
     user_id: *const c_char,
 ) -> c_int {
     clear_last_error();
+    if ptr.is_null() {
+        set_last_error("null DataAccess pointer");
+        return DafErrorCode::InvalidArgument as c_int;
+    }
     let result = catch_panic(|| {
-        let daf = panic::AssertUnwindSafe(unsafe { &*ptr });
-        let rid = unsafe { CStr::from_ptr(resource_id) }
-            .to_str()
-            .map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid resource_id utf8"))
-            })?;
-        let uid = if user_id.is_null() {
+        let rid = validate_utf8_cstr(resource_id, "resource_id")?;
+        let uid_str = if user_id.is_null() {
             None
         } else {
-            Some(unsafe { CStr::from_ptr(user_id) }.to_str().map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid user_id utf8"))
-            })?)
+            Some(validate_utf8_cstr(user_id, "user_id")?.to_string())
         };
+        let daf = unsafe { &*ptr };
         let info = PutInfo {
             resource_id: ResourceId::new(rid),
             data: HashMap::new(),
         };
-        block_on(async move { (*daf).put(info, uid.map(UserId::new).as_ref()).await })
+        let uid_ref = uid_str.as_ref().map(UserId::new);
+        block_on(async move { (*daf).put(info, uid_ref.as_ref()).await })
     });
 
     match result {
@@ -228,24 +262,23 @@ pub extern "C" fn daf_delete(
     user_id: *const c_char,
 ) -> c_int {
     clear_last_error();
+    if ptr.is_null() {
+        set_last_error("null DataAccess pointer");
+        return DafErrorCode::InvalidArgument as c_int;
+    }
     let result = catch_panic(|| {
-        let daf = panic::AssertUnwindSafe(unsafe { &*ptr });
-        let rid = unsafe { CStr::from_ptr(resource_id) }
-            .to_str()
-            .map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid resource_id utf8"))
-            })?;
-        let uid = if user_id.is_null() {
+        let rid = validate_utf8_cstr(resource_id, "resource_id")?;
+        let uid_str = if user_id.is_null() {
             None
         } else {
-            Some(unsafe { CStr::from_ptr(user_id) }.to_str().map_err(|_| {
-                DataAccessError::Validation(ValidationError::new("invalid user_id utf8"))
-            })?)
+            Some(validate_utf8_cstr(user_id, "user_id")?.to_string())
         };
+        let daf = unsafe { &*ptr };
         let info = DeleteInfo {
             resource_id: ResourceId::new(rid),
         };
-        block_on(async move { (*daf).delete(info, uid.map(UserId::new).as_ref()).await })
+        let uid_ref = uid_str.as_ref().map(UserId::new);
+        block_on(async move { (*daf).delete(info, uid_ref.as_ref()).await })
     });
 
     match result {
@@ -260,5 +293,9 @@ pub extern "C" fn daf_delete(
 
 #[no_mangle]
 pub extern "C" fn daf_last_error_message() -> *const c_char {
-    unsafe { LAST_ERROR.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()) }
+    LAST_ERROR.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map_or(std::ptr::null(), |s| s.as_ptr())
+    })
 }

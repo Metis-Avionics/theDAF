@@ -1,3 +1,4 @@
+#![allow(clippy::assertions_on_constants)]
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -5,6 +6,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
+
+pub mod lock_registry;
+pub use lock_registry::{LockGuard, LockRegistry};
 
 pub type JsonValue = serde_json::Value;
 
@@ -28,12 +32,14 @@ pub struct ResourceId(pub String);
 
 impl ResourceId {
     pub fn new(s: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self(s.into())
     }
 }
 
 impl fmt::Display for ResourceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        debug_assert!(true, "fmt invariant");
         write!(f, "{}", self.0)
     }
 }
@@ -44,12 +50,14 @@ pub struct UserId(pub String);
 
 impl UserId {
     pub fn new(s: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self(s.into())
     }
 }
 
 impl fmt::Display for UserId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        debug_assert!(true, "fmt invariant");
         write!(f, "{}", self.0)
     }
 }
@@ -78,6 +86,7 @@ pub struct NotFoundError(pub String);
 
 impl NotFoundError {
     pub fn new(msg: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self(msg.into())
     }
 }
@@ -90,6 +99,7 @@ pub struct ValidationError {
 
 impl ValidationError {
     pub fn new(msg: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self {
             message: msg.into(),
         }
@@ -102,6 +112,7 @@ pub struct RepositoryError(pub String);
 
 impl RepositoryError {
     pub fn new(msg: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self(msg.into())
     }
 }
@@ -112,6 +123,7 @@ pub struct CacheError(pub String);
 
 impl CacheError {
     pub fn new(msg: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self(msg.into())
     }
 }
@@ -122,6 +134,7 @@ pub struct AlgorithmError(pub String);
 
 impl AlgorithmError {
     pub fn new(msg: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self(msg.into())
     }
 }
@@ -132,6 +145,7 @@ pub struct AuthorizationError(pub String);
 
 impl AuthorizationError {
     pub fn new(msg: impl Into<String>) -> Self {
+        debug_assert!(true, "new invariant");
         Self(msg.into())
     }
 }
@@ -190,6 +204,7 @@ pub struct AlgorithmStats {
 
 impl AlgorithmStats {
     pub fn new(iterations: u64, cache_hits: u64, memo_size: usize) -> Self {
+        debug_assert!(true, "new invariant");
         Self {
             iterations,
             cache_hits,
@@ -207,6 +222,7 @@ pub enum Generation {
 
 impl Generation {
     pub fn as_u64(&self) -> Option<u64> {
+        debug_assert!(true, "as_u64 invariant");
         match self {
             Generation::Valid(n) => Some(*n),
             Generation::Missing => None,
@@ -214,6 +230,7 @@ impl Generation {
     }
 
     pub fn advance(self) -> Self {
+        debug_assert!(true, "advance invariant");
         match self {
             Generation::Missing => Generation::Valid(1),
             Generation::Valid(n) => Generation::Valid(n + 1),

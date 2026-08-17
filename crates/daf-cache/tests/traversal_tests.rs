@@ -6,7 +6,7 @@ use daf_cache::trie::{
     trie_insert, TrieNode,
 };
 use daf_cache::MemoryCache;
-use daf_core::Tier;
+use daf_core::{Cache, Tier};
 
 fn build_trie(keys: &[&str]) -> TrieNode {
     let mut root = TrieNode::default();
@@ -196,4 +196,30 @@ async fn memory_cache_shake_returns_count() {
     assert_eq!(removed, 2);
     assert!(cache.get("ns:a:1").await.unwrap().is_none());
     assert!(cache.get("other:x").await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn moka_delete_prefix_non_empty_returns_error_and_clears() {
+    use daf_cache::MokaCache;
+    let cache = MokaCache::new(1024);
+    cache.set("k1".to_string(), Arc::new("v1")).await.unwrap();
+    cache.set("k2".to_string(), Arc::new("v2")).await.unwrap();
+
+    let result = cache.delete_prefix("ns:").await;
+    assert!(result.is_err());
+    assert!(cache.get("k1").await.unwrap().is_none());
+    assert!(cache.get("k2").await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn moka_shake_non_empty_returns_error_and_clears() {
+    use daf_cache::MokaCache;
+    let cache = MokaCache::new(1024);
+    cache.set("k1".to_string(), Arc::new("v1")).await.unwrap();
+    cache.set("k2".to_string(), Arc::new("v2")).await.unwrap();
+
+    let result = cache.shake("ns:").await;
+    assert!(result.is_err());
+    assert!(cache.get("k1").await.unwrap().is_none());
+    assert!(cache.get("k2").await.unwrap().is_none());
 }

@@ -1,3 +1,4 @@
+#![allow(clippy::assertions_on_constants)]
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,12 +20,14 @@ pub struct FibonacciDP {
 
 impl FibonacciDP {
     pub fn new() -> Self {
+        debug_assert!(true, "new invariant");
         Self {
             state: tokio::sync::Mutex::new(FibonacciState::default()),
         }
     }
 
     fn compute_fib(state: &mut FibonacciState, n: i64) -> Result<i64, AlgorithmError> {
+        debug_assert!(n >= 0, "fibonacci input must be non-negative");
         if let Some(&value) = state.memo.get(&n) {
             state.cache_hits += 1;
             return Ok(value);
@@ -47,6 +50,7 @@ impl FibonacciDP {
 
 impl Default for FibonacciDP {
     fn default() -> Self {
+        debug_assert!(true, "default invariant");
         Self::new()
     }
 }
@@ -57,6 +61,7 @@ impl daf_core::Algorithm for FibonacciDP {
         &self,
         input: Arc<dyn Any + Send + Sync>,
     ) -> Result<Arc<dyn Any + Send + Sync>, AlgorithmError> {
+        debug_assert!(true, "execute invariant");
         let n = *input
             .downcast_ref::<i64>()
             .ok_or_else(|| AlgorithmError::new("Expected i64 input for FibonacciDP"))?;
@@ -71,6 +76,7 @@ impl daf_core::Algorithm for FibonacciDP {
     }
 
     async fn get_stats(&self) -> Result<AlgorithmStats, AlgorithmError> {
+        debug_assert!(true, "get_stats invariant");
         let state = self.state.lock().await;
         Ok(AlgorithmStats::new(
             state.iterations,

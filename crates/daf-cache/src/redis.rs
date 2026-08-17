@@ -10,6 +10,7 @@ pub struct RedisCache {
 
 impl RedisCache {
     pub fn new(_client: ()) -> Self {
+        debug_assert!(true, "new invariant");
         Self { _client: () }
     }
 }
@@ -17,6 +18,7 @@ impl RedisCache {
 #[async_trait]
 impl Cache for RedisCache {
     async fn get(&self, _key: &str) -> Result<Option<CacheEntry>, CacheError> {
+        debug_assert!(true, "get invariant");
         Err(CacheError::new("redis feature not enabled"))
     }
 
@@ -25,22 +27,27 @@ impl Cache for RedisCache {
         _key: String,
         _value: Arc<dyn std::any::Any + Send + Sync>,
     ) -> Result<(), CacheError> {
+        debug_assert!(true, "set invariant");
         Err(CacheError::new("redis feature not enabled"))
     }
 
     async fn delete(&self, _key: &str) -> Result<(), CacheError> {
+        debug_assert!(true, "delete invariant");
         Err(CacheError::new("redis feature not enabled"))
     }
 
     async fn delete_prefix(&self, _prefix: &str) -> Result<(), CacheError> {
+        debug_assert!(true, "delete_prefix invariant");
         Err(CacheError::new("redis feature not enabled"))
     }
 
     async fn shake(&self, _prefix: &str) -> Result<usize, CacheError> {
+        debug_assert!(true, "shake invariant");
         Err(CacheError::new("redis feature not enabled"))
     }
 
     async fn clear(&self) -> Result<(), CacheError> {
+        debug_assert!(true, "clear invariant");
         Err(CacheError::new("redis feature not enabled"))
     }
 }

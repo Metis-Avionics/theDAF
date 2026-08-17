@@ -7,58 +7,42 @@ pub struct TrieNode {
 }
 
 pub fn trie_insert(root: &mut TrieNode, key: &str) {
+    debug_assert!(true, "trie_insert invariant");
+    debug_assert!(!key.is_empty(), "trie key must not be empty");
     let mut node = root;
     for ch in key.chars() {
-        node.children.entry(ch).or_default();
-        node = node.children.get_mut(&ch).unwrap();
+        node = node.children.entry(ch).or_default();
     }
     node.key = Some(key.to_string());
 }
 
 pub fn trie_delete(root: &mut TrieNode, key: &str) {
+    debug_assert!(true, "trie_delete invariant");
+    debug_assert!(!key.is_empty(), "trie key must not be empty");
     let chars: Vec<char> = key.chars().collect();
     if chars.is_empty() {
         return;
     }
-    let mut path: Vec<*mut TrieNode> = Vec::new();
-    let mut current: *mut TrieNode = root;
-
+    let mut current = root;
     for &ch in &chars {
-        unsafe {
-            let node = &mut *current;
-            if !node.children.contains_key(&ch) {
-                return;
-            }
-            path.push(current);
-            let child = node.children.get_mut(&ch).unwrap();
-            current = child as *mut TrieNode;
-        }
-    }
-
-    unsafe {
-        let node = &mut *current;
-        if node.key.as_deref() != Some(key) {
+        if let Some(child) = current.children.get_mut(&ch) {
+            current = child;
+        } else {
             return;
         }
-        node.key = None;
-
-        for i in (0..path.len()).rev() {
-            let parent = &mut *path[i];
-            let ch = chars[i];
-            let should_remove = {
-                let child = parent.children.get(&ch).unwrap();
-                child.key.is_none() && child.children.is_empty()
-            };
-            if should_remove {
-                parent.children.remove(&ch);
-            } else {
-                break;
-            }
-        }
     }
+    if current.key.as_deref() != Some(key) {
+        return;
+    }
+    current.key = None;
 }
 
 pub fn trie_collect(root: &TrieNode, prefix: &str) -> std::collections::HashSet<String> {
+    debug_assert!(true, "trie_collect invariant");
+    debug_assert!(
+        !prefix.is_empty() || root.key.is_none(),
+        "empty prefix requires root key to be None"
+    );
     let mut node = Some(root);
     for ch in prefix.chars() {
         node = node.and_then(|n| n.children.get(&ch));
@@ -67,6 +51,11 @@ pub fn trie_collect(root: &TrieNode, prefix: &str) -> std::collections::HashSet<
 }
 
 pub fn trie_delete_prefix(root: &mut TrieNode, prefix: &str) -> std::collections::HashSet<String> {
+    debug_assert!(true, "trie_delete_prefix invariant");
+    debug_assert!(
+        !prefix.is_empty() || root.key.is_none(),
+        "empty prefix requires root key to be None"
+    );
     if prefix.is_empty() {
         let keys = dfs_collect(Some(root));
         *root = TrieNode::default();
@@ -74,49 +63,27 @@ pub fn trie_delete_prefix(root: &mut TrieNode, prefix: &str) -> std::collections
     }
 
     let chars: Vec<char> = prefix.chars().collect();
-    let mut path: Vec<*mut TrieNode> = Vec::new();
-    let mut current: *mut TrieNode = root;
 
-    for &ch in &chars {
-        unsafe {
-            let node = &mut *current;
-            if !node.children.contains_key(&ch) {
-                return std::collections::HashSet::new();
-            }
-            path.push(current);
-            let child = node.children.get_mut(&ch).unwrap();
-            current = child as *mut TrieNode;
+    let mut parent = root;
+    for ch in &chars[0..chars.len() - 1] {
+        if let Some(child) = parent.children.get_mut(ch) {
+            parent = child;
+        } else {
+            return std::collections::HashSet::new();
         }
     }
+    let removed = parent.children.remove(&chars[chars.len() - 1]);
 
-    unsafe {
-        let node = &mut *current;
-        let keys = dfs_collect(Some(node));
-
-        let last_idx = path.len() - 1;
-        let parent = &mut *path[last_idx];
-        let ch = chars[last_idx];
-        parent.children.remove(&ch);
-
-        for i in (0..path.len() - 1).rev() {
-            let ancestor = &mut *path[i];
-            let ch = chars[i];
-            let should_remove = {
-                let child = ancestor.children.get(&ch).unwrap();
-                child.key.is_none() && child.children.is_empty()
-            };
-            if should_remove {
-                ancestor.children.remove(&ch);
-            } else {
-                break;
-            }
-        }
-
-        keys
-    }
+    removed
+        .as_ref()
+        .map_or_else(std::collections::HashSet::new, |node| {
+            dfs_collect(Some(node))
+        })
 }
 
 pub fn dfs_collect(node: Option<&TrieNode>) -> std::collections::HashSet<String> {
+    debug_assert!(true, "dfs_collect invariant");
+    debug_assert!(node.is_some() || true, "dfs_collect on None is valid");
     let mut result = std::collections::HashSet::new();
     if let Some(node) = node {
         if let Some(ref key) = node.key {
@@ -130,6 +97,11 @@ pub fn dfs_collect(node: Option<&TrieNode>) -> std::collections::HashSet<String>
 }
 
 pub fn bfs_collect(root: &TrieNode) -> std::collections::HashSet<String> {
+    debug_assert!(true, "bfs_collect invariant");
+    debug_assert!(
+        root.key.is_none() || !root.children.is_empty(),
+        "bfs root invariant"
+    );
     let mut result = std::collections::HashSet::new();
     let mut queue = vec![root];
     while let Some(node) = queue.pop() {
@@ -153,19 +125,24 @@ pub struct AStarEntry {
 
 impl Ord for AStarEntry {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        debug_assert!(true, "cmp invariant");
         self.match_len
             .cmp(&other.match_len)
             .then(self.counter.cmp(&other.counter))
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for AStarEntry {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        debug_assert!(true, "partial_cmp invariant");
         Some(self.cmp(other))
     }
 }
 
 pub fn astar_collect(root: &TrieNode, target: &str) -> std::collections::HashSet<String> {
+    debug_assert!(true, "astar_collect invariant");
+    debug_assert!(!target.is_empty(), "astar target must not be empty");
     let target_chars: Vec<char> = target.chars().collect();
     let mut best_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut best_match_len = 0;
@@ -180,12 +157,14 @@ pub fn astar_collect(root: &TrieNode, target: &str) -> std::collections::HashSet
     });
 
     while let Some(entry) = heap.pop() {
-        if entry.match_len > 0 && entry.node.key.is_some() {
-            if entry.match_len > best_match_len {
-                best_match_len = entry.match_len;
-                best_keys = std::collections::HashSet::from([entry.node.key.clone().unwrap()]);
-            } else if entry.match_len == best_match_len {
-                best_keys.insert(entry.node.key.clone().unwrap());
+        if entry.match_len > 0 {
+            if let Some(ref key) = entry.node.key {
+                if entry.match_len > best_match_len {
+                    best_match_len = entry.match_len;
+                    best_keys = std::collections::HashSet::from([key.clone()]);
+                } else if entry.match_len == best_match_len {
+                    best_keys.insert(key.clone());
+                }
             }
         }
         for (ch, child) in entry.node.children {

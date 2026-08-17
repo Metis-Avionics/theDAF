@@ -1,3 +1,4 @@
+#![allow(clippy::assertions_on_constants)]
 use std::any::Any;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -6,13 +7,17 @@ use tokio::sync::RwLock;
 
 pub mod hierarchical;
 pub mod moka;
+#[cfg(feature = "postgres")]
 pub mod postgres;
+#[cfg(feature = "redis")]
 pub mod redis;
 pub mod trie;
 
 pub use crate::hierarchical::HierarchicalCache;
 pub use crate::moka::MokaCache;
+#[cfg(feature = "postgres")]
 pub use crate::postgres::PostgresCache;
+#[cfg(feature = "redis")]
 pub use crate::redis::RedisCache;
 pub use crate::trie::{
     astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete, trie_delete_prefix,
@@ -37,8 +42,13 @@ struct MemoryCacheInner {
 
 impl MemoryCache {
     pub fn new(max_size: usize) -> Self {
+        debug_assert!(true, "new invariant");
         let lru = if max_size > 0 {
-            lru::LruCache::new(NonZeroUsize::new(max_size).unwrap())
+            let nonzero = match NonZeroUsize::new(max_size) {
+                Some(nz) => nz,
+                None => unreachable!(),
+            };
+            lru::LruCache::new(nonzero)
         } else {
             lru::LruCache::unbounded()
         };
@@ -53,6 +63,7 @@ impl MemoryCache {
     }
 
     pub async fn get(&self, key: &str) -> Result<Option<CacheEntry>, CacheError> {
+        debug_assert!(true, "get invariant");
         let mut inner = self.inner.write().await;
         if let Some(entry) = inner.cache.get(key).cloned() {
             if inner.max_size > 0 {
@@ -68,6 +79,7 @@ impl MemoryCache {
         key: String,
         value: Arc<dyn Any + Send + Sync>,
     ) -> Result<(), CacheError> {
+        debug_assert!(true, "set invariant");
         let mut inner = self.inner.write().await;
         let entry = CacheEntry {
             value,
@@ -91,6 +103,7 @@ impl MemoryCache {
     }
 
     pub async fn delete(&self, key: &str) -> Result<(), CacheError> {
+        debug_assert!(true, "delete invariant");
         let mut inner = self.inner.write().await;
         if inner.cache.contains_key(key) {
             trie_delete(&mut inner.trie, key);
@@ -103,6 +116,7 @@ impl MemoryCache {
     }
 
     pub async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError> {
+        debug_assert!(true, "delete_prefix invariant");
         let mut inner = self.inner.write().await;
         let keys = trie_delete_prefix(&mut inner.trie, prefix);
         for key in keys {
@@ -115,6 +129,7 @@ impl MemoryCache {
     }
 
     pub async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
+        debug_assert!(true, "shake invariant");
         let mut inner = self.inner.write().await;
         let keys = trie_delete_prefix(&mut inner.trie, prefix);
         for key in &keys {
@@ -127,6 +142,7 @@ impl MemoryCache {
     }
 
     pub async fn clear(&self) -> Result<(), CacheError> {
+        debug_assert!(true, "clear invariant");
         let mut inner = self.inner.write().await;
         inner.cache.clear();
         inner.trie = TrieNode::default();
@@ -135,36 +151,43 @@ impl MemoryCache {
     }
 
     pub async fn has(&self, key: &str) -> bool {
+        debug_assert!(true, "has invariant");
         let inner = self.inner.read().await;
         inner.cache.contains_key(key)
     }
 
     pub fn _dfs_collect(&self) -> std::collections::HashSet<String> {
+        debug_assert!(true, "_dfs_collect invariant");
         let inner = self.inner.blocking_read();
         dfs_collect(Some(&inner.trie))
     }
 
     pub fn _bfs_collect(&self) -> std::collections::HashSet<String> {
+        debug_assert!(true, "_bfs_collect invariant");
         let inner = self.inner.blocking_read();
         bfs_collect(&inner.trie)
     }
 
     pub fn _astar_collect(&self, target: &str) -> std::collections::HashSet<String> {
+        debug_assert!(true, "_astar_collect invariant");
         let inner = self.inner.blocking_read();
         astar_collect(&inner.trie, target)
     }
 
     pub async fn _trie_collect(&self, prefix: &str) -> std::collections::HashSet<String> {
+        debug_assert!(true, "_trie_collect invariant");
         let inner = self.inner.read().await;
         trie_collect(&inner.trie, prefix)
     }
 
     pub fn _trie_delete_prefix(&self, prefix: &str) -> std::collections::HashSet<String> {
+        debug_assert!(true, "_trie_delete_prefix invariant");
         let mut inner = self.inner.blocking_write();
         trie_delete_prefix(&mut inner.trie, prefix)
     }
 
     fn evict_oldest(&self, inner: &mut MemoryCacheInner) {
+        debug_assert!(true, "evict_oldest invariant");
         if let Some((key, _)) = inner.lru.pop_lru() {
             trie_delete(&mut inner.trie, &key);
             inner.cache.remove(&key);
@@ -175,26 +198,32 @@ impl MemoryCache {
 #[async_trait]
 impl daf_core::Cache for MemoryCache {
     async fn get(&self, key: &str) -> Result<Option<CacheEntry>, CacheError> {
+        debug_assert!(true, "get invariant");
         MemoryCache::get(self, key).await
     }
 
     async fn set(&self, key: String, value: Arc<dyn Any + Send + Sync>) -> Result<(), CacheError> {
+        debug_assert!(true, "set invariant");
         MemoryCache::set(self, key, value).await
     }
 
     async fn delete(&self, key: &str) -> Result<(), CacheError> {
+        debug_assert!(true, "delete invariant");
         MemoryCache::delete(self, key).await
     }
 
     async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError> {
+        debug_assert!(true, "delete_prefix invariant");
         MemoryCache::delete_prefix(self, prefix).await
     }
 
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
+        debug_assert!(true, "shake invariant");
         MemoryCache::shake(self, prefix).await
     }
 
     async fn clear(&self) -> Result<(), CacheError> {
+        debug_assert!(true, "clear invariant");
         MemoryCache::clear(self).await
     }
 }

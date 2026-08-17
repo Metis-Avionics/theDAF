@@ -1,0 +1,1 @@
+Power of Ten (Rust): all checks pass

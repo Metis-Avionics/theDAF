@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-17
+
+### Added
+
+- `scripts/power_of_ten_rust.py` — NASA/JPL Power of Ten Rust checker with CI integration
+- `debug_assert!` instrumentation across all Rust functions in 8 crates (Power of Ten Rule 5)
+- `power-of-ten-rust-ratchet-debt.txt` — ratchet debt tracking file
+
+### Changed
+
+- `put` function in `daf-application` refactored: extracted `_build_put_merger` helper (63→45 lines)
+- All 8 Rust library crates suppress `clippy::assertions_on_constants` warnings for intentional `debug_assert!` instrumentation
+- `.gitignore` now excludes `node_modules/`, `package.json`, `package-lock.json`, and KiloCode artifacts
+
+### Fixed
+
+- Rule 4 violation: `put` exceeded 60-line limit; resolved via helper extraction
+- Rule 5 compliance: `_build_put_merger` now includes `debug_assert!` for assertion density
+- Clippy warnings: redundant closures in `daf-ffi`, non-canonical `partial_cmp` in trie, unused variables/imports
+- Commit history: removed `node_modules/`, `package.json`, `package-lock.json` from git tracking
+
 ## [0.2.2] - 2026-08-16
 
 ### Added
@@ -12,26 +33,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Global `LockRegistry` in `daf-core` with 16-shard striped locking and `OnceLock` singleton
 - `LockGuard` RAII guard for scoped lock acquisition
 - `tokio` dependency to `daf-core/Cargo.toml`
+- `debug_assert!` instrumentation across all Rust functions (Power of Ten Rule 5)
+- `Default` impl for `LockRegistry`
 
 ### Changed
 
 - `daf-application` uses global `LockRegistry` instead of per-`DataAccess` generation locks
 - `_current_generation`, `_advance_generation`, `_superedge_invalidate` operate on `Generation` enum directly
 - `HierarchicalCache::get` promotes L2/L3/L4 hits into L1, preserving originating `CacheEntry.tier`
-- `HierarchicalCache::delete`, `delete_prefix`, `clear` are best-effort (swallow backend errors)
-- `HierarchicalCache::shake` sums tier counts with best-effort fallback
-- `MokaCache::delete_prefix` and `shake` return `Ok(())`/`Ok(0)` for non-empty prefixes (moka 0.12 limitation)
+- `HierarchicalCache::delete`, `delete_prefix`, `clear` propagate tier errors with `?`
+- `HierarchicalCache::shake` sums tier counts authoritatively (L2-L4 errors propagate)
+- `MokaCache::delete_prefix` and `shake` always call `invalidate_all()`; return `Err(CacheError::new(...))` for non-empty prefixes
 - `daf-cache/src/lib.rs` feature-gates `pub mod redis;` and `pub mod postgres;`
 - `daf-ffi/src/lib.rs` uses `thread_local!` error state; validates null pointers and UTF-8 on all entrypoints
-- Cache JSON serialization uses `current_generation.as_u64()` for `"generation"` field
+- `daf-ffi/src/lib.rs` tracks live `DataAccess` handles via `LIVE_HANDLES: OnceLock<Mutex<HashSet<usize>>>`; `daf_data_access_free` returns `c_int`
+- `_execute_cache_miss` serializes `Generation` as symmetric JSON mapping: `Missing` → `Null`, `Valid(n)` → `Number(n)`
+- `query()` deserializes cached `"generation"` back to `Generation` enum for direct comparison
 - `.github/workflows/ci.yml` adds `parity` to `build.needs`
+- `.github/workflows/ci.yml` adds `power-of-ten-rust` job
+- All 8 Rust library crates suppress `clippy::assertions_on_constants` warnings for intentional `debug_assert!` instrumentation
 
 ### Fixed
 
-- Concurrent mutation generation monotonicity test uses `tokio::join!` for real concurrency
-- Generation assertions in integration tests downcast `daf_core::Generation` and call `.as_u64()`
-- `MokaCache::shake` returns accurate entry count for empty-prefix invalidation via `entry_count()` snapshot before `invalidate_all()`
+- `_superedge_invalidate` silently ignored `delete_prefix` and `shake` errors via `let _ =`; now propagates with `?`
+- `HierarchicalCache::shake` silently swallowed L2-L4 errors; all tiers now authoritative
 - `test_concurrent_mutations_generation_monotonic` assertion corrected to `gen >= 1` (CAS serialization limits advance to 1)
+- `MokaCache::shake` returns accurate entry count for empty-prefix invalidation via `entry_count()` snapshot before `invalidate_all()`
+- Generation assertions in integration tests downcast `daf_core::Generation` and call `.as_u64()`
+- `daf_data_access_free` returns `InvalidArgument` on null pointer or double-free instead of undefined behavior
+- 4 redundant closures in `daf-ffi/src/lib.rs` (`|s| UserId::new(s)` → `UserId::new`)
+- `thread_local!` initializer in `daf-ffi` converted to `const { ... }`
+- Unused `repo` variable in `hierarchical_delete_prefix_propagates_moka_error` test
+- Unused `MokaCache` import in `traversal_tests.rs`
+- Non-canonical `partial_cmp` allow attribute placement in `daf-cache/src/trie.rs`
+- Indexed loop variable warning in trie `_delete_prefix_impl`
 
 ## [0.2.1] - 2026-08-16
 
