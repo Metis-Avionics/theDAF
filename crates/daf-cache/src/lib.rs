@@ -125,7 +125,10 @@ impl MemoryCache {
     }
 
     pub async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError> {
-        debug_assert!(!prefix.is_empty(), "prefix must not be empty for delete_prefix");
+        debug_assert!(
+            !prefix.is_empty(),
+            "prefix must not be empty for delete_prefix"
+        );
         let mut inner = self.inner.write().await;
         let keys = trie_delete_prefix(&mut inner.trie, prefix);
         for key in keys {

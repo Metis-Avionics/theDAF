@@ -8,7 +8,7 @@ use daf_application::DataAccessFactory;
 use daf_cache::MemoryCache;
 use daf_core::{
     AuthorizationError, Authorizer, Cache, DeleteInfo, Generation, JsonValue, PostInfo, PutInfo,
-    QueryInfo, Repository, ResourceId, Tier, UserId,
+    QueryInfo, Repository, RepositoryError, ResourceId, Tier, UserId,
 };
 use daf_repository::MemoryRepository;
 use sha2::{Digest, Sha256};
@@ -1274,18 +1274,153 @@ async fn test_cache_entry_tier_from_hierarchical() {
 }
 
 #[tokio::test]
-async fn hierarchical_delete_prefix_propagates_moka_error() {
+async fn hierarchical_delete_prefix_is_best_effort_across_tiers() {
     use daf_cache::{HierarchicalCache, MokaCache};
 
-    let _repo = Arc::new(MemoryRepository::<JsonValue>::new());
     let l1 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
     let l2 = Arc::new(MokaCache::new(1024)) as Arc<dyn daf_core::Cache>;
     let l3 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
     let l4 = Arc::new(MemoryCache::new(1024)) as Arc<dyn daf_core::Cache>;
     let cache = Arc::new(HierarchicalCache::new(l1, l2, l3, l4));
 
+    // Moka L2 returns Err on non-empty prefix; best-effort (INV-001) must not abort
+    // and must still return Ok (invalidation is advisory; generation check safety).
     let result = cache.delete_prefix("ns:").await;
-    assert!(result.is_err());
+    assert!(result.is_ok());
+}
+
+/// Repository wrapper that commits, signals commit, then blocks on a barrier —
+/// used to force the deterministic "committed repository + pre-advance" window.
+struct CoordinatingRepo {
+    inner: Arc<dyn Repository<JsonValue>>,
+    committed: Arc<tokio::sync::Notify>,
+    update_barrier: Arc<tokio::sync::Barrier>,
+}
+
+#[async_trait]
+impl Repository<JsonValue> for CoordinatingRepo {
+    async fn get(&self, key: &ResourceId) -> Result<Option<Arc<JsonValue>>, RepositoryError> {
+        self.inner.get(key).await
+    }
+    async fn save(&self, key: &ResourceId, value: JsonValue) -> Result<(), RepositoryError> {
+        self.inner.save(key, value).await
+    }
+    async fn delete(&self, key: &ResourceId) -> Result<(), RepositoryError> {
+        self.inner.delete(key).await
+    }
+    async fn create(&self, value: JsonValue) -> Result<ResourceId, RepositoryError> {
+        self.inner.create(value).await
+    }
+    async fn try_update(
+        &self,
+        key: &ResourceId,
+        expected: &JsonValue,
+        update: Box<dyn FnOnce(JsonValue) -> JsonValue + Send + 'static>,
+    ) -> Result<Option<JsonValue>, RepositoryError> {
+        // Commit FIRST, then signal, then block: the repository holds V1 while this
+        // call is in flight (and, with the COH-001 fix, while `put` holds the gen lock).
+        let res = self.inner.try_update(key, expected, update).await?;
+        self.committed.notify_one();
+        self.update_barrier.wait().await;
+        Ok(res)
+    }
+    async fn try_delete(
+        &self,
+        key: &ResourceId,
+        expected: &JsonValue,
+    ) -> Result<bool, RepositoryError> {
+        self.inner.try_delete(key, expected).await
+    }
+}
+
+#[tokio::test]
+async fn a11_generation_value_read_skew_no_stale_after_commit() {
+    let repo = Arc::new(MemoryRepository::<JsonValue>::new());
+    save(
+        &repo,
+        "123",
+        HashMap::from([("name".to_string(), JsonValue::String("John".to_string()))]),
+    )
+    .await;
+
+    // Prime the cache with a query result under generation Missing ("John").
+    let cache = Arc::new(MemoryCache::new(1024));
+    let daf = make_daf(
+        repo.clone() as Arc<dyn Repository<JsonValue>>,
+        cache.clone(),
+        None,
+    );
+    daf.query(
+        QueryInfo {
+            resource_id: ResourceId::new("123"),
+            filters: None,
+            algorithm: None,
+        },
+        None,
+    )
+    .await
+    .unwrap();
+
+    let committed = Arc::new(tokio::sync::Notify::new());
+    let barrier = Arc::new(tokio::sync::Barrier::new(2));
+    let coord = Arc::new(CoordinatingRepo {
+        inner: repo.clone() as Arc<dyn Repository<JsonValue>>,
+        committed: committed.clone(),
+        update_barrier: barrier.clone(),
+    }) as Arc<dyn Repository<JsonValue>>;
+    let daf2 = make_daf(coord, cache.clone(), None);
+
+    // Writer: commits V1 ("Jane"), signals, then blocks in try_update while holding
+    // the per-resource generation lock (with the COH-001 fix).
+    let writer = tokio::spawn(async move {
+        daf2.put(
+            PutInfo {
+                resource_id: ResourceId::new("123"),
+                data: HashMap::from([("name".to_string(), JsonValue::String("Jane".to_string()))]),
+            },
+            None,
+        )
+        .await
+    });
+
+    // Wait until the repository commit has landed (gen lock held by the writer).
+    committed.notified().await;
+
+    // Reader: must block on the generation lock until the writer advances it.
+    let reader_daf = make_daf(
+        repo.clone() as Arc<dyn Repository<JsonValue>>,
+        cache.clone(),
+        None,
+    );
+    let reader = tokio::spawn(async move {
+        reader_daf
+            .query(
+                QueryInfo {
+                    resource_id: ResourceId::new("123"),
+                    filters: None,
+                    algorithm: None,
+                },
+                None,
+            )
+            .await
+    });
+
+    // Release the writer: try_update returns, generation advances, caches
+    // invalidate, gen lock releases, reader proceeds and must NOT see "John".
+    barrier.wait().await;
+
+    let put_result = writer.await.unwrap();
+    assert!(put_result.is_ok(), "put should succeed");
+    let q = reader.await.unwrap().unwrap();
+    assert_eq!(
+        q.data.expect("reader must return data"),
+        JsonValue::Object(
+            [("name".to_string(), JsonValue::String("Jane".to_string()))]
+                .into_iter()
+                .collect(),
+        ),
+        "COH-001: reader must not return stale pre-mutation value after commit"
+    );
 }
 
 #[tokio::test]

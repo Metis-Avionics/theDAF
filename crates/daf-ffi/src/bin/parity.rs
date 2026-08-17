@@ -5,9 +5,7 @@ use std::sync::Arc;
 use daf_algorithms::FibonacciDP;
 use daf_application::DataAccess;
 use daf_cache::MemoryCache;
-use daf_core::{
-    DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo, ResourceId, UserId,
-};
+use daf_core::{DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo, ResourceId, UserId};
 use daf_repository::MemoryRepository;
 
 #[derive(serde::Serialize)]
@@ -76,27 +74,39 @@ struct ParityState {
 
 impl ParityState {
     fn new() -> Self {
-        let algorithms: HashMap<String, Arc<dyn daf_core::Algorithm>> =
-            HashMap::from([(
-                "fib".to_string(),
-                Arc::new(FibonacciDP::new()) as Arc<dyn daf_core::Algorithm>,
-            )]);
-        let repo: Arc<dyn daf_core::Repository<JsonValue>> =
-            Arc::new(MemoryRepository::new());
+        let algorithms: HashMap<String, Arc<dyn daf_core::Algorithm>> = HashMap::from([(
+            "fib".to_string(),
+            Arc::new(FibonacciDP::new()) as Arc<dyn daf_core::Algorithm>,
+        )]);
+        let repo: Arc<dyn daf_core::Repository<JsonValue>> = Arc::new(MemoryRepository::new());
         let cache = Arc::new(MemoryCache::new(1024));
         let daf = DataAccess::new(repo.clone(), cache, Some(algorithms), None);
         Self { daf, repo }
     }
 
     async fn execute(&self, cmd: Command) -> OkResponse {
-        debug_assert!(matches!(cmd, Command::Post { .. } | Command::Put { .. } | Command::Delete { .. } | Command::Query { .. }), "cmd must be a valid Command variant");
+        debug_assert!(
+            matches!(
+                cmd,
+                Command::Post { .. }
+                    | Command::Put { .. }
+                    | Command::Delete { .. }
+                    | Command::Query { .. }
+            ),
+            "cmd must be a valid Command variant"
+        );
         match cmd {
-            Command::Post { resource_type, data } => self.handle_post(resource_type, data).await,
+            Command::Post {
+                resource_type,
+                data,
+            } => self.handle_post(resource_type, data).await,
             Command::Put { resource_id, data } => self.handle_put(resource_id, data).await,
             Command::Delete { resource_id } => self.handle_delete(resource_id).await,
-            Command::Query { resource_id, filters, algorithm } => {
-                self.handle_query(resource_id, filters, algorithm).await
-            }
+            Command::Query {
+                resource_id,
+                filters,
+                algorithm,
+            } => self.handle_query(resource_id, filters, algorithm).await,
         }
     }
 

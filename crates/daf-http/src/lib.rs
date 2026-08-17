@@ -34,7 +34,10 @@ pub struct AppError(DataAccessError);
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         if let DataAccessError::Authorization(_) = &self.0 {
-        debug_assert!(!matches!(self.0, DataAccessError::NotFound(_)), "NotFound must return 404");
+            debug_assert!(
+                !matches!(self.0, DataAccessError::NotFound(_)),
+                "NotFound must return 404"
+            );
             return (StatusCode::FORBIDDEN, "Forbidden").into_response();
         }
         if let DataAccessError::NotFound(_) = &self.0 {
@@ -92,7 +95,10 @@ async fn query_handler(
     State(state): State<Arc<AppState>>,
     Path(resource_id): Path<String>,
 ) -> Result<Json<QueryResult>, AppError> {
-    debug_assert!(!resource_id.is_empty(), "path resource_id must not be empty");
+    debug_assert!(
+        !resource_id.is_empty(),
+        "path resource_id must not be empty"
+    );
     let user = (state.get_current_user)().await?;
     let info = QueryInfo {
         resource_id: ResourceId::new(resource_id),
@@ -103,12 +109,15 @@ async fn query_handler(
     Ok(Json(result))
 }
 
-    async fn post_handler(
-        State(state): State<Arc<AppState>>,
-        Json(info): Json<PostInfo>,
-    ) -> Result<Json<MutationResult>, AppError> {
-        debug_assert!(!info.resource_type.is_empty(), "resource_type must not be empty");
-        let user = (state.get_current_user)().await?;
+async fn post_handler(
+    State(state): State<Arc<AppState>>,
+    Json(info): Json<PostInfo>,
+) -> Result<Json<MutationResult>, AppError> {
+    debug_assert!(
+        !info.resource_type.is_empty(),
+        "resource_type must not be empty"
+    );
+    let user = (state.get_current_user)().await?;
     let result = state.data_access.post(info, user.as_ref()).await?;
     Ok(Json(result))
 }
@@ -118,7 +127,10 @@ async fn put_handler(
     Path(resource_id): Path<String>,
     Json(mut info): Json<PutInfo>,
 ) -> Result<Json<MutationResult>, AppError> {
-    debug_assert!(!resource_id.is_empty(), "path resource_id must not be empty");
+    debug_assert!(
+        !resource_id.is_empty(),
+        "path resource_id must not be empty"
+    );
     let user = (state.get_current_user)().await?;
     info.resource_id = ResourceId::new(resource_id);
     let result = state.data_access.put(info, user.as_ref()).await?;
@@ -129,7 +141,10 @@ async fn delete_handler(
     State(state): State<Arc<AppState>>,
     Path(resource_id): Path<String>,
 ) -> Result<Json<MutationResult>, AppError> {
-    debug_assert!(!resource_id.is_empty(), "path resource_id must not be empty");
+    debug_assert!(
+        !resource_id.is_empty(),
+        "path resource_id must not be empty"
+    );
     let user = (state.get_current_user)().await?;
     let info = DeleteInfo {
         resource_id: ResourceId::new(resource_id),

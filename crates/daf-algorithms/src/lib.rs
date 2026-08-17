@@ -76,12 +76,11 @@ impl daf_core::Algorithm for FibonacciDP {
 
     async fn get_stats(&self) -> Result<AlgorithmStats, AlgorithmError> {
         let state = self.state.lock().await;
-        let stats = AlgorithmStats::new(
-            state.iterations,
-            state.cache_hits,
-            state.memo.len(),
+        let stats = AlgorithmStats::new(state.iterations, state.cache_hits, state.memo.len());
+        debug_assert!(
+            stats.iterations >= stats.cache_hits,
+            "iterations must be >= cache_hits"
         );
-        debug_assert!(stats.iterations >= stats.cache_hits, "iterations must be >= cache_hits");
         Ok(stats)
     }
 }

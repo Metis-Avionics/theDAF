@@ -224,9 +224,7 @@ impl Generation {
 
     pub fn advance(self) -> Self {
         match self {
-            Generation::Missing => {
-                Generation::Valid(1)
-            }
+            Generation::Missing => Generation::Valid(1),
             Generation::Valid(n) => {
                 debug_assert!(n < u64::MAX, "Valid(n) -> Valid(n+1) overflow guard");
                 Generation::Valid(n + 1)

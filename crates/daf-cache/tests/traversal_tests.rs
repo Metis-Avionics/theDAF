@@ -199,7 +199,7 @@ async fn memory_cache_shake_returns_count() {
 }
 
 #[tokio::test]
-async fn moka_delete_prefix_non_empty_returns_error_and_clears() {
+async fn moka_delete_prefix_non_empty_returns_error_and_leaves_intact() {
     use daf_cache::MokaCache;
     let cache = MokaCache::new(1024);
     cache.set("k1".to_string(), Arc::new("v1")).await.unwrap();
@@ -207,12 +207,13 @@ async fn moka_delete_prefix_non_empty_returns_error_and_clears() {
 
     let result = cache.delete_prefix("ns:").await;
     assert!(result.is_err());
-    assert!(cache.get("k1").await.unwrap().is_none());
-    assert!(cache.get("k2").await.unwrap().is_none());
+    // CON-006: non-empty prefix must NOT over-invalidate unrelated keys.
+    assert!(cache.get("k1").await.unwrap().is_some());
+    assert!(cache.get("k2").await.unwrap().is_some());
 }
 
 #[tokio::test]
-async fn moka_shake_non_empty_returns_error_and_clears() {
+async fn moka_shake_non_empty_returns_error_and_leaves_intact() {
     use daf_cache::MokaCache;
     let cache = MokaCache::new(1024);
     cache.set("k1".to_string(), Arc::new("v1")).await.unwrap();
@@ -220,6 +221,6 @@ async fn moka_shake_non_empty_returns_error_and_clears() {
 
     let result = cache.shake("ns:").await;
     assert!(result.is_err());
-    assert!(cache.get("k1").await.unwrap().is_none());
-    assert!(cache.get("k2").await.unwrap().is_none());
+    assert!(cache.get("k1").await.unwrap().is_some());
+    assert!(cache.get("k2").await.unwrap().is_some());
 }

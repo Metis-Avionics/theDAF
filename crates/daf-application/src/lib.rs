@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use sha2::{Digest, Sha256};
-use tracing::warn;
 
 use daf_core::{
     Algorithm, AlgorithmError, AlgorithmStats, Authorizer, Cache, DataAccessError, DeleteInfo,
@@ -42,8 +41,14 @@ impl DataAccess {
         Arc<dyn Cache>,
         &HashMap<String, Arc<dyn Algorithm>>,
     ) {
-        debug_assert!(Arc::strong_count(&self.repository) > 0, "repository Arc must be valid");
-        debug_assert!(Arc::strong_count(&self.cache) > 0, "cache Arc must be valid");
+        debug_assert!(
+            Arc::strong_count(&self.repository) > 0,
+            "repository Arc must be valid"
+        );
+        debug_assert!(
+            Arc::strong_count(&self.cache) > 0,
+            "cache Arc must be valid"
+        );
         (
             self.repository.clone(),
             self.cache.clone(),
@@ -52,14 +57,20 @@ impl DataAccess {
     }
 
     fn resource_namespace(&self, resource_id: &str) -> String {
-        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty for namespace");
+        debug_assert!(
+            !resource_id.is_empty(),
+            "resource_id must not be empty for namespace"
+        );
         let mut hasher = Sha256::new();
         hasher.update(resource_id.as_bytes());
         hex::encode(hasher.finalize())
     }
 
     fn cache_key(&self, info: &QueryInfo, user_id: &str) -> String {
-        debug_assert!(!info.resource_id.0.is_empty(), "resource_id must not be empty for cache key");
+        debug_assert!(
+            !info.resource_id.0.is_empty(),
+            "resource_id must not be empty for cache key"
+        );
         let namespace = self.resource_namespace(&info.resource_id.0);
         let mut payload = serde_json::Map::new();
         payload.insert(
@@ -80,7 +91,10 @@ impl DataAccess {
     }
 
     fn user_id(&self, user: Option<&UserId>) -> String {
-        debug_assert!(user.is_some() || user.map(|u| !u.0.is_empty()).unwrap_or(true), "user_id must not be empty when user is provided");
+        debug_assert!(
+            user.is_some() || user.map(|u| !u.0.is_empty()).unwrap_or(true),
+            "user_id must not be empty when user is provided"
+        );
         match user {
             Some(u) => u.0.clone(),
             None => "anonymous".to_string(),
@@ -105,14 +119,18 @@ impl DataAccess {
     }
 
     async fn generation_lock(&self, resource_id: &str) -> daf_core::LockGuard<'_> {
-        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty for lock");
+        debug_assert!(
+            !resource_id.is_empty(),
+            "resource_id must not be empty for lock"
+        );
         daf_core::LockRegistry::global().acquire(resource_id).await
     }
 
-    async fn _current_generation(&self, resource_id: &str) -> Result<Generation, DataAccessError> {
+    /// Read the current generation WITHOUT acquiring the per-resource lock.
+    /// Callers needing atomicity w.r.t. concurrent advancement must already hold
+    /// the generation lock for `resource_id` (see `generation_lock`).
+    async fn _read_generation(&self, resource_id: &str) -> Result<Generation, DataAccessError> {
         debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
-        let lock = self.generation_lock(resource_id).await;
-        let _guard = lock;
         let namespace = self.resource_namespace(resource_id);
         let key = format!("_daf_gen:{namespace}");
         let entry = self.cache.get(&key).await?;
@@ -126,10 +144,10 @@ impl DataAccess {
         }
     }
 
-    async fn _advance_generation(&self, resource_id: &str) -> Result<(), DataAccessError> {
+    /// Advance the generation WITHOUT acquiring the per-resource lock.
+    /// Caller must already hold the generation lock for `resource_id`.
+    async fn _advance_generation_locked(&self, resource_id: &str) -> Result<(), DataAccessError> {
         debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
-        let lock = self.generation_lock(resource_id).await;
-        let _guard = lock;
         let namespace = self.resource_namespace(resource_id);
         let key = format!("_daf_gen:{namespace}");
         let current = match self.cache.get(&key).await? {
@@ -144,6 +162,16 @@ impl DataAccess {
             next
         );
         Ok(())
+    }
+
+    async fn _current_generation(&self, resource_id: &str) -> Result<Generation, DataAccessError> {
+        let _guard = self.generation_lock(resource_id).await;
+        self._read_generation(resource_id).await
+    }
+
+    async fn _advance_generation(&self, resource_id: &str) -> Result<(), DataAccessError> {
+        let _guard = self.generation_lock(resource_id).await;
+        self._advance_generation_locked(resource_id).await
     }
 
     async fn _invalidate_caches(&self, resource_id: &str) {
@@ -163,7 +191,10 @@ impl DataAccess {
         data: JsonValue,
         algorithm_name: &str,
     ) -> Result<(JsonValue, Option<AlgorithmStats>), DataAccessError> {
-        debug_assert!(self.algorithms.contains_key(algorithm_name), "algorithm must be registered");
+        debug_assert!(
+            self.algorithms.contains_key(algorithm_name),
+            "algorithm must be registered"
+        );
         let algorithm = self
             .algorithms
             .get(algorithm_name)
@@ -221,7 +252,13 @@ impl DataAccess {
         final_data: JsonValue,
         current_generation: Generation,
     ) -> JsonValue {
-        debug_assert!(matches!(current_generation, Generation::Missing | Generation::Valid(_)), "generation must be Missing or Valid");
+        debug_assert!(
+            matches!(
+                current_generation,
+                Generation::Missing | Generation::Valid(_)
+            ),
+            "generation must be Missing or Valid"
+        );
         serde_json::json!({
             "raw": raw_data,
             "transformed": final_data,
@@ -336,10 +373,18 @@ impl DataAccess {
         }
         let user_id = self.user_id(user);
         let cache_key = self.cache_key(&info, &user_id);
+        let resource_id = info.resource_id.0.clone();
+
+        // COH-001: hold the per-resource generation lock across the value read and
+        // the generation read so a concurrent writer's commit+advance cannot split
+        // them. Without this, a reader can observe cached_gen == current_gen == old
+        // in the window between a repository commit and the subsequent generation
+        // advance, accepting a stale value after the mutation has committed.
+        let _gen_guard = self.generation_lock(&resource_id).await;
 
         let entry = self.cache.get(&cache_key).await?;
         if let Some(cached_entry) = entry {
-            if let Ok(current_gen) = self._current_generation(&info.resource_id.0).await {
+            if let Ok(current_gen) = self._read_generation(&resource_id).await {
                 if let Some(cached_value) = cached_entry.value.downcast_ref::<serde_json::Value>() {
                     if let Some(cached_map) = cached_value.as_object() {
                         let cached_gen = cached_map.get("generation").and_then(|g| {
@@ -350,14 +395,16 @@ impl DataAccess {
                             }
                         });
                         if cached_gen == Some(current_gen) {
+                            drop(_gen_guard);
                             return self
-                                ._handle_cache_hit(cache_key, &info.resource_id.0, user, cached_map)
+                                ._handle_cache_hit(cache_key, &resource_id, user, cached_map)
                                 .await;
                         }
                     }
                 }
             }
         }
+        drop(_gen_guard);
         self._execute_cache_miss(cache_key, info, user).await
     }
 
@@ -366,7 +413,10 @@ impl DataAccess {
         info: PostInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
-        debug_assert!(!info.resource_type.is_empty(), "resource_type must not be empty");
+        debug_assert!(
+            !info.resource_type.is_empty(),
+            "resource_type must not be empty"
+        );
         if info.resource_type.is_empty() {
             return Err(ValidationError::new("resource_type must be a non-empty string").into());
         }
@@ -408,7 +458,10 @@ impl DataAccess {
         info: PutInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
-        debug_assert!(!info.resource_id.0.is_empty(), "resource_id must not be empty");
+        debug_assert!(
+            !info.resource_id.0.is_empty(),
+            "resource_id must not be empty"
+        );
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -424,6 +477,12 @@ impl DataAccess {
             auth.authorize("put", Some(&info.resource_id), user, Some(existing.clone()))
                 .await?;
         }
+
+        // COH-001/COH-002: hold the per-resource generation lock across the
+        // repository commit, the generation advance, and the cache invalidation so
+        // that no reader can observe "committed repository + old generation" and the
+        // advance+invalidation are atomic (the superedge pattern).
+        let _gen_guard = self.generation_lock(&info.resource_id.0).await;
 
         let result = self
             .repository
@@ -445,7 +504,15 @@ impl DataAccess {
             });
         }
 
-        self._advance_generation(&info.resource_id.0).await?;
+        // COH-003: generation advance is best-effort. A cache write failure after a
+        // committed repository mutation must not make the mutation appear uncommitted.
+        if let Err(e) = self._advance_generation_locked(&info.resource_id.0).await {
+            tracing::warn!(
+                resource_id = %info.resource_id.0,
+                error = %e,
+                "generation advance failed after committed mutation; proceeding"
+            );
+        }
         self._invalidate_caches(&info.resource_id.0).await;
 
         Ok(MutationResult {
@@ -463,7 +530,10 @@ impl DataAccess {
         info: DeleteInfo,
         user: Option<&UserId>,
     ) -> Result<MutationResult, DataAccessError> {
-        debug_assert!(!info.resource_id.0.is_empty(), "resource_id must not be empty");
+        debug_assert!(
+            !info.resource_id.0.is_empty(),
+            "resource_id must not be empty"
+        );
         if info.resource_id.0.is_empty() {
             return Err(ValidationError::new("resource_id must be a non-empty string").into());
         }
@@ -485,6 +555,9 @@ impl DataAccess {
             .await?;
         }
 
+        // COH-001/COH-002: commit + advance + invalidate atomic per resource.
+        let _gen_guard = self.generation_lock(&info.resource_id.0).await;
+
         let deleted = self
             .repository
             .try_delete(&info.resource_id, &existing)
@@ -500,7 +573,13 @@ impl DataAccess {
             });
         }
 
-        self._advance_generation(&info.resource_id.0).await?;
+        if let Err(e) = self._advance_generation_locked(&info.resource_id.0).await {
+            tracing::warn!(
+                resource_id = %info.resource_id.0,
+                error = %e,
+                "generation advance failed after committed mutation; proceeding"
+            );
+        }
         self._invalidate_caches(&info.resource_id.0).await;
 
         Ok(MutationResult {
@@ -537,8 +616,14 @@ impl DataAccessFactory {
     }
 
     pub fn create(self) -> DataAccess {
-        debug_assert!(Arc::strong_count(&self.repository) > 0, "factory repository must be valid");
-        debug_assert!(Arc::strong_count(&self.cache) > 0, "factory cache must be valid");
+        debug_assert!(
+            Arc::strong_count(&self.repository) > 0,
+            "factory repository must be valid"
+        );
+        debug_assert!(
+            Arc::strong_count(&self.cache) > 0,
+            "factory cache must be valid"
+        );
         DataAccess::new(
             self.repository,
             self.cache,

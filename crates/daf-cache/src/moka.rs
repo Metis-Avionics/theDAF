@@ -45,28 +45,27 @@ impl Cache for MokaCache {
     }
 
     async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError> {
-        debug_assert!(!prefix.is_empty(), "prefix must not be empty for delete_prefix");
-        self.inner.invalidate_all();
         if prefix.is_empty() {
-            Ok(())
-        } else {
-            Err(CacheError::new(format!(
-                "MokaCache does not support prefix-scoped invalidation; full tier invalidated for prefix '{prefix}'",
-            )))
+            self.inner.invalidate_all();
+            return Ok(());
         }
+        // Non-empty prefix is unsupported. Do NOT invalidate_all first (that would
+        // over-invalidate unrelated keys, CON-006). Leave the tier intact and let
+        // HierarchicalCache treat this tier as best-effort.
+        Err(CacheError::new(format!(
+            "MokaCache does not support prefix-scoped invalidation; tier left intact for prefix '{prefix}'"
+        )))
     }
 
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
-        debug_assert!(!prefix.is_empty(), "prefix must not be empty for shake");
-        let count = self.inner.entry_count() as usize;
-        self.inner.invalidate_all();
         if prefix.is_empty() {
-            Ok(count)
-        } else {
-            Err(CacheError::new(format!(
-                "MokaCache does not support prefix-scoped shake; full tier invalidated for prefix '{prefix}'",
-            )))
+            let count = self.inner.entry_count() as usize;
+            self.inner.invalidate_all();
+            return Ok(count);
         }
+        Err(CacheError::new(format!(
+            "MokaCache does not support prefix-scoped shake; tier left intact for prefix '{prefix}'"
+        )))
     }
 
     async fn clear(&self) -> Result<(), CacheError> {
