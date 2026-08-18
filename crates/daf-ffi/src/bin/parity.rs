@@ -242,6 +242,7 @@ impl ParityState {
 }
 
 fn main() {
+    let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
     let state = ParityState::new();
     let reader = std::io::BufReader::new(std::io::stdin().lock());
     let mut stdout = std::io::stdout().lock();
@@ -269,9 +270,7 @@ fn main() {
                 continue;
             }
         };
-        let result = tokio::runtime::Runtime::new()
-            .expect("failed to create tokio runtime")
-            .block_on(state.execute(cmd));
+        let result = rt.block_on(state.execute(cmd));
         let json = serde_json::to_string(&result).unwrap();
         writeln!(stdout, "{json}").ok();
         stdout.flush().ok();

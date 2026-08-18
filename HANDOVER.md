@@ -35,14 +35,15 @@ The cache hierarchy is one component of this milestone, not the entire PR.
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1787059126278-pr29-refine-into-targeted-fixes.md` have been addressed:
+All issues from `.kilo/plans/1787062546279-test-caching-manifest-plan.md` have been addressed:
 
-- **PR29 targeted fixes extracted and validated**: 219/219 tests passing; PR29 closed
-- **`_superedge_invalidate` generation-aware invalidation**: `_daf_gen:{namespace}` key deleted between `delete_prefix` and `shake` in `src/daf/core/access.py`
-- **Trie node isolation for parity tests**: `_TrieNode.clear()` added in `src/daf/cache/_trie.py`; parity tests use `root.clear()` instead of `node.__init__()`
-- **A* tie-breaking fixed**: `_astar_collect` uses module-level `_ASTAR_COUNTER = count()` with tuple shape `(priority, counter, node, depth, match_len)` in `src/daf/cache/memory.py`
-- **Power of Ten exceptions**: Added `_RECURSION_EXCEPTIONS` set in `scripts/power_of_ten.py` for known-safe recursions (`_dfs_collect`, `_trie_collect`, `_trie_delete_prefix`, `walk_tree`)
-- **Parity test lifecycle refactored**: `tests/unit/test_differential_parity.py` uses pytest fixtures for subprocess lifecycle; state-mirroring ensures Python and Rust operate on equivalent data across `post`, `put`, `delete`, and `query` operations
+- **Manifest-driven parity tests**: `tests/unit/parity_manifest.json` defines 7 test cases; `test_differential_parity.py` loads the manifest and runs one parametrized test per entry
+- **Parity binary runtime reuse**: `crates/daf-ffi/src/bin/parity.rs` creates a single Tokio `Runtime` at the top of `main()` and reuses it for all commands
+- **CI rust-test fix**: `.github/workflows/ci.yml` rust-test job now runs `cargo test --workspace --all-features`
+- **CI build caching**: `Swatinem/rust-cache@v2` added to rust-lint, parity-differential, and power-of-ten jobs
+- **Rust toolchain pinning**: `rust-toolchain.toml` created with stable channel, minimal profile, rustfmt and clippy components
+- **Workspace build optimizations**: `Cargo.toml` adds `[profile.release]` (LTO, codegen-units=1, panic="abort", strip) and `[profile.dev]` (codegen-units=16, incremental)
+- **Parity test failures fail CI**: `pytest.skip()` replaced with `pytest.fail()` on binary build errors so CI catches Rust regressions
 
 ### Key Facts
 
@@ -53,7 +54,7 @@ All issues from `.kilo/plans/1787059126278-pr29-refine-into-targeted-fixes.md` h
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 219 Python tests + 71 Rust tests, all passing
+- **Test Count**: 219 Python tests + 7 parity tests + 71 Rust tests, all passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 - **Clippy**: 0 warnings

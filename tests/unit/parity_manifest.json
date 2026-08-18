@@ -1,0 +1,85 @@
+[
+  {
+    "name": "test_post_mutation_result_matches",
+    "ops": [
+      { "op": "post", "resource_type": "user", "data": {"name": "alice"} }
+    ],
+    "assertions": [
+      { "field": "py_0.success", "rust_field": "rust_0.success", "op": "eq", "value": true },
+      { "field": "py_0.resource_id", "rust_field": "rust_0.resource_id", "op": "not_null" },
+      { "field": "py_0.error", "rust_field": "rust_0.error", "op": "eq", "value": null }
+    ]
+  },
+  {
+    "name": "test_put_mutation_result_matches",
+    "ops": [
+      { "op": "post", "resource_type": "user", "data": {"name": "alice"} },
+      { "op": "put", "resource_id": "{0.resource_id}", "data": {"name": "bob"} }
+    ],
+    "assertions": [
+      { "field": "py_1.success", "rust_field": "rust_1.success", "op": "eq", "value": true },
+      { "field": "py_1.error", "rust_field": "rust_1.error", "op": "eq", "value": null }
+    ]
+  },
+  {
+    "name": "test_delete_mutation_result_matches",
+    "ops": [
+      { "op": "post", "resource_type": "user", "data": {"name": "alice"} },
+      { "op": "delete", "resource_id": "{0.resource_id}" }
+    ],
+    "assertions": [
+      { "field": "py_1.success", "rust_field": "rust_1.success", "op": "eq", "value": true },
+      { "field": "py_1.error", "rust_field": "rust_1.error", "op": "eq", "value": null }
+    ]
+  },
+  {
+    "name": "test_query_cache_miss_matches",
+    "ops": [
+      { "op": "post", "resource_type": "user", "data": {"name": "alice"} },
+      { "op": "query", "resource_id": "{0.resource_id}", "filters": null, "algorithm": null }
+    ],
+    "assertions": [
+      { "field": "py_1.success", "rust_field": "rust_1.success", "op": "eq", "value": true },
+      { "field": "py_1.cache_hit", "rust_field": "rust_1.cache_hit", "op": "eq", "value": false },
+      { "field": "py_1.data", "rust_field": "rust_1.data", "op": "eq", "value": {"name": "alice"} }
+    ]
+  },
+  {
+    "name": "test_query_cache_hit_matches",
+    "ops": [
+      { "op": "post", "resource_type": "user", "data": {"name": "alice"} },
+      { "op": "query", "resource_id": "{0.resource_id}", "filters": null, "algorithm": null },
+      { "op": "query", "resource_id": "{0.resource_id}", "filters": null, "algorithm": null }
+    ],
+    "assertions": [
+      { "field": "py_2.cache_hit", "rust_field": "rust_2.cache_hit", "op": "eq", "value": true },
+      { "field": "py_2.data", "rust_field": "rust_2.data", "op": "eq", "value": {"name": "alice"} }
+    ]
+  },
+  {
+    "name": "test_generation_advances_after_put",
+    "ops": [
+      { "op": "post", "resource_type": "user", "data": {"name": "alice"} },
+      { "op": "query", "resource_id": "{0.resource_id}", "filters": null, "algorithm": null },
+      { "op": "put", "resource_id": "{0.resource_id}", "data": {"name": "bob"} },
+      { "op": "query", "resource_id": "{0.resource_id}", "filters": null, "algorithm": null }
+    ],
+    "assertions": [
+      { "field": "py_3.cache_hit", "rust_field": "rust_3.cache_hit", "op": "eq", "value": false },
+      { "field": "py_3.data", "rust_field": "rust_3.data", "op": "eq", "value": {"name": "bob"} }
+    ]
+  },
+  {
+    "name": "test_stale_rejected_after_put",
+    "ops": [
+      { "op": "post", "resource_type": "user", "data": {"name": "alice"} },
+      { "op": "query", "resource_id": "{0.resource_id}", "filters": null, "algorithm": null },
+      { "op": "put", "resource_id": "{0.resource_id}", "data": {"name": "bob"} },
+      { "op": "query", "resource_id": "{0.resource_id}", "filters": null, "algorithm": null }
+    ],
+    "assertions": [
+      { "field": "py_3.cache_hit", "rust_field": "rust_3.cache_hit", "op": "eq", "value": false },
+      { "field": "py_3.data", "rust_field": "rust_3.data", "op": "eq", "value": {"name": "bob"} }
+    ]
+  }
+]

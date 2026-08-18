@@ -1654,3 +1654,69 @@ Each session entry should include:
 - State-mirroring ensures Python and Rust operate on equivalent data for accurate parity comparison
 - Remote revert branch `revert-24-feat/tier-aware-cache-and-parity` deleted; workspace is clean locally and remotely
 
+---
+
+## Session 019 - 2026-08-18
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `87dc450` on branch `feat/tier-aware-cache-and-parity` passes 219 Python tests and 71 Rust tests. PR29 closed; new work targets test caching, manifest-driven parity tests, and CI/Rust build optimizations.
+
+**Actions Taken**:
+- Executed plan `.kilo/plans/1787062546279-test-caching-manifest-plan.md`
+- Added `pytest-cacheprovider` to dev dependencies in `pyproject.toml` and enabled `cacheprovider = true` in `[tool.pytest.ini_options]`
+- Created `rust-toolchain.toml` pinning stable channel with minimal profile and rustfmt/clippy components
+- Added `Swatinem/rust-cache@v2` to rust-lint, parity-differential, and power-of-ten jobs in `.github/workflows/ci.yml`
+- Added workspace-level `[profile.release]` (lto=true, codegen-units=1, panic="abort", strip=true) and `[profile.dev]` (codegen-units=16, incremental=true) to `Cargo.toml`
+- Created `tests/unit/parity_manifest.json` with 7 parametrized test cases covering post/put/delete/query operations
+- Refactored `tests/unit/test_differential_parity.py` to load manifest and run a single parametrized test per entry
+- Fixed `crates/daf-ffi/src/bin/parity.rs` to create a single Tokio `Runtime` at the top of `main()` and reuse it for all commands
+- Fixed CI `rust-test` job to run `cargo test --workspace --all-features`
+- Changed parity test build failures from `pytest.skip()` to `pytest.fail()` so CI catches Rust build regressions
+- Validated all parity tests pass: `uv run pytest tests/unit/test_differential_parity.py -v` → 7 passed
+- Removed `pytest-cacheprovider` from `pyproject.toml` after discovering the package is unavailable on PyPI
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| `pyproject.toml` | Modified | Added then removed `pytest-cacheprovider`; kept other dev dependencies |
+| `rust-toolchain.toml` | Created | Stable channel, minimal profile, rustfmt + clippy components |
+| `.github/workflows/ci.yml` | Modified | Added `Swatinem/rust-cache@v2` to 3 jobs; added `--all-features` to rust-test |
+| `Cargo.toml` | Modified | Added workspace-level release and dev profile settings |
+| `crates/daf-ffi/src/bin/parity.rs` | Modified | Single Tokio runtime reused across all commands |
+| `tests/unit/parity_manifest.json` | Created | 7 manifest-driven parity test cases |
+| `tests/unit/test_differential_parity.py` | Modified | Manifest-driven parametrized tests; `pytest.fail()` on build errors |
+| `CHANGELOG.md` | Modified | Added test caching and manifest entries |
+| `HANDOVER.md` | Modified | Updated latest changes |
+| `SESSION.md` | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `feat/tier-aware-cache-and-parity`
+- **Version**: 0.2.2
+- **Tests**: 219/219 Python + 7/7 parity passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Rust**: 71/71 tests passing, clippy clean, Power of Ten clean
+- **PR**: pending new PR from this branch
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch to origin
+- [ ] Open new PR from `feat/tier-aware-cache-and-parity` against `main`
+- [ ] Close resolved issues (#35, #36, #42)
+- [ ] Merge PR after adversarial review
+- [ ] Tag release `v0.2.2`
+- [ ] Publish to PyPI
+
+### Notes
+
+- `pytest-cacheprovider` was removed because the package does not exist on PyPI; test caching is deferred
+- Parity manifest format uses `{N.field}` placeholders that resolve from prior operation results in the same case
+- CI build caching via `Swatinem/rust-cache@v2` reduces rust-test, rust-lint, and power-of-ten job times
+- Workspace LTO and single codegen-unit release profile optimize binary size at the cost of compile time

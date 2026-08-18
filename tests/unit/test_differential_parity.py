@@ -12,13 +12,16 @@ Timestamps are stripped before comparison; `cache_hit` is compared as-is.
 The Rust side is driven by the `daf-parity` binary (crates/daf-ffi/src/bin/parity.rs),
 which accepts one JSON command per line on stdin and emits one JSON response per line
 on stdout.
+
+Tests are defined in `parity_manifest.json`; this module loads the manifest and
+parametrizes one test function per entry.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -42,8 +45,7 @@ from daf.repositories import MemoryRepository
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PARITY_BIN = REPO_ROOT / "target" / "debug" / "daf-parity"
-
-# Lazily resolved subprocess handle; None means "not yet checked".
+MANIFEST = REPO_ROOT / "tests" / "unit" / "parity_manifest.json"
 
 
 def _build_parity_bin() -> Path:
@@ -54,17 +56,26 @@ def _build_parity_bin() -> Path:
         text=True,
     )
     if result.returncode != 0:
-        pytest.skip(
-            "daf-parity binary failed to build:\n"
-            + result.stderr[-2000:]
+        pytest.fail(
+            "daf-parity binary failed to build:\n" + result.stderr[-2000:]
         )
     return PARITY_BIN
 
 
-@pytest.fixture()
+def _load_manifest() -> list[dict]:
+    with open(MANIFEST) as f:
+        return json.load(f)
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped parity process
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
 def parity_proc() -> subprocess.Popen:
+    bin_path = _build_parity_bin()
     proc = subprocess.Popen(
-        [str(_build_parity_bin())],
+        [str(bin_path)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -73,7 +84,11 @@ def parity_proc() -> subprocess.Popen:
     )
     yield proc
     proc.terminate()
-    proc.wait()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
 
 def _rust_send(proc: subprocess.Popen, cmd: dict) -> dict:
@@ -82,12 +97,22 @@ def _rust_send(proc: subprocess.Popen, cmd: dict) -> dict:
         proc.stdin.write(line)
         proc.stdin.flush()
     except BrokenPipeError:
-        pytest.skip("daf-parity binary exited unexpectedly")
+        pytest.fail("daf-parity binary exited unexpectedly")
     response_line = proc.stdout.readline()
     if not response_line:
         stderr = proc.stderr.read()[-500:]
-        pytest.skip(f"daf-parity produced no output. stderr: {stderr!r}")
+        pytest.fail(f"daf-parity produced no output. stderr: {stderr!r}")
     return json.loads(response_line)
+
+
+# ---------------------------------------------------------------------------
+# Shared setup
+# ---------------------------------------------------------------------------
+
+def _python_factory():
+    repo = MemoryRepository()
+    cache = MemoryCache()
+    return DataAccessFactory(repository=repo, cache=cache)
 
 
 def _normalize(result: MutationResult | QueryResult) -> dict:
@@ -103,251 +128,129 @@ def _rust_normalize(r: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Shared setup
+# Manifest-driven tests
 # ---------------------------------------------------------------------------
 
-
-def _python_factory():
-    repo = MemoryRepository()
-    cache = MemoryCache()
-    return DataAccessFactory(repository=repo, cache=cache)
-
-
-# ---------------------------------------------------------------------------
-# Differential tests
-# ---------------------------------------------------------------------------
-
-
-class TestPostParity:
-    @pytest.mark.asyncio
-    async def test_post_mutation_result_matches(self, parity_proc) -> None:
-        factory = _python_factory()
-        daf = factory.create()
-        py = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-
-        rust = _rust_send(parity_proc, {
-            "op": "post",
-            "resource_type": "user",
-            "data": {"name": "alice"},
-        })
-
-        assert py.success == rust["success"]
-        assert py.error == rust.get("error")
-        assert py.error_type == rust.get("error_type")
-        # Both must return a resource_id
-        assert py.resource_id is not None
-        assert rust.get("resource_id") is not None
+def _substitute(template: str, context: dict) -> str:
+    def _replace(m: re.Match) -> str:
+        key = m.group(1)
+        parts = key.split(".")
+        value = context
+        for part in parts:
+            if isinstance(value, dict):
+                value = value.get(part)
+            else:
+                value = getattr(value, part, None)
+        if value is None:
+            raise KeyError(f"undefined substitution key: {key}")
+        return str(value)
+    return re.sub(r"\{([^}]+)\}", _replace, template)
 
 
-class TestPutParity:
-    @pytest.mark.asyncio
-    async def test_put_mutation_result_matches(self, parity_proc) -> None:
-        factory = _python_factory()
-        daf = factory.create()
-        post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        py_rid = post.resource_id
-
-        rust_post = _rust_send(parity_proc, {
-            "op": "post",
-            "resource_type": "user",
-            "data": {"name": "alice"},
-        })
-        rust_rid = rust_post["resource_id"]
-
-        py = await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
-
-        rust = _rust_send(parity_proc, {
-            "op": "put",
-            "resource_id": rust_rid,
-            "data": {"name": "bob"},
-        })
-
-        assert py.success == rust["success"]
-        assert py.error == rust.get("error")
-        assert py.error_type == rust.get("error_type")
+def _substitute_for_namespace(d: dict, context: dict, namespace: str) -> dict:
+    result = {}
+    for key, value in d.items():
+        if isinstance(value, str):
+            template = re.sub(r"\{([^}]+)\}", lambda m: f"{{{namespace}_{m.group(1)}}}", value)
+            result[key] = _substitute(template, context)
+        else:
+            result[key] = value
+    return result
 
 
-class TestDeleteParity:
-    @pytest.mark.asyncio
-    async def test_delete_mutation_result_matches(self, parity_proc) -> None:
-        factory = _python_factory()
-        daf = factory.create()
-        post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        py_rid = post.resource_id
+async def _run_manifest_case(parity_proc, case: dict):
+    name = case["name"]
+    ops = case["ops"]
+    assertions = case["assertions"]
 
-        rust_post = _rust_send(parity_proc, {
-            "op": "post",
-            "resource_type": "user",
-            "data": {"name": "alice"},
-        })
-        rust_rid = rust_post["resource_id"]
+    factory = _python_factory()
+    daf = factory.create()
+    context: dict[str, dict] = {}
 
-        py = await daf.delete(DeleteInfo(resource_id=py_rid))
+    for idx, op in enumerate(ops):
+        op_template = dict(op)
+        op_type = op_template.pop("op")
 
-        rust = _rust_send(parity_proc, {
-            "op": "delete",
-            "resource_id": rust_rid,
-        })
+        py_cmd = _substitute_for_namespace(op_template, context, "py")
+        rust_cmd = _substitute_for_namespace(op_template, context, "rust")
+        py_cmd["op"] = op_type
+        rust_cmd["op"] = op_type
 
-        assert py.success == rust["success"]
-        assert py.error == rust.get("error")
-        assert py.error_type == rust.get("error_type")
+        py_result = None
+        rust_result = None
 
+        if op_type == "post":
+            py_result = _normalize(
+                await daf.post(PostInfo(resource_type=py_cmd["resource_type"], data=py_cmd["data"]))
+            )
+            rust_raw = _rust_send(parity_proc, rust_cmd)
+            rust_result = _rust_normalize(rust_raw)
+        elif op_type == "put":
+            py_result = _normalize(
+                await daf.put(PutInfo(resource_id=py_cmd["resource_id"], data=py_cmd["data"]))
+            )
+            rust_raw = _rust_send(parity_proc, rust_cmd)
+            rust_result = _rust_normalize(rust_raw)
+        elif op_type == "delete":
+            py_result = _normalize(
+                await daf.delete(DeleteInfo(resource_id=py_cmd["resource_id"]))
+            )
+            rust_raw = _rust_send(parity_proc, rust_cmd)
+            rust_result = _rust_normalize(rust_raw)
+        elif op_type == "query":
+            py_result = _normalize(
+                await daf.query(QueryInfo(
+                    resource_id=py_cmd["resource_id"],
+                    filters=py_cmd.get("filters"),
+                    algorithm=py_cmd.get("algorithm"),
+                ))
+            )
+            rust_raw = _rust_send(parity_proc, rust_cmd)
+            rust_result = _rust_normalize(rust_raw)
+        else:
+            pytest.fail(f"unknown op type: {op_type}")
 
-class TestQueryCacheMissParity:
-    @pytest.mark.asyncio
-    async def test_query_cache_miss_matches(self, parity_proc) -> None:
-        factory = _python_factory()
-        daf = factory.create()
-        post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        py_rid = post.resource_id
+        context[f"py_{idx}"] = py_result
+        context[f"rust_{idx}"] = rust_result
 
-        rust_post = _rust_send(parity_proc, {
-            "op": "post",
-            "resource_type": "user",
-            "data": {"name": "alice"},
-        })
-        rust_rid = rust_post["resource_id"]
+    for assertion in assertions:
+        field = assertion["field"]
+        rust_field = assertion.get("rust_field", field)
+        expected = assertion.get("value")
+        op = assertion["op"]
 
-        py = await daf.query(QueryInfo(resource_id=py_rid))
+        py_val = _resolve_field(field, context)
+        rust_val = _resolve_field(rust_field, context)
 
-        rust = _rust_send(parity_proc, {
-            "op": "query",
-            "resource_id": rust_rid,
-            "filters": None,
-            "algorithm": None,
-        })
-
-        assert py.success == rust["success"]
-        assert py.cache_hit == rust.get("cache_hit")
-        assert py.data == rust.get("data")
-
-
-class TestQueryCacheHitParity:
-    @pytest.mark.asyncio
-    async def test_query_cache_hit_matches(self, parity_proc) -> None:
-        factory = _python_factory()
-        daf = factory.create()
-        post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        py_rid = post.resource_id
-
-        rust_post = _rust_send(parity_proc, {
-            "op": "post",
-            "resource_type": "user",
-            "data": {"name": "alice"},
-        })
-        rust_rid = rust_post["resource_id"]
-
-        await daf.query(QueryInfo(resource_id=py_rid))  # warm cache
-        _rust_send(parity_proc, {
-            "op": "query",
-            "resource_id": rust_rid,
-            "filters": None,
-            "algorithm": None,
-        })  # warm Rust cache
-
-        py = await daf.query(QueryInfo(resource_id=py_rid))
-        assert py.cache_hit is True
-
-        rust = _rust_send(parity_proc, {
-            "op": "query",
-            "resource_id": rust_rid,
-            "filters": None,
-            "algorithm": None,
-        })
-
-        assert py.success == rust["success"]
-        assert py.cache_hit == rust.get("cache_hit")
-        assert py.data == rust.get("data")
+        if op == "eq":
+            assert py_val == rust_val == expected, \
+                f"{name}: {field}={py_val!r} vs {rust_field}={rust_val!r} (expected {expected!r})"
+        elif op == "not_null":
+            assert py_val is not None, f"{name}: {field} is null in python"
+            assert rust_val is not None, f"{name}: {rust_field} is null in rust"
+        else:
+            pytest.fail(f"unknown assertion op: {op}")
 
 
-class TestGenerationRoundTripParity:
-    @pytest.mark.asyncio
-    async def test_generation_advances_after_put(self, parity_proc) -> None:
-        factory = _python_factory()
-        daf = factory.create()
-        post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        py_rid = post.resource_id
-
-        rust_post = _rust_send(parity_proc, {
-            "op": "post",
-            "resource_type": "user",
-            "data": {"name": "alice"},
-        })
-        rust_rid = rust_post["resource_id"]
-
-        await daf.query(QueryInfo(resource_id=py_rid))  # establish gen=0
-        _rust_send(parity_proc, {
-            "op": "query",
-            "resource_id": rust_rid,
-            "filters": None,
-            "algorithm": None,
-        })  # establish gen=0 on Rust
-
-        await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
-        _rust_send(parity_proc, {
-            "op": "put",
-            "resource_id": rust_rid,
-            "data": {"name": "bob"},
-        })  # mirror put on Rust
-
-        # Second query must be a cache miss (stale rejection)
-        py = await daf.query(QueryInfo(resource_id=py_rid))
-        assert py.cache_hit is False
-        assert py.data == {"name": "bob"}
-
-        rust = _rust_send(parity_proc, {
-            "op": "query",
-            "resource_id": rust_rid,
-            "filters": None,
-            "algorithm": None,
-        })
-
-        assert py.success == rust["success"]
-        assert py.data == rust.get("data")
+def _resolve_field(field: str, context: dict):
+    parts = field.split(".")
+    value = context
+    for part in parts:
+        if isinstance(value, dict):
+            value = value.get(part)
+        else:
+            value = getattr(value, part, None)
+    return value
 
 
-class TestCacheInvalidationParity:
-    @pytest.mark.asyncio
-    async def test_stale_rejected_after_put(self, parity_proc) -> None:
-        factory = _python_factory()
-        daf = factory.create()
-        post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        py_rid = post.resource_id
+def _load_cases():
+    try:
+        return _load_manifest()
+    except Exception as e:
+        pytest.skip(f"failed to load parity manifest: {e}")
 
-        rust_post = _rust_send(parity_proc, {
-            "op": "post",
-            "resource_type": "user",
-            "data": {"name": "alice"},
-        })
-        rust_rid = rust_post["resource_id"]
 
-        r1 = await daf.query(QueryInfo(resource_id=py_rid))
-        assert r1.cache_hit is False
-        _rust_send(parity_proc, {
-            "op": "query",
-            "resource_id": rust_rid,
-            "filters": None,
-            "algorithm": None,
-        })  # warm Rust cache
-
-        await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
-        _rust_send(parity_proc, {
-            "op": "put",
-            "resource_id": rust_rid,
-            "data": {"name": "bob"},
-        })  # mirror put on Rust
-
-        r2 = await daf.query(QueryInfo(resource_id=py_rid))
-        assert r2.cache_hit is False
-        assert r2.data == {"name": "bob"}
-
-        rust = _rust_send(parity_proc, {
-            "op": "query",
-            "resource_id": rust_rid,
-            "filters": None,
-            "algorithm": None,
-        })
-
-        assert r2.success == rust["success"]
-        assert r2.data == rust.get("data")
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", _load_cases(), ids=lambda c: c["name"])
+async def test_parity_manifest(parity_proc, case: dict):
+    await _run_manifest_case(parity_proc, case)

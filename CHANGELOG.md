@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CachelitoCache` as sole L1 implementation using owned `DashMap` (replaces `MemoryCache`)
 - `GenerationRegistry` for tracking current generation per resource via `DashMap<ResourceId, Generation>`
 - `debug_assert!` assertions in `CachelitoCache` and `GenerationRegistry` (P10 Rule 5)
+- `rust-toolchain.toml` pinning stable channel with minimal profile and rustfmt/clippy components
+- `Swatinem/rust-cache@v2` to CI workflow for Rust build caching
+- Workspace-level `[profile.release]` (LTO, codegen-units=1, panic="abort", strip) and `[profile.dev]` (codegen-units=16, incremental) in `Cargo.toml`
+- Manifest-driven parity tests via `tests/unit/parity_manifest.json`
 
 ### Changed
 
@@ -22,12 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `daf-core` remains zero-dependency (no `cachelito` or `dashmap`)
 - Removed `lru` dependency from `daf-cache` and `daf-application`
 - Degraded-tier cache operations (`delete`, `delete_prefix`, `shake`, `clear`) are no-ops
+- Parity test binary build failures now fail CI via `pytest.fail()` instead of `pytest.skip()`
+- CI `rust-test` job runs `cargo test --workspace --all-features` to cover feature-gated modules
 
 ### Fixed
 
 - P10 Rule 7 compliance: `.unwrap()` on `Mutex::lock()` replaced with `.unwrap_or_else(|e| e.into_inner())`
 - `dead_code` warning in `daf-ffi/src/bin/parity.rs`: renamed `repo` to `_repo`
 - Unused `MokaCache` import removed from `daf-cache/tests/traversal_tests.rs`
+- Parity binary creates a single Tokio `Runtime` at the top of `main()` and reuses it for all commands instead of allocating per command
 
 ## [0.2.2] - 2026-08-16
 
