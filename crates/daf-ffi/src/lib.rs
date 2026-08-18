@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use daf_algorithms::FibonacciDP;
 use daf_application::DataAccess;
-use daf_cache::MemoryCache;
+use daf_cache::{CachelitoCache, GenerationRegistry};
 use daf_core::{
     DataAccessError, DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo, ResourceId, UserId,
     ValidationError,
@@ -23,7 +23,10 @@ static LIVE_HANDLES: OnceLock<Mutex<HashMap<usize, u64>>> = OnceLock::new();
 
 fn live_handles() -> &'static Mutex<HashMap<usize, u64>> {
     let handles = LIVE_HANDLES.get_or_init(|| Mutex::new(HashMap::new()));
-    debug_assert!(!handles.is_poisoned(), "LIVE_HANDLES mutex must not be poisoned");
+    debug_assert!(
+        !handles.is_poisoned(),
+        "LIVE_HANDLES mutex must not be poisoned"
+    );
     handles
 }
 
@@ -35,7 +38,10 @@ fn set_last_error(msg: &str) {
 }
 
 fn clear_last_error() {
-    debug_assert!(LAST_ERROR.with(|s| s.borrow().is_none()), "LAST_ERROR already set before clear");
+    debug_assert!(
+        LAST_ERROR.with(|s| s.borrow().is_none()),
+        "LAST_ERROR already set before clear"
+    );
     LAST_ERROR.with(|slot| {
         *slot.borrow_mut() = None;
     });
@@ -59,7 +65,16 @@ fn map_data_access_error(err: DataAccessError) -> DafErrorCode {
         DataAccessError::Validation(_) => DafErrorCode::ValidationFailed,
         _ => DafErrorCode::InternalError,
     };
-    debug_assert!(code != DafErrorCode::InternalError || !matches!(err, DataAccessError::NotFound(_) | DataAccessError::Authorization(_) | DataAccessError::Validation(_)), "known error variant must not map to InternalError");
+    debug_assert!(
+        code != DafErrorCode::InternalError
+            || !matches!(
+                err,
+                DataAccessError::NotFound(_)
+                    | DataAccessError::Authorization(_)
+                    | DataAccessError::Validation(_)
+            ),
+        "known error variant must not map to InternalError"
+    );
     code
 }
 
@@ -79,7 +94,10 @@ where
 }
 
 fn validate_utf8_cstr(ptr: *const c_char, label: &str) -> Result<&'static str, DataAccessError> {
-    debug_assert!(!ptr.is_null(), "null ptr must be caught before validate_utf8_cstr");
+    debug_assert!(
+        !ptr.is_null(),
+        "null ptr must be caught before validate_utf8_cstr"
+    );
     if ptr.is_null() {
         set_last_error(&format!("null pointer: {label}"));
         return Err(ValidationError::new(format!("null pointer: {label}")).into());
@@ -95,13 +113,14 @@ pub extern "C" fn daf_data_access_new() -> *mut DataAccess {
     clear_last_error();
     match panic::catch_unwind(|| {
         let repo = Arc::new(MemoryRepository::<JsonValue>::new());
-        let cache = Arc::new(MemoryCache::new(1024));
+        let cache = Arc::new(CachelitoCache::new());
+        let generation_registry = Arc::new(GenerationRegistry::new());
         let mut algorithms = HashMap::new();
         algorithms.insert(
             "fib".to_string(),
             Arc::new(FibonacciDP::new()) as Arc<dyn daf_core::Algorithm>,
         );
-        let daf = DataAccess::new(repo, cache, Some(algorithms), None);
+        let daf = DataAccess::new(repo, cache, generation_registry, Some(algorithms), None);
         let raw = Box::into_raw(Box::new(daf));
         live_handles().lock().unwrap().insert(raw as usize, 0);
         raw

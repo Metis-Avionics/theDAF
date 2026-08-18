@@ -1180,8 +1180,86 @@ Each session entry should include:
 - FFI uses `thread_local!` + `RefCell<Option<CString>>` for C caller thread expectations
 - `Generation` enum is stored directly in cache values and serialized as `u64` in JSON via `.as_u64()`
 
+## Session 023 - 2026-08-18
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Branch `feat/tier-aware-cache-and-parity` (PR #24 merged, PR #29 revert open) passes 77 Rust tests, clippy clean, Power of Ten Rust clean. Plan `.kilo/plans/1787053103038-cachelito-l1-dashmap-runtime-plan.md` specified replacing `MemoryCache` with `CachelitoCache` and introducing `GenerationRegistry`.
+
+**Actions Taken**:
+- Replaced `MemoryCache` (L1) with `CachelitoCache` in `daf-cache/src/lib.rs` and `cachelito.rs`
+- `CachelitoCache` uses owned `Arc<DashMap<String, Arc<dyn Any + Send + Sync>>>` directly instead of `cachelito_async::AsyncGlobalCache` (which requires borrowing an external `DashMap` and creates lifetime complexity incompatible with `daf-cache`'s owned-struct design)
+- Created `GenerationRegistry` in `daf-cache/src/generation_registry.rs` using `Arc<DashMap<ResourceId, Generation>>`
+- Updated `DataAccess` in `daf-application/src/lib.rs` to use `GenerationRegistry` for generation tracking instead of cache key `_daf_gen:{namespace}`
+- Removed `_invalidate_caches` entirely from mutation path (`put`, `delete`)
+- Updated `query()` to read `current_gen` from `GenerationRegistry` and compare against cached generation field
+- Removed `lru` dependency from `daf-cache/Cargo.toml` and `daf-application/Cargo.toml`
+- Updated all tests, FFI, and parity binary to use `CachelitoCache` and `GenerationRegistry`
+- Ran `cargo test --workspace`: 77/77 passing
+- Ran `cargo clippy --workspace --all-targets --all-features -- -D warnings`: 0 warnings
+- Ran `python scripts/power_of_ten_rust.py`: all checks pass (0 violations)
+- Updated living docs: SESSION.md, HANDOVER.md, CHANGELOG.md
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| `crates/daf-cache/src/cachelito.rs` | Created | `CachelitoCache` using owned `DashMap` |
+| `crates/daf-cache/src/generation_registry.rs` | Created | `GenerationRegistry` using `DashMap<ResourceId, Generation>` |
+| `crates/daf-cache/src/lib.rs` | Modified | Removed `MemoryCache`; added `CachelitoCache` and `GenerationRegistry` modules |
+| `crates/daf-cache/Cargo.toml` | Modified | Removed `lru.workspace = true` |
+| `crates/daf-cache/tests/traversal_tests.rs` | Modified | Updated tests for `CachelitoCache` (no-op degraded ops) |
+| `crates/daf-application/src/lib.rs` | Modified | Added `generation_registry` field; removed `_invalidate_caches`; updated `_current_generation`/`_advance_generation` |
+| `crates/daf-application/Cargo.toml` | Modified | Removed `lru.workspace = true` |
+| `crates/daf-application/tests/integration_tests.rs` | Modified | Updated fixtures for `CachelitoCache` and `GenerationRegistry` |
+| `crates/daf-application/tests/factory_tests.rs` | Modified | Updated for new `DataAccess` constructor signature |
+| `crates/daf-ffi/src/lib.rs` | Modified | Updated to use `CachelitoCache` and `GenerationRegistry` |
+| `crates/daf-ffi/src/bin/parity.rs` | Modified | Updated to use `CachelitoCache` and `GenerationRegistry` |
+| `crates/daf-core/src/lib.rs` | Modified | Removed trailing newline, formatting fix |
+| `crates/daf-core/src/lock_registry.rs` | Modified | `debug_assert!` formatting |
+| `crates/daf-cache/src/hierarchical.rs` | Modified | `debug_assert!` formatting |
+| `crates/daf-cache/src/moka.rs` | Modified | `debug_assert!` formatting |
+| `crates/daf-cache/src/trie.rs` | Modified | `debug_assert!` formatting |
+| `crates/daf-http/src/lib.rs` | Modified | `debug_assert!` formatting |
+| `crates/daf-repository/src/memory.rs` | Modified | Trailing newline fix |
+| `crates/daf-runtime/src/lib.rs` | Modified | Trailing newline fix |
+| `crates/daf-algorithms/src/lib.rs` | Modified | `debug_assert!` formatting |
+| `SESSION.md` | Modified | Added this session entry |
+| `HANDOVER.md` | Modified | Updated architecture description and latest changes |
+| `CHANGELOG.md` | Modified | Added Cachelito L1 + DashMap runtime entries |
+
+### Project Status
+
+- **Branch**: `feat/tier-aware-cache-and-parity`
+- **Version**: 0.2.2
+- **Rust Tests**: 77/77 passing
+- **Clippy**: 0 warnings
+- **Power of Ten Rust**: All checks pass
+- **PR**: https://github.com/Metis-Avionics/theDAF/pull/24 (merged), https://github.com/Metis-Avionics/theDAF/pull/29 (revert open)
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch to origin
+- [ ] Leave adversarial review comment on PR #29
+- [ ] Merge PR after review
+- [ ] Tag release `v0.2.2`
+- [ ] Publish to PyPI
+
+### Notes
+
+- `MemoryCache` removed from `daf-cache` public API; all consumers updated to `CachelitoCache`
+- `CachelitoCache` uses owned `Arc<DashMap<String, Arc<dyn Any + Send + Sync>>>` directly — no external `cachelito-*` runtime dependency
+- `GenerationRegistry` uses `Arc<DashMap<ResourceId, Generation>>`; `advance()` clones `ResourceId` for DashMap entry API
+- `DataAccess::new` signature now requires `Arc<GenerationRegistry>` as third parameter; all call sites updated
+- `_invalidate_caches` removed; generation advancement under `LockRegistry` is the authoritative invalidation signal
+- `query()` generation validation reads from `GenerationRegistry` and compares with cached generation embedded in cache value JSON
+
 ---
-## Session 018 - 2026-08-16
+
 
 ### Agent: Kilo
 

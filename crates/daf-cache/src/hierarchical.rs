@@ -24,22 +24,34 @@ impl HierarchicalCache {
     }
 
     pub fn l1(&self) -> &Arc<dyn Cache> {
-        debug_assert!(Arc::strong_count(&self.l1) > 0, "l1 cache Arc must be valid");
+        debug_assert!(
+            Arc::strong_count(&self.l1) > 0,
+            "l1 cache Arc must be valid"
+        );
         &self.l1
     }
 
     pub fn l2(&self) -> &Arc<dyn Cache> {
-        debug_assert!(Arc::strong_count(&self.l2) > 0, "l2 cache Arc must be valid");
+        debug_assert!(
+            Arc::strong_count(&self.l2) > 0,
+            "l2 cache Arc must be valid"
+        );
         &self.l2
     }
 
     pub fn l3(&self) -> &Arc<dyn Cache> {
-        debug_assert!(Arc::strong_count(&self.l3) > 0, "l3 cache Arc must be valid");
+        debug_assert!(
+            Arc::strong_count(&self.l3) > 0,
+            "l3 cache Arc must be valid"
+        );
         &self.l3
     }
 
     pub fn l4(&self) -> &Arc<dyn Cache> {
-        debug_assert!(Arc::strong_count(&self.l4) > 0, "l4 cache Arc must be valid");
+        debug_assert!(
+            Arc::strong_count(&self.l4) > 0,
+            "l4 cache Arc must be valid"
+        );
         &self.l4
     }
 }
@@ -112,7 +124,10 @@ impl Cache for HierarchicalCache {
     }
 
     async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError> {
-        debug_assert!(!prefix.is_empty(), "prefix must not be empty for delete_prefix");
+        debug_assert!(
+            !prefix.is_empty(),
+            "prefix must not be empty for delete_prefix"
+        );
         self.l1.delete_prefix(prefix).await?;
         self.l2.delete_prefix(prefix).await?;
         self.l3.delete_prefix(prefix).await?;

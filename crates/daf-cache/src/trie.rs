@@ -128,7 +128,10 @@ impl Ord for AStarEntry {
 #[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for AStarEntry {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        debug_assert!(self.match_len == other.match_len || self.counter != other.counter, "AStarEntry cmp total order");
+        debug_assert!(
+            self.match_len == other.match_len || self.counter != other.counter,
+            "AStarEntry cmp total order"
+        );
         Some(self.cmp(other))
     }
 }

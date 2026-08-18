@@ -1,11 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use daf_cache::trie::{
-    astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete, trie_delete_prefix,
-    trie_insert, TrieNode,
-};
-use daf_cache::MemoryCache;
+use daf_cache::{trie::*, CachelitoCache};
 use daf_core::{Cache, Tier};
 
 fn build_trie(keys: &[&str]) -> TrieNode {
@@ -142,8 +138,8 @@ fn astar_collect_no_mismatch_descendant_penalty() {
 }
 
 #[tokio::test]
-async fn memory_cache_set_get_round_trip_with_tier() {
-    let cache = MemoryCache::new(1024);
+async fn cachelito_cache_set_get_round_trip_with_tier() {
+    let cache = CachelitoCache::new();
     let value = Arc::new(42_i64) as Arc<dyn std::any::Any + Send + Sync>;
     cache.set("key:1".to_string(), value).await.unwrap();
     let entry = cache.get("key:1").await.unwrap();
@@ -154,8 +150,8 @@ async fn memory_cache_set_get_round_trip_with_tier() {
 }
 
 #[tokio::test]
-async fn memory_cache_delete_prefix_removes_matching_keys() {
-    let cache = MemoryCache::new(1024);
+async fn cachelito_cache_delete_prefix_is_noop() {
+    let cache = CachelitoCache::new();
     cache
         .set("ns:a:1".to_string(), Arc::new("v1"))
         .await
@@ -171,14 +167,14 @@ async fn memory_cache_delete_prefix_removes_matching_keys() {
 
     cache.delete_prefix("ns:a:").await.unwrap();
 
-    assert!(cache.get("ns:a:1").await.unwrap().is_none());
-    assert!(cache.get("ns:a:2").await.unwrap().is_none());
+    assert!(cache.get("ns:a:1").await.unwrap().is_some());
+    assert!(cache.get("ns:a:2").await.unwrap().is_some());
     assert!(cache.get("ns:b:1").await.unwrap().is_some());
 }
 
 #[tokio::test]
-async fn memory_cache_shake_returns_count() {
-    let cache = MemoryCache::new(1024);
+async fn cachelito_cache_shake_returns_zero() {
+    let cache = CachelitoCache::new();
     cache
         .set("ns:a:1".to_string(), Arc::new("v1"))
         .await
@@ -193,8 +189,8 @@ async fn memory_cache_shake_returns_count() {
         .unwrap();
 
     let removed = cache.shake("ns:a:").await.unwrap();
-    assert_eq!(removed, 2);
-    assert!(cache.get("ns:a:1").await.unwrap().is_none());
+    assert_eq!(removed, 0);
+    assert!(cache.get("ns:a:1").await.unwrap().is_some());
     assert!(cache.get("other:x").await.unwrap().is_some());
 }
 

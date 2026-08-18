@@ -45,7 +45,10 @@ impl Cache for MokaCache {
     }
 
     async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError> {
-        debug_assert!(!prefix.is_empty(), "prefix must not be empty for delete_prefix");
+        debug_assert!(
+            !prefix.is_empty(),
+            "prefix must not be empty for delete_prefix"
+        );
         self.inner.invalidate_all();
         if prefix.is_empty() {
             Ok(())

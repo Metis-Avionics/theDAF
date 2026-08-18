@@ -25,7 +25,10 @@ impl LockRegistry {
         use std::sync::OnceLock;
         static INSTANCE: OnceLock<LockRegistry> = OnceLock::new();
         let registry = INSTANCE.get_or_init(LockRegistry::new);
-        debug_assert!(INSTANCE.get().is_some(), "LockRegistry singleton must be initialized");
+        debug_assert!(
+            INSTANCE.get().is_some(),
+            "LockRegistry singleton must be initialized"
+        );
         registry
     }
 

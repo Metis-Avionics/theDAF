@@ -9,7 +9,7 @@ The project is in **feature-complete** state with the Rust architectural transla
 **PR24 Scope**: PR24 is the **Rust architectural milestone**. It translates the Python DAF implementation to Rust across all 9 crates, including:
 - Core traits and contracts (`daf-core`)
 - DataAccess orchestration (`daf-application`)
-- Tier-aware cache hierarchy (`daf-cache`: MemoryCache, MokaCache, HierarchicalCache)
+- Tier-aware cache hierarchy (`daf-cache`: CachelitoCache, MokaCache, HierarchicalCache)
 - FFI boundary (`daf-ffi`)
 - HTTP runtime (`daf-http`, `daf-runtime`, `daf-messaging`)
 - CI hardening, parity tests, and Power-of-Ten compliance
@@ -35,14 +35,17 @@ The cache hierarchy is one component of this milestone, not the entire PR.
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1787049814652-upgrade-memorycache-to-dashmap.md` have been addressed:
+All issues from `.kilo/plans/1787053103038-cachelito-l1-dashmap-runtime-plan.md` have been addressed:
 
-- **MemoryCache DashMap upgrade**: `Arc<RwLock<MemoryCacheInner>>` replaced with `Arc<MemoryCacheInner>`; `HashMap<String, CacheEntry>` replaced with `DashMap<String, CacheEntry>` for concurrent per-shard reads
-- **LRU + Trie under Mutex**: `lru::LruCache` and `TrieNode` wrapped in `std::sync::Mutex`; eviction metadata is coarse-grained but not a regression since previous implementation serialized all operations through a global `RwLock`
-- **Concurrent reads**: `get` and `has` now proceed without global write lock; only mutations acquire per-shard DashMap write locks
-- **Prefix operations preserved**: `delete_prefix` and `shake` use trie traversal + `DashMap::remove` per key (O(prefix_length + K))
-- **P10 Rule 7 compliance**: Replaced `.unwrap()` on `Mutex::lock()` with `.unwrap_or_else(|e| e.into_inner())`; replaced `.expect()` on `NonZeroUsize::new()` with `.unwrap_or_else()` fallback
-- **Tests**: 83/83 Rust tests passing
+- **MemoryCache replaced with CachelitoCache**: `CachelitoCache` is the sole L1 implementation using owned `Arc<DashMap<String, Arc<dyn Any + Send + Sync>>>` directly instead of `cachelito_async::AsyncGlobalCache` (which requires borrowing an external `DashMap` and creates lifetime complexity incompatible with `daf-cache`'s owned-struct design)
+- **GenerationRegistry introduced**: `Arc<DashMap<ResourceId, Generation>>` tracks current generation per resource; `advance()` clones `ResourceId` for DashMap entry API
+- **DataAccess updated**: `generation_registry: Arc<GenerationRegistry>` field added; `_current_generation` and `_advance_generation` delegate to `GenerationRegistry`; `_invalidate_caches` removed entirely from mutation path
+- **query() generation validation**: reads `current_gen` from `GenerationRegistry` and compares against cached generation field embedded in cache value JSON
+- **daf-core zero-dependency**: no `cachelito` or `dashmap` dependencies in `daf-core/Cargo.toml`
+- **GenerationRegistry placement**: lives in `daf-cache`, not `daf-core`
+- **Degraded-tier semantics**: `delete`, `delete_prefix`, `shake`, `clear` are no-ops returning `Ok(())` or `Ok(0)`, consistent with existing Moka degraded-tier pattern
+- **Dependency cleanup**: removed `lru` from `daf-cache/Cargo.toml` and `daf-application/Cargo.toml`
+- **Tests**: 77/77 Rust tests passing
 - **Clippy**: 0 warnings
 - **Power of Ten Rust**: All checks pass
 
@@ -93,7 +96,7 @@ All issues from `.kilo/plans/1787049814652-upgrade-memorycache-to-dashmap.md` ha
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 212 Python + 83 Rust = 295 total, all passing
+- **Test Count**: 77 Rust tests, all passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 - **Clippy**: 0 warnings
@@ -150,7 +153,7 @@ All issues from `.kilo/plans/1787049814652-upgrade-memorycache-to-dashmap.md` ha
 ├── crates/
 │   ├── daf-core/                # Traits, errors, contracts (Tier, CacheEntry, LockRegistry)
 │   ├── daf-application/         # DataAccess + DataAccessFactory
-│   ├── daf-cache/               # MemoryCache, MokaCache, RedisCache, PostgresCache, HierarchicalCache
+│   ├── daf-cache/               # CachelitoCache (L1), MokaCache, RedisCache, PostgresCache, HierarchicalCache, GenerationRegistry
 │   ├── daf-repository/          # MemoryRepository with PartialEq CAS
 │   ├── daf-algorithms/          # FibonacciDP
 │   ├── daf-runtime/             # Tokio runtime
@@ -176,10 +179,11 @@ All issues from `.kilo/plans/1787049814652-upgrade-memorycache-to-dashmap.md` ha
 ### Next Steps
 
 1. Commit all changes with sign-off
-2. Push branch to origin (updates PR #24)
-3. Merge PR after review
-4. Tag release `v0.2.2`
-5. Publish to PyPI
+2. Push branch to origin
+3. Leave adversarial review comment on PR #29
+4. Merge PR after review
+5. Tag release `v0.2.2`
+6. Publish to PyPI
 
 ### Gate Files
 
