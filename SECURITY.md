@@ -13,7 +13,7 @@ If you discover a security vulnerability in `daf`, please report it responsibly.
 ### How to Report
 
 - **Email**: security@example.com (replace with actual maintainer email)
-- **GitHub**: Open a private security advisory at https://github.com/Metis-Avionics/theDAF-LLVM/security/advisories
+- **GitHub**: Open a private security advisory at https://github.com/RAliane-REBORN/theDAF/security/advisories
 
 ### What to Include
 
@@ -52,11 +52,6 @@ Detailed technical findings are documented in [BUGS.md](./BUGS.md). Critical and
 - ~~**Adapter reaches into private state**~~ — FIXED. Uses `daf.get_components()` to extract dependencies.
 - ~~**PUT mutates validated model**~~ — FIXED. Constructs new `PutInfo` instead of mutating in-place.
 - ~~**No structured logging**~~ — FIXED. Logging added with structured `extra` dicts across core components.
-- ~~**Trie memory amplification**~~ — FIXED. Terminal-only trie nodes.
-- ~~**Cache downcast panic**~~ — FIXED. Cache entry downcast uses `serde_json::Value` + `.as_object()`.
-- ~~**Superedge double-delete panic**~~ — FIXED. Removed redundant `cache.delete(gen_key)`.
-- ~~**Trie ancestor removal panic**~~ — FIXED. Off-by-one cleanup in `trie_delete_prefix`.
-- ~~**Async blocking in tests**~~ — FIXED. `_trie_collect` made async.
 
 ---
 
@@ -68,98 +63,61 @@ These invariants were added to prevent second-order defects from interacting inc
 - Authorization is atomic with mutation reads (prevents TOCTOU race)
 - Unknown algorithms return validation errors (prevents silent raw data exposure)
 
-## Rust Security Considerations
-
-### Memory Safety
-
-- `daf-core` contains no `unsafe` code. All shared state uses `Arc` + immutable borrows or `Mutex`/`RwLock` for interior mutability.
-- `daf-cache`’s prefix trie uses `unsafe` raw pointers for path tracking during deletion. This is confined to `trie_delete` and `trie_delete_prefix` and is covered by adversarial invariant tests.
-- No `static mut` state. The `daf-ffi` crate uses `OnceLock` / `Mutex` for global error state instead of mutable statics.
-
-### Concurrency
-
-- Per-resource lock striping (`GenerationLocks`) bounds the number of live `tokio::sync::Mutex` allocations via LRU eviction (max 256 by default). This prevents unbounded memory growth from unique resource IDs.
-- `MemoryRepository` uses `tokio::sync::RwLock` for concurrent reads and exclusive writes. `try_update` / `try_delete` perform compare-and-swap under the write lock.
-- `MemoryCache` updates `_cache`, `_trie`, and `_lru` without `await` between them, preserving the multi-index atomicity invariant.
-
-### Authorization
-
-- The `Authorizer` trait is optional. When absent, `DataAccess` allows all operations. Production deployments must provide an implementor.
-- Authorization runs after repository read on cache miss, and re-runs on cache hit with the cached raw data. This prevents stale grants from bypassing revoked access.
-- Empty `resource_id` is rejected before authorization, avoiding unnecessary authorizer calls with invalid input.
-
-### Cache Isolation
-
-- Cache keys include `resource_id`, canonical `filters`, `algorithm`, and `user_id`. Changing any of these produces a distinct key, preventing cross-user and cross-projection leakage.
-- Generation keys (`_daf_gen:{namespace}`) are stored in the same cache namespace as query entries. Bounded LRU eviction may evict generation metadata, which is handled by treating missing generation as a cache miss.
-
-### FFI Boundaries
-
-- `daf-ffi` exposes `extern "C"` functions with opaque pointers. No Rust panics, `Result`, or `String` cross the boundary. Errors are returned as `i32` error codes.
-- `UserId` and `ResourceId` are passed as `const char*` and copied into Rust `String` to avoid lifetime issues across the FFI boundary.
-
-### Algorithm Execution
-
-- Custom `Algorithm` implementations execute arbitrary code. Only use trusted algorithms in production. The `daf-algorithms` crate ships only `FibonacciDP` as a reference implementation.
-
-### Error Handling
-
-- `DataAccessError` is a `thiserror` enum with typed sub-errors. The Rust API returns `Result<T, DataAccessError>`.
-- `QueryResult` / `MutationResult` preserve the external `Option<String>` envelope for ABI compatibility with the Python contract and FFI consumers.
-
 ## Security Best Practices for Users
 
 ### Do Not Expose DAF Without Authorization
 
 The core `DataAccess` layer does not enforce authorization. Always provide an `Authorizer` when exposing DAF through any interface:
 
-```rust
-use daf_application::DataAccess;
-use daf_core::Authorizer;
+```python
+from daf.core.access import DataAccess
+from daf.core.factory import DataAccessFactory
 
-let daf = DataAccess::new(
-    repo,
-    cache,
-    algorithms,
-    Some(my_authorizer), // REQUIRED for production
-);
+factory = DataAccessFactory(
+    repository=repo,
+    cache=cache,
+    authorizer=my_authorizer,  # REQUIRED for production
+)
+daf = factory.create()
 ```
 
-When using the Axum adapter, always provide `get_current_user`:
+When using the FastAPI adapter, always provide `get_current_user`:
 
-```rust
-use daf_http::DataAccessRouter;
+```python
+from daf.adapters.fastapi import DataAccessRouter
 
-let router = DataAccessRouter::new(daf, get_current_user)?;
-// GET /query/{id} returns 403/404/500 as appropriate
+router = DataAccessRouter(
+    daf=daf,
+    get_current_user=get_current_user,  # REQUIRED for production
+)
 ```
 
 ### Input Validation
 
 Validate input at the boundary before passing to `DataAccess`:
 
-```rust
-use daf_core::QueryInfo;
-use daf_core::ResourceId;
+```python
+import re
+from daf.contracts.query import QueryInfo
 
-let info = QueryInfo {
-    resource_id: ResourceId::new("user:1"),
-    filters: None,
-    algorithm: None,
-};
+if not re.match(r'^[a-zA-Z0-9_-]+$', resource_id):
+    raise ValueError("Invalid resource_id format")
+
+info = QueryInfo(resource_id=resource_id)
 ```
 
 ### Error Handling
 
-Never expose raw exception messages to clients. Wrap DAF operations to sanitize errors in production:
+Never expose raw exception messages to clients. The framework currently propagates error strings in result envelopes; wrap DAF operations to sanitize errors in production:
 
-```rust
-match daf.query(info, Some(user)).await {
-    Ok(result) => ...,
-    Err(daf_core::DataAccessError::Authorization(_)) => (StatusCode::FORBIDDEN, "Forbidden").into_response(),
-    Err(daf_core::DataAccessError::NotFound(_)) => (StatusCode::NOT_FOUND, "Not Found").into_response(),
-    Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response(),
-}
+```python
+from daf.core.errors import DataAccessError
+
+try:
+    result = await daf.query(info)
+except DataAccessError as e:
+    logger.error(f"DataAccess error: {e}")
+    raise HTTPException(status_code=500, detail="Internal server error")
 ```
 
 ### Cache Invalidation
@@ -168,18 +126,19 @@ Be aware that mutations use per-resource prefix invalidation (`delete_prefix`). 
 
 ### Rate Limiting
 
-Use the built-in rate limiting in the Axum adapter. Do not disable rate limiting in production.
+Use the built-in rate limiting in the FastAPI adapter. Do not disable rate limiting in production.
 
 ### Secrets Management
 
 Never store secrets in the repository:
 
-```rust
-// Bad
-repo.save(&ResourceId::new("db_password"), "super_secret").await;
+```python
+# Bad
+repo.save("db_password", "super_secret")
 
-// Good
-let db_password = std::env::var("DB_PASSWORD")?;
+# Good
+import os
+db_password = os.environ["DB_PASSWORD"]
 ```
 
 ### Dependency Scanning
@@ -187,7 +146,8 @@ let db_password = std::env::var("DB_PASSWORD")?;
 Regularly scan dependencies for vulnerabilities:
 
 ```bash
-cargo audit
+uv pip list --outdated
+pip-audit
 ```
 
 ## Known Security Considerations
@@ -203,13 +163,17 @@ cargo audit
 
 Do not use them in production with sensitive data.
 
-### Bounded LRU Can Evict Generation Metadata
+### Dead Code Removal
 
-`_daf_gen:*` keys share the same cache namespace as query entries. Evicting generation metadata forces a cache miss, which is correct but may increase repository load. The `GenerationLocks` LRU is bounded to 256 entries to prevent unbounded memory growth from unique resource IDs.
+Unused code (`memoize` decorator, `PureMemo`, `_make_key`) has been removed from `daf.utils._memoize`. Dead code expands the attack surface and confuses readers. Git history preserves removed code if needed later.
+
+### MemoryCache Bounds
+
+`MemoryCache(max_size=0)` (the default) is backwards-compatible and unbounded. It is **not** memory-safe for production deployments. Set a positive `max_size` to enable LRU eviction and bound memory growth.
 
 ### Rate Limiting
 
-Rate limiting is implemented at the Axum adapter layer only. If you expose `DataAccess` directly (without the adapter), you must implement your own rate limiting.
+Rate limiting is implemented at the FastAPI adapter layer only. If you expose `DataAccess` directly (without the adapter), you must implement your own rate limiting.
 
 ### Algorithm Execution
 
@@ -219,31 +183,28 @@ Custom `Algorithm` implementations execute arbitrary code. Only use trusted algo
 
 The built-in authorizer is a simple ownership check (`owner_id == user.id`). It does not support roles, scopes, tenant boundaries, or administrative access. Implement a custom `Authorizer` for production use.
 
+### HTTP Test Client
+
+The test suite uses `httpx2` (the actively maintained successor to `httpx`) for HTTP integration tests. `httpx2` resolves `StarletteDeprecationWarning` seen with older `httpx` versions in combination with Starlette's `TestClient`.
+
 ### Trie Traversal Complexity
 
-`MemoryCache._trie_collect()` and `_trie_delete_prefix()` operate in O(prefix_length + K) time where K is the number of matching entries. The internal prefix trie stores keys only at terminal nodes, eliminating the O(N × L) memory amplification present in naive implementations.
+`MemoryCache._trie_delete_prefix()` and `_trie_collect()` operate in O(prefix_length + K) time where K is the number of matching entries. The internal prefix trie stores keys only at terminal nodes, eliminating the O(N × L) memory amplification present in naive implementations that store key references at every node along each key's path.
 
-### Rust FFI Safety
+### Base SHA Validation
 
-`daf-ffi` uses `extern "C"` with opaque pointers. Callers must not free returned pointers; the FFI layer owns all allocations. Error codes are `i32`; a return value of `0` indicates success, non-zero indicates failure.
+`scripts/graphify_affected.py` validates the base ref exists locally via `git rev-parse --verify` before running `git diff`. This prevents CI from producing false-green results when the base ref is missing or the clone is shallow.
 
-### Tier-Aware Cache Hierarchy
+### Graph JSON Schema Validation
 
-The Rust backend implements a tier-aware cache hierarchy:
+`scripts/graphify_affected.py` validates the loaded graph JSON contains a top-level `nodes` list and that each node has `source_file` and `id` fields. Malformed graph output now produces a clear error instead of silently producing "no impacted test files detected".
 
-- **L1**: `MemoryCache` (in-process, fastest, bounded by `max_size`)
-- **L2**: `MokaCache` (optional, thread-local, bounded by `max_capacity`)
-- **L3**: `RedisCache` (optional, remote, feature-gated)
-- **L4**: `PostgresCache` (optional, persistent, feature-gated)
+## Security Updates
 
-`HierarchicalCache` propagates `get` misses down the hierarchy and `set` writes to L1 only (write-through policy). `delete`, `delete_prefix`, and `clear` propagate to all tiers. `shake` sums removed counts across all tiers.
+Security updates will be released as patch versions (e.g., 0.1.1) and announced via:
 
-The `Cache::get` return type changed from `Option<Arc<dyn Any>>` to `Option<CacheEntry>` where `CacheEntry { value, tier }` carries the originating tier. This is an internal API change; `DataAccess` unwraps `CacheEntry.value` transparently.
+- GitHub Security Advisories
+- CHANGELOG.md
+- GitHub Releases
 
-### Cache Backend Feature Gates
-
-`RedisCache` and `PostgresCache` are optional and return `CacheError` unless their respective Cargo features (`redis`, `postgres`) are enabled. Do not enable these features in environments where the corresponding services are not configured, as missing dependencies will cause runtime errors rather than graceful fallbacks.
-
-### PartialEq CAS Semantics
-
-`MemoryRepository::try_update` and `try_delete` now use `PartialEq` directly when `T: PartialEq`, falling back to JSON serialization only when `T` does not implement `PartialEq`. This preserves existing semantics for `JsonValue` (which implements `PartialEq`) while maintaining compatibility for custom types that only implement `Serialize`.
+Subscribe to releases for notifications: https://github.com/RAliane-REBORN/theDAF/releases

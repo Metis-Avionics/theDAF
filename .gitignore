@@ -220,7 +220,3 @@ __marimo__/
 # graphifyy artifacts (CI/development)
 graphify-out/
 graph.json
-node_modules/
-package.json
-package-lock.json
-=0.27

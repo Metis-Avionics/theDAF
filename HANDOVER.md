@@ -4,90 +4,103 @@
 
 ### Current State
 
-The project is in **feature-complete** state with the Rust architectural translation complete. Tier-aware cache hierarchy, Python–Rust differential parity tests, adversarial review remediation (PR24 plan), global lock striping, and Power of Ten Rust compliance are implemented on the `feat/tier-aware-cache-and-parity` branch. Remaining work is tracked in BUGS.md.
-
-**PR24 Scope**: PR24 is the **Rust architectural milestone**. It translates the Python DAF implementation to Rust across all 9 crates, including:
-- Core traits and contracts (`daf-core`)
-- DataAccess orchestration (`daf-application`)
-- Tier-aware cache hierarchy (`daf-cache`: MemoryCache, MokaCache, HierarchicalCache)
-- FFI boundary (`daf-ffi`)
-- HTTP runtime (`daf-http`, `daf-runtime`, `daf-messaging`)
-- CI hardening, parity tests, and Power-of-Ten compliance
-
-The cache hierarchy is one component of this milestone, not the entire PR.
+The project is in **feature-complete** state with all planned bugs and security issues resolved. All work from the barrel-overlap plan, cache optimization plan, and red-team fix plan is complete and uncommitted in the working tree.
 
 ### Repository Status
 
-- **Branch**: `feat/tier-aware-cache-and-parity`
-- **Commits**: 1 clean commit ahead of origin/main (`7e71580`)
-- **PR Status**: PR #24 open (https://github.com/Metis-Avionics/theDAF/pull/24)
+- **Branch**: `refactor/barrel-overlap-optimizations`
+- **Commits**: up to date with origin/refactor/barrel-overlap-optimizations; uncommitted red-team fixes and optimization changes
+- **PR Status**: #18 open for red-team fixes on barrel-overlap-optimizations branch
 
 ### Quality Status
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ⚠️ 212/212 passing (6 parity failures are pre-existing state-isolation issue) |
+| Tests (pytest) | ✅ 192/192 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
-| Rust Clippy | ✅ 0 warnings |
-| Power of Ten Rust | ✅ All checks pass |
 | Build | ✅ Verified |
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786886032141-pr24-adversarial-fixes.md` and `.kilo/plans/1786888887462-rust-power-of-ten-remediation.md` have been addressed:
+All issues from `.kilo/plans/1786733196653-barrel-overlap-plan.md`, `.kilo/plans/1786732042967-cache-optimization-plan.md`, `.kilo/plans/1786798171669-pr18-red-team-fixes.md`, `.kilo/plans/1786798481667-pr18-adversarial-fixes.md`, `.kilo/plans/1786799336554-adversarial-hardening-plan.md`, `.kilo/plans/1786800722008-pr18-red-team-fixes.md`, `.kilo/plans/1786803535993-dp-pickup-plan.md`, and `.kilo/plans/1786806609555-deferred-p1-p2-fixes.md` have been addressed:
 
-- **MokaCache non-empty prefix**: `delete_prefix` and `shake` always call `invalidate_all()` and return `CacheError::new(...)` for non-empty prefixes
-- **HierarchicalCache error propagation**: `delete`, `clear`, `delete_prefix`, and `shake` all propagate tier errors with `?`; the caller decides whether to treat them as fatal or advisory
-- **Mutation flow restructured**: `put`/`delete` now advance generation under the per-resource lock before attempting cache invalidation; `_invalidate_caches` (delete_prefix + shake) is advisory and errors are logged, not propagated; the previously broken transaction boundary is fixed — generation always advances regardless of cache tier state
-- **Generation enum round-trip**: `_execute_cache_miss` serializes `Missing` as `Null` and `Valid(n)` as `Number(n)`; `query()` deserializes back to `Generation` enum
-- **FFI double-free / ABA guard**: `LIVE_HANDLES` is a `HashMap<usize, u64>` tracking generation-tagged handles; `daf_data_access_new` inserts `(handle, 0)`; `daf_data_access_free` rejects absent handles (prevents double-free and use-after-free within a single process)
-- **Power of Ten Rust gate**: Added `scripts/power_of_ten_rust.py` with CI integration
-- **Power of Ten Rust instrumentation**: Meaningful `debug_assert!` calls encoding actual invariants (non-empty keys, generation state machine transitions, lock acquisition) across 8 crates; suppressed clippy warnings with crate-level `allow(clippy::assertions_on_constants)`
-- **Rule 4 cleanup**: Extracted `_build_put_merger` from `put` in `daf-application`; all functions now under 60 lines
-- **Rule 5 compliance**: Added `debug_assert!` to `_build_put_merger`; all functions have at least 1 assertion
-- **FFI lint cleanup**: Fixed redundant closures, const thread_local initializer, unused variable, unused import
-- **Trie lint cleanup**: Fixed non-canonical `partial_cmp` allow attribute placement
-- **LockRegistry**: Added `Default` impl to eliminate clippy suggestion
-- **Commit history cleanup**: Removed `node_modules/`, `package.json`, `package-lock.json` from git tracking; added to `.gitignore`
-- **Rule 5 assertion remediation**: Replaced all broken `debug_assert!(true, ...)` placeholders with meaningful invariants across `daf-core`, `daf-cache`, `daf-application`, and `daf-ffi`; eliminated all `assertions_on_constants` clippy warnings
-- **Cache trait**: `get` returns `Option<CacheEntry>` instead of `Option<Arc<dyn Any>>`
-- **MemoryCache**: Wraps values in `CacheEntry { origin_tier: Tier::L1 }`
-- **MokaCache**: L2 backend; non-empty `delete_prefix`/`shake` return `Err(CacheError::new(...))`
-- **RedisCache**: L3 stub (feature-gated behind `redis`; returns `CacheError::new("redis feature not enabled")` for all operations)
-- **PostgresCache**: L4 stub (feature-gated behind `postgres`; returns `CacheError::new("postgres feature not enabled")` for all operations)
-- **HierarchicalCache**: L1→L2→L3→L4 miss propagation; `set` writes to L1 only; `delete`/`clear`/`delete_prefix`/`shake` all propagate tier errors with `?`; caller decides fatal vs advisory
-- **DataAccessFactory**: Added to `daf-application` with `new()` and `create()`
-- **try_update equality**: Uses `PartialEq` directly when `T: PartialEq`, JSON fallback otherwise
-- **Python parity tests**: Added `tests/unit/test_rust_parity.py` with 20 tests
-- **Rust contract tests**: Added `AlgorithmStats` serde round-trip, `Generation::Missing`/`Valid` round-trip, `QueryInfo` empty defaults
-- **Rust traversal tests**: Added `CacheEntry` round-trip with `Tier::L1`, `delete_prefix` integration, `shake` count, Moka prefix error tests
-- **Rust fibonacci tests**: Added `Arc<i64>` input and multi-execute stats tests
-- **Rust integration tests**: Added factory creation, post-then-query, concurrent queries, generation missing init, hierarchical cache, adversarial Moka/FFI tests
-- **CI**: Added `rust-lint`, `rust-test`, `daf-core-contract`, `parity`, and `power-of-ten-rust` jobs
-- **Global lock registry**: Added `LockRegistry` (16-shard striped) with `OnceLock` singleton and `LockGuard` RAII
-- **FFI safety**: Rewrote `daf-ffi` with thread-local error state, null/UTF-8 validation, removed `#![allow(static_mut_refs)]`
-- **FFI double-free guard**: `LIVE_HANDLES` tracks live `DataAccess` pointers; `daf_data_access_free` returns `InvalidArgument` on double-free
-- **Cache invalidation**: `delete`/`delete_prefix`/`clear` propagate tier errors; `HierarchicalCache::shake` sums counts authoritatively
-- **Cache promotion**: L2/L3/L4 hits promote into L1, preserving originating `CacheEntry.origin_tier`
-- **Moka limitation**: Non-empty `delete_prefix` and `shake` always invalidate all entries and return `Err(CacheError::new(...))`; MokaCache is a degraded tier — callers must treat L2 as advisory
-- **Feature gates**: `redis` and `postgres` modules gated behind Cargo features in `daf-cache/src/lib.rs`
-- **CI parity gate**: Added `parity` to `build.needs` in `.github/workflows/ci.yml`
-- **Generation JSON round-trip**: Symmetric enum↔JSON mapping: `Missing` ↔ `Null`, `Valid(n)` ↔ `Number(n)`
+- **Barrel overlap**: `_public` helper added to all 7 barrel `__init__.py` files
+- **Barrel-consistency test**: `tests/unit/test_barrels.py` guards `daf` ⊂ `daf.core` subset invariant
+- **No inline `_public`**: `test_no_barrel_defines_own_public` asserts all barrel `__init__.py` files import `_public` from `daf._barrel`
+- **Namespace cache**: `DataAccess._namespace_cache` removed; `_resource_namespace` computes SHA-256 inline (unbounded dict was a memory-growth risk)
+- **Prefix trie root-key tracking**: `MemoryCache._trie_insert` and `_trie_delete` now include root node in key tracking, fixing `shake("")` / `delete_prefix("")` semantics
+- **Trie empty-branch pruning**: `_trie_delete` prunes child nodes where both `keys` and `children` are empty, preventing unbounded structural memory growth
+- **Graphify report deduplication**: Removed silent duplicate `graphify diagnose multigraph` invocation in `scripts/graphify_report.py`
+- **Graphify affected error handling**: `scripts/graphify_affected.py` `affected()` now raises `RuntimeError` on subprocess failure instead of silently returning empty output
+- **LRU bounded cache**: `MemoryCache` supports optional `max_size > 0` with `OrderedDict`-based LRU eviction; default `max_size=0` is unbounded
+- **O(prefix_length) prefix deletion**: `_trie_delete_prefix` detaches subtree in O(prefix_length) instead of looping `_trie_delete` per key
+- **Cache/trie invariant test**: `test_cache_trie_invariant_under_random_mutations` performs 200 random mutations asserting `_cache.keys() == _trie_collect("")` after each operation
+- **Graphify report check=True**: `graphify_report.py` now propagates `CalledProcessError` with stderr instead of producing `JSONDecodeError`
+- **Canonical node-ID lookup**: `graphify_affected.py` queries `graph.json` for canonical node ID, falling back to `file_to_node_id()` with warning
+- **Base SHA validation**: `graphify_affected.py` verifies base ref exists locally via `git rev-parse --verify` before diffing
+- **3 new trie tests**: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
+- **2 new bounded-cache tests**: `test_memory_cache_bounded_eviction`, `test_memory_cache_unbounded_default`
+- **BFS and A* traversal tests**: `test_bfs_collect_matches_bruteforce_prefix`, `test_astar_collect_matches_bruteforce_prefix`
+- **TestDataAccessNamespaceCache removed**: 2 obsolete tests deleted (namespace caching behavior no longer exists)
+- **Barrel test rename**: `test_daf_is_strict_subset_of_core` → `test_daf_is_subset_of_core`
+- **Terminal-only trie (B1)**: `_TrieNode` stores only terminal `key`; `_dfs_collect` DFS helper; `_trie_delete_prefix` returns keys; callers clean `_cache`/`_lru` directly without re-walking removed nodes
+- **Negative max_size rejection (P2-1)**: `MemoryCache(max_size=-1)` raises `ValueError`
+- **Reference-model trie test (P2-2)**: `test_trie_collect_matches_bruteforce_prefix`
+- **LRU adversarial tests (P2-3)**: `test_memory_cache_max_size_one`, `test_memory_cache_lru_delete_after_promotion`, `test_memory_cache_lru_prefix_delete_after_promotion`, `test_memory_cache_shake_empty_prefix_bounded`, `test_memory_cache_empty_key_bounded`
+- **Graphify schema validation (P2-4)**: `_validate_graph_schema` in `graphify_affected.py`; `main()` returns 1 on malformed JSON
+- **Graphify canonical-ID tests (P2-5)**: `tests/unit/test_graphify.py` with 9 tests covering graph preference, fallback, warnings, malformed JSON, missing base
+- **Complexity docstrings (P2-6)**: `MemoryCache` class and `_trie_delete_prefix` updated to O(prefix_length + subtree_nodes)
+- **A* depth-tracking fix (P1)**: `_astar_collect` heap stores depth; `match_len` only increments when `match_len == depth`, preventing post-mismatch child characters from incorrectly extending LCP
+- **Graph canonicalization deterministic (P2)**: `_canonical_node_id` sorts matching nodes by `id` before selecting first
+- **Graph schema validation deepened (P2)**: validates node types, non-empty strings, and uniqueness
+- **Git diff failure normalized (P2)**: `changed_files()` wraps `git diff` in try/except; raises `RuntimeError` with stderr context
+- **CI duplicate extraction removed (P2)**: graphify job now runs single `graphify_report.py` invocation with `fetch-depth: 0`
+- **LRU edge-case tests (P2)**: `test_memory_cache_lru_eviction_prefix_sharing`, `test_memory_cache_lru_eviction_near_duplicate`, `test_memory_cache_set_after_prefix_delete`
+- **Graphify adversarial tests (P2)**: `test_canonical_node_id_returns_lexicographically_first_when_no_exact_match`, `test_graphify_schema_validation_*` (5 tests), `test_changed_files_raises_on_git_diff_failure`
+- **A* regression and property tests (P1)**: `test_astar_collect_regression_mismatching_prefix`, `test_astar_collect_property_based_random`
+- **DP extraction and cleanup**:
+  - `src/daf/utils/__init__.py` barrel pattern added
+  - `src/daf/cache/_trie.py` standalone trie extracted; unused `heapq` import removed
+  - `src/daf/utils/_memoize.py` dead code removed (`memoize`, `PureMemo`, `_make_key`); docstring and lint issues fixed
+  - `src/daf/utils/_recursion.py` broken `astar` strategy removed; `heapq` import and `_astar` method deleted; `Iterable[Any]` and `deque[Any]` type args added
+  - `src/daf/algorithms/dynamic_programming.py` `memo.get(n)` return annotated with `# type: ignore[no-any-return]`
+- **New direct primitive tests**: `tests/unit/test_memoize.py` (10 tests), `tests/unit/test_recursion.py` (8 tests)
+- **R1-R26, R19b, R19c, R3b, R21b, R22, R23, R24, R25, R26, superedge collapse, AST tree shaking, graphifyy CI**: All implemented and merged in PR #17
+- **Architecture docs**: `scripts/graphify_report.py` and `scripts/graphify_affected.py` automate graphify suite; CI uploads `GRAPH_TREE.html` and `theDAF-callflow.html` artifacts
+- **PR18 Round 2 (red-team adversarial hardening)**:
+  - `_generation_locks` bounded with fixed-size lock striping (N=16) via `ResourceMemo`
+  - `GenerationKeyError` added; missing generation key forces cache miss instead of serving stale data
+  - `_execute_cache_miss` writes generation key on first query to prevent repeated misses
+  - `_bfs` uses `collections.deque` + `popleft()` for O(1) queue operations
+  - `_bfs_collect` and `_astar_collect` marked experimental in docstrings
+  - `_canonical_node_id` fail-closed: calls `_validate_graph_schema`, returns `None` on malformed input
+  - `graphify_affected.py` docstring documents `.py`-only scope and CI full-suite guarantee
+  - `GenerationKeyError` raised in `_current_generation`, `_advance_generation`, `_superedge_invalidate` for absent/malformed generation keys
+  - `ResourceMemo` bounded with `max_size=256` and `OrderedDict`-based LRU eviction
+  - `_validate_graph_schema` validates that JSON root is a `dict` before structural checks
+  - `test_non_dict_root_raises` verifies `RuntimeError` on non-dict graph JSON root
+  - Cache-correctness invariant documented in `DataAccess` concurrency model
+  - `test_generation_eviction_forces_cache_miss` verifies bounded LRU eviction of generation metadata
+  - `test_malformed_graph_schema_returns_none` verifies fail-closed canonicalization
+  - `test_missing_nodes_key` updated to expect `None` (fail-closed) instead of warning + fallback
+  - `GenerationKeyError` raised in `_current_generation`, `_advance_generation`, `_superedge_invalidate` for absent/malformed generation keys
+  - `ResourceMemo` bounded with `max_size=256` and `OrderedDict`-based LRU eviction
+  - `_validate_graph_schema` validates that JSON root is a `dict` before structural checks
+  - `test_non_dict_root_raises` verifies `RuntimeError` on non-dict graph JSON root
 
 ### Key Facts
 
 - **Package**: `thedaf`
-- **Version**: 0.2.2
+- **Version**: 0.2.0
 - **Python**: >= 3.12
 - **License**: MIT
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 212 Python + 77 Rust = 289 total, all passing
+- **Test Count**: 192/192 passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
-- **Clippy**: 0 warnings
 - **Architecture Docs**: `graphify-out/GRAPH_TREE.html`, `graphify-out/theDAF-callflow.html`
 
 ### Project Structure
@@ -131,30 +144,17 @@ All issues from `.kilo/plans/1786886032141-pr24-adversarial-fixes.md` and `.kilo
 │   │   ├── test_graphify.py     # 18 tests (canonical ID, changed_files, schema validation)
 │   │   ├── test_memoize.py      # 10 tests (Memo and ResourceMemo direct tests)
 │   │   ├── test_recursion.py    # 8 tests (TreeCollector and walk_tree direct tests)
-│   │   ├── test_barrels.py      # 3 tests (barrel consistency + no inline _public)
-│   │   └── test_rust_parity.py  # 20 Python↔Rust parity tests
+│   │   └── test_barrels.py      # 3 tests (barrel consistency + no inline _public)
 │   └── integration/
 │       ├── test_data_access.py  # 18 tests
 │       ├── test_authorization.py  # 15 tests
 │       ├── test_fastapi_adapter.py  # 18 tests
 │       └── test_security_invariants.py  # 30 tests
-├── crates/
-│   ├── daf-core/                # Traits, errors, contracts (Tier, CacheEntry, LockRegistry)
-│   ├── daf-application/         # DataAccess + DataAccessFactory
-│   ├── daf-cache/               # MemoryCache, MokaCache, RedisCache, PostgresCache, HierarchicalCache
-│   ├── daf-repository/          # MemoryRepository with PartialEq CAS
-│   ├── daf-algorithms/          # FibonacciDP
-│   ├── daf-runtime/             # Tokio runtime
-│   ├── daf-messaging/           # Async message processing
-│   ├── daf-http/                # Axum router
-│   └── daf-ffi/                 # C-compatible ABI
 ├── scripts/
-│   ├── power_of_ten.py         # NASA/JPL Power of Ten AST checker (Python)
-│   ├── power_of_ten_rust.py    # NASA/JPL Power of Ten checker (Rust)
+│   ├── power_of_ten.py         # NASA/JPL Power of Ten AST checker
 │   ├── graphify_report.py      # graphify extract+diagnose+tree+callflow pipeline (deduplicated diagnose)
 │   └── graphify_affected.py    # impacted-test analysis for CI (fail-fast on subprocess errors)
 ├── pyproject.toml               # Build config, metadata, tool configs
-├── Cargo.toml                   # Rust workspace config
 ├── README.md                    # Package documentation
 ├── SECURITY.md                  # Security policy
 ├── CHANGELOG.md                 # Version history
@@ -167,10 +167,8 @@ All issues from `.kilo/plans/1786886032141-pr24-adversarial-fixes.md` and `.kilo
 ### Next Steps
 
 1. Commit all changes with sign-off
-2. Push branch to origin (updates PR #24)
-3. Merge PR after review
-4. Tag release `v0.2.2`
-5. Publish to PyPI
+2. Tag release `v0.2.0`
+3. Publish to PyPI
 
 ### Gate Files
 
@@ -189,4 +187,4 @@ The following gate files are maintained and updated after every turn:
 
 - **Repository**: https://github.com/RAliane-REBORN/theDAF
 - **Issues**: https://github.com/RAliane-REBORN/theDAF/issues
-- **PR**: Open new PR for adversarial review remediation
+- **PR**: https://github.com/RAliane-REBORN/theDAF/pull/18 (open — adversarial red-team fixes; requesting in-depth adversarial review)

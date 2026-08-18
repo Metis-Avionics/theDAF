@@ -223,6 +223,7 @@ class DataAccess:
                     f"Generation key '_daf_gen:{namespace}' is not an int"
                 )
             await self._cache.delete_prefix(f"query:{namespace}:")
+            await self._cache.delete(f"_daf_gen:{namespace}")
             await self._cache.shake(f"_daf_gen:{namespace}")
             await self._cache.set(f"_daf_gen:{namespace}", (current or 0) + 1)
 

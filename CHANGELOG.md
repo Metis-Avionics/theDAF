@@ -5,123 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.2] - 2026-08-17
-
-### Added
-
-- `scripts/power_of_ten_rust.py` — NASA/JPL Power of Ten Rust checker with CI integration
-- `debug_assert!` instrumentation across all Rust functions in 8 crates (Power of Ten Rule 5)
-- `power-of-ten-rust-ratchet-debt.txt` — ratchet debt tracking file
-
-### Changed
-
-- `put` function in `daf-application` refactored: extracted `_build_put_merger` helper (63→45 lines)
-- All 8 Rust library crates suppress `clippy::assertions_on_constants` warnings for intentional `debug_assert!` instrumentation
-- `.gitignore` now excludes `node_modules/`, `package.json`, `package-lock.json`, and KiloCode artifacts
-
-### Fixed
-
-- Rule 4 violation: `put` exceeded 60-line limit; resolved via helper extraction
-- Rule 5 compliance: `_build_put_merger` now includes `debug_assert!` for assertion density
-- Clippy warnings: redundant closures in `daf-ffi`, non-canonical `partial_cmp` in trie, unused variables/imports
-- Commit history: removed `node_modules/`, `package.json`, `package-lock.json` from git tracking
-- Rule 5 assertion remediation: replaced all broken `debug_assert!(true, ...)` placeholders with meaningful invariants across `daf-core`, `daf-cache`, `daf-application`, and `daf-ffi`; eliminated all `assertions_on_constants` clippy warnings
-
-## [0.2.2] - 2026-08-16
-
-### Added
-
-- Global `LockRegistry` in `daf-core` with 16-shard striped locking and `OnceLock` singleton
-- `LockGuard` RAII guard for scoped lock acquisition
-- `tokio` dependency to `daf-core/Cargo.toml`
-- `debug_assert!` instrumentation across all Rust functions (Power of Ten Rule 5)
-- `Default` impl for `LockRegistry`
-
-### Changed
-
-- `daf-application` uses global `LockRegistry` instead of per-`DataAccess` generation locks
-- `_current_generation`, `_advance_generation`, `_superedge_invalidate` operate on `Generation` enum directly
-- `HierarchicalCache::get` promotes L2/L3/L4 hits into L1, preserving originating `CacheEntry.tier`
-- `HierarchicalCache::delete`, `delete_prefix`, `clear` propagate tier errors with `?`
-- `HierarchicalCache::shake` sums tier counts authoritatively (L2-L4 errors propagate)
-- `MokaCache::delete_prefix` and `shake` always call `invalidate_all()`; return `Err(CacheError::new(...))` for non-empty prefixes
-- `daf-cache/src/lib.rs` feature-gates `pub mod redis;` and `pub mod postgres;`
-- `daf-ffi/src/lib.rs` uses `thread_local!` error state; validates null pointers and UTF-8 on all entrypoints
-- `daf-ffi/src/lib.rs` tracks live `DataAccess` handles via `LIVE_HANDLES: OnceLock<Mutex<HashSet<usize>>>`; `daf_data_access_free` returns `c_int`
-- `_execute_cache_miss` serializes `Generation` as symmetric JSON mapping: `Missing` → `Null`, `Valid(n)` → `Number(n)`
-- `query()` deserializes cached `"generation"` back to `Generation` enum for direct comparison
-- `.github/workflows/ci.yml` adds `parity` to `build.needs`
-- `.github/workflows/ci.yml` adds `power-of-ten-rust` job
-- All 8 Rust library crates suppress `clippy::assertions_on_constants` warnings for intentional `debug_assert!` instrumentation
-
-### Fixed
-
-- `_superedge_invalidate` silently ignored `delete_prefix` and `shake` errors via `let _ =`; now propagates with `?`
-- `HierarchicalCache::shake` silently swallowed L2-L4 errors; all tiers now authoritative
-- `test_concurrent_mutations_generation_monotonic` assertion corrected to `gen >= 1` (CAS serialization limits advance to 1)
-- `MokaCache::shake` returns accurate entry count for empty-prefix invalidation via `entry_count()` snapshot before `invalidate_all()`
-- Generation assertions in integration tests downcast `daf_core::Generation` and call `.as_u64()`
-- `daf_data_access_free` returns `InvalidArgument` on null pointer or double-free instead of undefined behavior
-- 4 redundant closures in `daf-ffi/src/lib.rs` (`|s| UserId::new(s)` → `UserId::new`)
-- `thread_local!` initializer in `daf-ffi` converted to `const { ... }`
-- Unused `repo` variable in `hierarchical_delete_prefix_propagates_moka_error` test
-- Unused `MokaCache` import in `traversal_tests.rs`
-- Non-canonical `partial_cmp` allow attribute placement in `daf-cache/src/trie.rs`
-- Indexed loop variable warning in trie `_delete_prefix_impl`
-
-## [0.2.1] - 2026-08-16
-
-### Added
-
-- Tier-aware cache hierarchy: `Tier` enum (`L1`–`L4`), `CacheEntry` struct with `value` and `tier` fields
-- `Cache::get` returns `Option<CacheEntry>` instead of `Option<Arc<dyn Any>>`
-- `MokaCache` L2 backend wrapping `moka::future::Cache` with `Tier::L2`
-- `RedisCache` L3 stub (feature-gated behind `redis` Cargo feature)
-- `PostgresCache` L4 stub (feature-gated behind `postgres` Cargo feature)
-- `HierarchicalCache` with L1→L2→L3→L4 miss propagation; `set` writes to L1 only
-- `DataAccessFactory` in `daf-application` with `new()` and `create()` methods
-- `MemoryRepository::values_equal` uses `PartialEq` directly when `T: PartialEq`, JSON fallback otherwise
-- Python parity tests: `tests/unit/test_rust_parity.py` with 20 tests (contract round-trip, trie traversal, Fibonacci parity, generation advancement, cache invalidation)
-- Rust contract tests: `AlgorithmStats` serde round-trip, `Generation::Missing`/`Valid` round-trip, `QueryInfo` empty defaults
-- Rust traversal tests: `CacheEntry` round-trip with `Tier::L1`, `delete_prefix` integration, `shake` count
-- Rust fibonacci tests: `Arc<i64>` input, multi-execute stats tests
-- Rust integration tests: factory creation, post-then-query, concurrent queries, generation missing init, hierarchical cache
-- `daf-application/tests/factory_tests.rs` with 2 tests
-- CI jobs: `rust-lint`, `rust-test`, `daf-core-contract`, `parity`
-
-### Changed
-
-- `MemoryCache` wraps stored values in `CacheEntry { value, tier: Tier::L1 }`
-- `DataAccess` unwraps `CacheEntry.value` for generation and cache operations
-- `daf-cache/Cargo.toml` adds optional `moka`, `redis`, `postgres` dependencies
-- `daf-core/src/lib.rs` adds `Tier`, `CacheEntry` types
-- `.github/workflows/ci.yml` `build` job depends on new Rust jobs
-
-### Security
-
-- `PartialEq` fast path in `MemoryRepository` preserves existing CAS semantics; JSON fallback maintains compatibility for non-`PartialEq` types
-- `HierarchicalCache` miss propagation does not bypass authorization; `DataAccess` handles auth independently per tier
-
 ## [Unreleased]
 
 ### Added
 
-- theDAF-LLVM Rust workspace with 9 crates (`daf-core`, `daf-application`, `daf-cache`, `daf-repository`, `daf-algorithms`, `daf-runtime`, `daf-messaging`, `daf-http`, `daf-ffi`) implementing the same data-access semantics as the Python reference
-- `Generation` enum (`Missing` / `Valid(u64)`) preventing sentinel-`0` conflation from Python
-- C-compatible FFI boundary (`daf-ffi`) with opaque pointers and `i32` error codes for reverse compatibility
-- 23 Rust integration tests covering authorization, cache isolation, generation monotonicity, prefix invalidation, filter semantics, and conflict behavior
-- `MemoryCache` terminal-only prefix trie translated from Python with O(prefix_length + K) prefix ops
-- `MemoryRepository` CAS semantics (`try_update` / `try_delete`) using `Arc` clone isolation
-- `FibonacciDP` algorithm with typed `AlgorithmStats`
-- `DataAccessRouter` Axum adapter with 403/404/500 error translation
-- `trie_delete_prefix` off-by-one fix and ancestor cleanup regression coverage
-- `_handle_cache_hit` downcast fix (serde_json::Value + .as_object()) preventing auth bypass on cache hit
-- `_superedge_invalidate` double-delete fix preventing generation-key panic
-- `DenyAllAuthorizer` test fixture for explicit deny-all scenarios
-- Concurrent mutation generation monotonicity test (per-resource lock serialization)
-- Authorization prevents mutation side effects test (denied mutations do not advance generation)
-- Query after successful POST roundtrip test
-- Query filters return matching data / Null on mismatch test
+- 3 new `TestMemoryCache` tests: `test_shake_empty_prefix_removes_all_keys`, `test_delete_prefix_empty_removes_all_keys`, `test_trie_prunes_empty_branches_after_delete`
+- `graphify_affected.py` raises `RuntimeError` with stderr context on subprocess failure
+- `MemoryCache(max_size=0)` unbounded default; optional `max_size > 0` enables LRU eviction via `OrderedDict`
+- `MemoryCache._trie_delete_prefix()` for O(prefix_length) subtree detachment
+- `TestMemoryCache.test_memory_cache_bounded_eviction` — LRU eviction at capacity
+- `TestMemoryCache.test_memory_cache_unbounded_default` — default mode retains all entries
+- `TestMemoryCache.test_cache_trie_invariant_under_random_mutations` — adversarial invariant test (200 random mutations)
+- `MemoryCache` terminal-only prefix trie: only terminal nodes store a key, intermediate nodes carry only `children`
+- `MemoryCache._dfs_collect()` DFS helper for terminal key collection
+- `MemoryCache._bfs_collect()` BFS helper for level-order terminal key collection
+- `MemoryCache._astar_collect(target)` A* best-first helper returning keys matching longest prefix with target
+- `test_bfs_collect_matches_bruteforce_prefix`, `test_astar_collect_matches_bruteforce_prefix` reference-model tests
+- `httpx>=0.27` upgraded to `httpx2>=0.27` in dev and optional-dependencies
+- `test_memory_cache_rejects_negative_max_size`, `test_memory_cache_max_size_one`
+- `test_memory_cache_lru_delete_after_promotion`, `test_memory_cache_lru_prefix_delete_after_promotion`
+- `test_memory_cache_shake_empty_prefix_bounded`, `test_memory_cache_empty_key_bounded`
 - `test_trie_collect_matches_bruteforce_prefix` reference-model test
 - `test_canonical_node_id_*` and `test_changed_files_raises_on_missing_base` in `tests/unit/test_graphify.py`
 - `test_main_exits_one_on_missing_base`, `test_graphify_schema_validation_*`
