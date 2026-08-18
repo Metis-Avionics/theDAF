@@ -1455,3 +1455,62 @@ Each session entry should include:
 - `assertions_on_constants` clippy warnings eliminated across all 8 crates
 - Power of Ten Rule 5 (assertion density ≥ 1 per non-trivial function) now fully satisfied
 - Python parity test failures are pre-existing: `daf-parity` binary maintains independent state from Python `DataAccess` instances, so cross-backend sequential operations (post-then-put/delete/query) cannot be tested with current design
+
+---
+
+## Session 022 - 2026-08-18
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Branch `feat/tier-aware-cache-and-parity` (PR #24 open) passes 77 Rust tests, clippy clean, Power of Ten Rust clean. Plan `.kilo/plans/1787049814652-upgrade-memorycache-to-dashmap.md` specified upgrading `MemoryCache` from `Arc<RwLock<HashMap>>` to `DashMap` while preserving trie + LRU eviction.
+
+**Actions Taken**:
+- Added `dashmap = "7.0.0-rc2"` to `crates/daf-cache/Cargo.toml`
+- Upgraded `MemoryCache` internals: replaced `Arc<RwLock<MemoryCacheInner>>` with `Arc<MemoryCacheInner>`, `HashMap<String, CacheEntry>` with `DashMap<String, CacheEntry>`
+- LRU and trie state wrapped in `std::sync::Mutex`; concurrent reads now proceed per-shard without global write lock
+- `get` uses `DashMap::get` (lock-free per-shard read); `set` uses `DashMap::insert` (per-shard write)
+- `delete`/`delete_prefix`/`shake` use `DashMap::remove` + trie + LRU cleanup under `Mutex`
+- `has` uses `DashMap::contains_key` (public API preserved)
+- Fixed P10 Rule 7 violations: replaced `.unwrap()` on `Mutex::lock()` with `.unwrap_or_else(|e| e.into_inner())`; replaced `.expect()` on `NonZeroUsize::new()` with `.unwrap_or_else()` fallback
+- Verified `cargo test --workspace`: 83/83 passing
+- Verified `cargo clippy -p daf-cache`: clean
+- Verified `python scripts/power_of_ten_rust.py`: all checks pass (0 violations)
+- Updated living docs: CHANGELOG.md, HANDOVER.md, SESSION.md
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| `crates/daf-cache/Cargo.toml` | Modified | Added `dashmap = "7.0.0-rc2"` dependency |
+| `crates/daf-cache/src/lib.rs` | Modified | Upgraded `MemoryCache` to DashMap; preserved trie + LRU; fixed P10 Rule 7 |
+| `CHANGELOG.md` | Modified | Added DashMap upgrade entry |
+| `HANDOVER.md` | Modified | Updated quality status and latest changes |
+| `SESSION.md` | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `feat/tier-aware-cache-and-parity`
+- **Version**: 0.2.2
+- **Rust Tests**: 83/83 passing
+- **Clippy**: 0 warnings
+- **Power of Ten Rust**: All checks pass
+- **PR**: https://github.com/Metis-Avionics/theDAF/pull/24
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [ ] Commit changes with sign-off
+- [ ] Push branch to origin (updates PR #24)
+- [ ] Merge PR after adversarial review
+- [ ] Tag release `v0.2.2`
+- [ ] Publish to PyPI
+
+### Notes
+
+- `MemoryCache` retains its public API (`get`, `set`, `delete`, `delete_prefix`, `shake`, `clear`, `has`, `_dfs_collect`, `_bfs_collect`, `_astar_collect`, `_trie_collect`, `_trie_delete_prefix`) while achieving concurrent reads via per-shard DashMap locking
+- Eviction bookkeeping under `Mutex` is not a regression: previous implementation serialized ALL operations through a global `RwLock`
+- `HierarchicalCache` and all downstream consumers are unaffected — trait signatures and behavior preserved
+- Cachelito is noted as future L1 backend per ADR-003; current implementation is the production-ready DashMap-based `MemoryCache`
+

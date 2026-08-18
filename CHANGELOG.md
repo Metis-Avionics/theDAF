@@ -12,9 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/power_of_ten_rust.py` — NASA/JPL Power of Ten Rust checker with CI integration
 - `debug_assert!` instrumentation across all Rust functions in 8 crates (Power of Ten Rule 5)
 - `power-of-ten-rust-ratchet-debt.txt` — ratchet debt tracking file
+- `MemoryCache` DashMap backend: concurrent per-shard reads via `dashmap = "7.0.0-rc2"`
 
 ### Changed
 
+- `MemoryCache` internals upgraded: `Arc<RwLock<MemoryCacheInner>>` → `Arc<MemoryCacheInner>`; `HashMap<String, CacheEntry>` → `DashMap<String, CacheEntry>`
+- `MemoryCache` LRU and trie state wrapped in `std::sync::Mutex`; previous global `RwLock` serialization eliminated for reads
 - `put` function in `daf-application` refactored: extracted `_build_put_merger` helper (63→45 lines)
 - All 8 Rust library crates suppress `clippy::assertions_on_constants` warnings for intentional `debug_assert!` instrumentation
 - `.gitignore` now excludes `node_modules/`, `package.json`, `package-lock.json`, and KiloCode artifacts
@@ -23,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Rule 4 violation: `put` exceeded 60-line limit; resolved via helper extraction
 - Rule 5 compliance: `_build_put_merger` now includes `debug_assert!` for assertion density
+- Rule 7 compliance: replaced `.unwrap()` on `Mutex::lock()` with `.unwrap_or_else(|e| e.into_inner())`; replaced `.expect()` on `NonZeroUsize::new()` with `.unwrap_or_else()` fallback
 - Clippy warnings: redundant closures in `daf-ffi`, non-canonical `partial_cmp` in trie, unused variables/imports
 - Commit history: removed `node_modules/`, `package.json`, `package-lock.json` from git tracking
 - Rule 5 assertion remediation: replaced all broken `debug_assert!(true, ...)` placeholders with meaningful invariants across `daf-core`, `daf-cache`, `daf-application`, and `daf-ffi`; eliminated all `assertions_on_constants` clippy warnings

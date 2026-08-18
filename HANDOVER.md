@@ -35,7 +35,16 @@ The cache hierarchy is one component of this milestone, not the entire PR.
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1786886032141-pr24-adversarial-fixes.md` and `.kilo/plans/1786888887462-rust-power-of-ten-remediation.md` have been addressed:
+All issues from `.kilo/plans/1787049814652-upgrade-memorycache-to-dashmap.md` have been addressed:
+
+- **MemoryCache DashMap upgrade**: `Arc<RwLock<MemoryCacheInner>>` replaced with `Arc<MemoryCacheInner>`; `HashMap<String, CacheEntry>` replaced with `DashMap<String, CacheEntry>` for concurrent per-shard reads
+- **LRU + Trie under Mutex**: `lru::LruCache` and `TrieNode` wrapped in `std::sync::Mutex`; eviction metadata is coarse-grained but not a regression since previous implementation serialized all operations through a global `RwLock`
+- **Concurrent reads**: `get` and `has` now proceed without global write lock; only mutations acquire per-shard DashMap write locks
+- **Prefix operations preserved**: `delete_prefix` and `shake` use trie traversal + `DashMap::remove` per key (O(prefix_length + K))
+- **P10 Rule 7 compliance**: Replaced `.unwrap()` on `Mutex::lock()` with `.unwrap_or_else(|e| e.into_inner())`; replaced `.expect()` on `NonZeroUsize::new()` with `.unwrap_or_else()` fallback
+- **Tests**: 83/83 Rust tests passing
+- **Clippy**: 0 warnings
+- **Power of Ten Rust**: All checks pass
 
 - **MokaCache non-empty prefix**: `delete_prefix` and `shake` always call `invalidate_all()` and return `CacheError::new(...)` for non-empty prefixes
 - **HierarchicalCache error propagation**: `delete`, `clear`, `delete_prefix`, and `shake` all propagate tier errors with `?`; the caller decides whether to treat them as fatal or advisory
@@ -84,7 +93,7 @@ All issues from `.kilo/plans/1786886032141-pr24-adversarial-fixes.md` and `.kilo
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 212 Python + 77 Rust = 289 total, all passing
+- **Test Count**: 212 Python + 83 Rust = 295 total, all passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 - **Clippy**: 0 warnings

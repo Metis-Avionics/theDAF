@@ -1,0 +1,460 @@
+[spec]
+id = "theDAF.pr24.adversarial.pass3"
+version = "3.0.0"
+title = "PR24 Adversarial Review Pass 3"
+repository = "Metis-Avionics/theDAF"
+target = "pull_request:24"
+
+objective = """
+Perform a systems-level adversarial review of PR24 with particular emphasis on
+concurrency architecture, cache hot-path behavior, compatibility with planned
+specialized cache primitives (Cachelito), generation-based coherence, and
+interactions between concurrent reads and invalidation.
+
+The review must determine whether the current Cache trait and HierarchicalCache
+composition are compatible with future adoption of Cachelito (L1) without
+requiring architectural changes that would "flatten" the hierarchy.
+
+The review is not a refactoring exercise. Do not rewrite cache primitives.
+Do not recommend adopting Cachelito or DashMap in this pass.
+Identify architectural violations, race conditions, contention hazards,
+semantic regressions, and missing evidence.
+"""
+
+[constraints]
+no_primitive_rewrite = true
+no_speculative_optimization = true
+no_generic_lock_replacement = true
+no_behavior_change_without_evidence = true
+preserve_existing_cache_primitives = true
+preserve_public_api_unless_required = true
+review_source_and_living_docs = true
+review_full_pr_history = true
+review_current_diff = true
+
+[required_context]
+pull_request = 24
+branch_head = "current"
+repository = "Metis-Avionics/theDAF"
+
+[architectural_intent]
+cache_model = "hierarchical"
+tier_order = ["L1", "L2", "L3", "L4"]
+
+# Current L1: MemoryCache (Arc<RwLock<MemoryCacheInner>>)
+# Planned L1:  Cachelito (per-key concurrent reads, process-local)
+# L2:          MokaCache (moka::future::Cache, async-native)
+# L3:          RedisCache (stub behind feature flag)
+# L4:          PostgresCache (stub behind feature flag)
+
+read_path = """
+L1 -> L2 -> L3 -> L4
+"""
+
+write_path = """
+repository mutation
+-> generation advancement
+-> cache invalidation
+"""
+
+authoritative_state = "repository + generation"
+cache_role = "advisory"
+
+l1_intent = "read-heavy hot-path cache (currently MemoryCache; Cachelito planned per architectural translation)"
+l2_intent = "secondary cache"
+l3_intent = "distributed/remote cache"
+l4_intent = "persistent fallback"
+
+specialized_primitives = [
+    "Cachelito",
+    "DashMap"
+]
+
+# Note: Cachelito is specified as the planned L1 backend in the architectural
+# translation plan but is not yet adopted. DashMap is not referenced anywhere
+# in the codebase or architectural plans. The review treats these as the
+# intended specialized primitives and evaluates whether the current abstraction
+# is compatible with their concurrency models.
+
+[concurrency_requirements]
+read_heavy_paths_must_remain_concurrent = true
+l1_reads_should_not_be_globally_serialized = true
+cache_hierarchy_must_not_hide_contention = true
+promotion_must_not_introduce_global_locking = true
+invalidation_must_not_corrupt_concurrent_reads = true
+generation_reads_must_be_safe_under_concurrency = true
+
+[concurrency_requirements.dashmap]
+requirement = """
+DashMap is not currently in the codebase. Audit whether the current abstraction
+would preserve DashMap's sharded concurrent map semantics IF it were added.
+Flag any pattern that would force external locking around DashMap or serialize
+access at a coarser granularity than DashMap's shards.
+"""
+
+[concurrency_requirements.cachelito]
+requirement = """
+Cachelito is the planned L1 backend per the architectural translation plan but
+is not yet adopted. Audit whether the current Cache trait and HierarchicalCache
+composition would preserve Cachelito's per-key concurrent read semantics IF it
+were adopted as L1. Do not recommend adopting Cachelito in this pass.
+Do not propose replacing Cachelito with a generic primitive when it IS adopted.
+"""
+
+[forbidden_remediations]
+# These apply to FUTURE adoption of Cachelito/DashMap, not current code.
+# The current L1 (MemoryCache) uses RwLock<HashMap> as an interim implementation.
+# Do not recommend changing MemoryCache in this pass; that is out of scope.
+items = [
+    "Replace Cachelito with HashMap",
+    "Replace Cachelito with RwLock<HashMap>",
+    "Replace Cachelito with Mutex<HashMap>",
+    "Replace DashMap with HashMap behind a global lock",
+    "Introduce a global mutex around HierarchicalCache",
+    "Rewrite cache primitives without benchmark evidence",
+    "Treat concurrency regressions as acceptable implementation details",
+    "Suppress race or contention findings because unit tests pass"
+]
+
+[review_axes]
+
+[[review_axes.item]]
+id = "CONCURRENCY-001"
+name = "L1 read concurrency"
+severity = "P0/P1"
+question = """
+Can independent L1 reads proceed concurrently, or has the abstraction introduced
+a shared lock, serialized executor path, or other bottleneck?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-002"
+name = "L1 primitive compatibility"
+severity = "P1"
+question = """
+If Cachelito were adopted as L1, would HierarchicalCache preserve its
+per-key concurrent read semantics, or would the hierarchy add synchronization
+that defeats Cachelito's concurrency model?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-003"
+name = "DashMap compatibility"
+severity = "P1"
+question = """
+If a DashMap-like concurrent map were added to any tier, would callers or
+HierarchicalCache introduce coarse-grained synchronization around it?
+Flag lock amplification or serialization that would defeat DashMap's sharded
+concurrency model. (DashMap is not currently in the codebase; this is a
+forward-looking compatibility audit.)
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-004"
+name = "Lock amplification"
+severity = "P0/P1"
+question = """
+Does a single high-level cache operation acquire multiple locks or serialize
+operations across otherwise independent keys or tiers?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-005"
+name = "Promotion contention"
+severity = "P1"
+question = """
+Does L2/L3/L4 -> L1 promotion introduce contention that defeats the purpose of
+the concurrent L1 primitive?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-006"
+name = "Concurrent invalidation"
+severity = "P0"
+question = """
+Can invalidation race with reads or promotion in a way that returns stale data,
+resurrects invalid entries, or creates inconsistent generation state?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-007"
+name = "Generation coherence"
+severity = "P0"
+question = """
+Can concurrent mutation and cache access observe an old generation after the
+repository mutation has committed?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-008"
+name = "Cross-tier semantics"
+severity = "P1"
+question = """
+Does each cache tier preserve its intended concurrency and failure semantics,
+or does the hierarchy impose one synchronization model on every backend?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-009"
+name = "Async contention"
+severity = "P1"
+question = """
+Are blocking locks, synchronous critical sections, or expensive operations
+performed inside async cache paths?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-010"
+name = "Clone/allocation pressure"
+severity = "P2"
+question = """
+Does cache promotion or result handling introduce unnecessary cloning,
+allocation, serialization, or Arc churn on the read hot path?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-011"
+name = "Async boundary contention"
+severity = "P1"
+question = """
+Does the Cache trait's async boundary force serialization that a synchronous
+concurrent primitive (like Cachelito) would not incur? Specifically: does
+HierarchicalCache::get() hold locks or await points that would serialize
+independent L1 reads when the underlying primitive is concurrent?
+"""
+
+[[review_axes.item]]
+id = "CONCURRENCY-012"
+name = "Evidence"
+severity = "P1"
+question = """
+Are claims about concurrency backed by implementation evidence, tests,
+benchmarks, documentation, or source-level guarantees?
+"""
+
+[coherence]
+model = "generation_based"
+required_invariant = """
+Once a repository mutation commits, every subsequently accepted cache value
+must correspond to the current generation.
+"""
+
+required_properties = [
+    "generation advancement must not depend on successful cache deletion",
+    "cache invalidation failure must not make committed repository state appear uncommitted",
+    "concurrent readers must reject values from obsolete generations",
+    "promotion must not bypass generation validation",
+    "partial tier invalidation must not permit stale values to be accepted"
+]
+
+[read_path_analysis]
+required = true
+
+steps = [
+    "trace L1 lookup",
+    "trace L1 miss",
+    "trace L2 lookup",
+    "trace L2 miss",
+    "trace L3 lookup",
+    "trace L3 miss",
+    "trace L4 fallback",
+    "trace promotion",
+    "trace generation validation",
+    "trace returned value"
+]
+
+for_each_step = [
+    "identify synchronization",
+    "identify allocation",
+    "identify clone/copy",
+    "identify await",
+    "identify failure mode",
+    "identify contention scope"
+]
+
+[invalidation_analysis]
+required = true
+
+scenarios = [
+    "read during invalidation",
+    "read immediately after repository mutation",
+    "promotion during invalidation",
+    "concurrent invalidation of different keys",
+    "concurrent invalidation of same key",
+    "prefix invalidation during reads",
+    "full cache shake during reads",
+    "Moka degraded invalidation",
+    "L1 invalidation failure",
+    "L2 invalidation failure",
+    "L3 invalidation failure",
+    "L4 invalidation failure"
+]
+
+[adversarial_scenarios]
+required = true
+
+[[adversarial_scenarios.case]]
+id = "A1"
+name = "hot-key read storm"
+description = """
+Simulate many concurrent readers targeting the same hot key. Determine whether
+the hierarchy serializes access or preserves concurrent reads.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A2"
+name = "many-key read storm"
+description = """
+Simulate many concurrent readers targeting independent keys. Determine whether
+the implementation accidentally creates global contention.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A3"
+name = "read/write collision"
+description = """
+Concurrent reads occur while a mutation invalidates the same key.
+Determine whether a stale value can escape.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A4"
+name = "promotion race"
+description = """
+Two or more readers miss L1 and promote the same lower-tier value concurrently.
+Determine whether duplicate work, contention, or stale resurrection occurs.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A5"
+name = "mutation storm"
+description = """
+Concurrent mutations invalidate overlapping cache regions. Determine whether
+generation and invalidation ordering remains coherent.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A6"
+name = "Moka degraded backend"
+description = """
+Moka performs full invalidation for a prefix operation and returns an error.
+Determine whether repository state, generation state, and lower cache tiers
+remain coherent.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A7"
+name = "ABA generation"
+description = """
+Attempt to construct a sequence in which stale cache state becomes
+indistinguishable from current state because generation advancement is skipped,
+reordered, or reused.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A8"
+name = "lock amplification"
+description = """
+Trace whether one cache operation causes unrelated keys, requests, or tiers to
+share synchronization unnecessarily.
+"""
+
+[[adversarial_scenarios.case]]
+id = "A9"
+name = "primitive substitution"
+description = """
+Search for any implementation pattern that would force a future specialized
+concurrent primitive (Cachelito, DashMap) to be replaced with a weaker generic
+synchronization structure (HashMap, RwLock<HashMap>, Mutex<HashMap>, global lock).
+
+Specifically: does HierarchicalCache or any caller add a synchronization layer
+that would make Cachelito's per-key concurrency indistinguishable from a global
+lock?
+"""
+
+[[adversarial_scenarios.case]]
+id = "A10"
+name = "async blocking"
+description = """
+Search for synchronous locks or blocking work executed across async boundaries.
+"""
+
+[reporting]
+format = "structured"
+
+[reporting.required_sections]
+sections = [
+    "executive_verdict",
+    "architecture_model",
+    "concurrency_findings",
+    "coherence_findings",
+    "primitive_compatibility",
+    "read_path_analysis",
+    "invalidation_analysis",
+    "adversarial_scenarios",
+    "evidence",
+    "regressions",
+    "recommended_changes",
+    "non_changes",
+    "merge_disposition"
+]
+
+[reporting.finding_schema]
+required_fields = [
+    "id",
+    "severity",
+    "location",
+    "claim",
+    "mechanism",
+    "failure_mode",
+    "evidence",
+    "confidence",
+    "recommended_action"
+]
+
+[severity]
+P0 = "Correctness, safety, or coherence failure. Merge blocker."
+P1 = "Architectural or concurrency defect requiring resolution or explicit waiver."
+P2 = "Non-blocking defect, maintainability issue, or missing evidence."
+P3 = "Observation or future improvement."
+
+[merge_policy]
+block_on = ["P0"]
+require_explicit_decision_for = ["P1"]
+document_only = ["P2", "P3"]
+
+[non_changes]
+required = true
+description = """
+The reviewer must explicitly list things that should NOT be changed, especially
+code whose modification would be out of scope for this pass. This includes:
+
+- MemoryCache's RwLock-based implementation (interim L1; Cachelito adoption
+  is a separate implementation task, not a review finding).
+- Cache trait signatures (changing them to accommodate future primitives is
+  out of scope).
+- HierarchicalCache's composition structure (unless it has a P0 defect).
+- Any existing test or CI configuration.
+"""
+
+[performance_claims]
+require_evidence = true
+accepted_evidence = [
+    "source-level concurrency guarantees",
+    "existing benchmarks",
+    "new benchmark",
+    "contention analysis",
+    "documented primitive semantics"
+]
+
+[final_question]
+value = """
+Does the current Cache trait + HierarchicalCache composition preserve the
+concurrency characteristics required for future adoption of specialized
+concurrent primitives (Cachelito for L1) without requiring architectural
+changes that would "flatten" the hierarchy?
+
+Additionally: does the current implementation preserve generation-based
+coherence and avoid race conditions, contention hazards, and lock amplification
+under concurrent reads, mutations, promotion, and invalidation?
+"""
