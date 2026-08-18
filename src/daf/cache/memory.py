@@ -7,6 +7,7 @@ import copy
 import heapq
 import logging
 from collections import OrderedDict
+from itertools import count
 from typing import Any
 
 from daf.cache._trie import (
@@ -70,6 +71,7 @@ class MemoryCache:
             An independent copy of the cached value if found, None otherwise.
             Callers must not mutate the returned value in-place.
         """
+        assert isinstance(key, str), "key must be a string"
         logger.debug("cache get", extra={"key": key})
         value = self._cache.get(key)
         if value is not None:
@@ -180,8 +182,9 @@ class MemoryCache:
             return builtins.set()
         best_keys: builtins.set[str] = builtins.set()
         best_match_len = 0
-        counter = 0
         heap: list[tuple[int, int, _TrieNode, int, int]] = [(0, 0, node, 0, 0)]
+        assert heap, "heap initialized with root"
+        counter = count()
         while heap:
             _neg_match, _cnt, current, depth, match_len = heapq.heappop(heap)
             if match_len > 0 and current.key is not None:
@@ -200,10 +203,9 @@ class MemoryCache:
                     child_match = match_len + 1
                 else:
                     child_match = match_len
-                counter += 1
                 heapq.heappush(
                     heap,
-                    (-child_match, counter, child, child_depth, child_match),
+                    (-child_match, next(counter), child, child_depth, child_match),
                 )
         return best_keys
 

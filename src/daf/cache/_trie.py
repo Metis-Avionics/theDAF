@@ -11,10 +11,16 @@ import builtins
 
 class _TrieNode:
     __slots__ = ("children", "key")
+    children: dict[str, _TrieNode]
+    key: str | None
+
+    def clear(self) -> None:
+        self.children.clear()
+        self.key = None
 
     def __init__(self) -> None:
-        self.children: dict[str, _TrieNode] = {}
-        self.key: str | None = None
+        self.children = {}
+        self.key = None
 
 
 def _trie_insert(root: _TrieNode, key: str) -> None:
@@ -70,7 +76,7 @@ def _dfs_collect(node: _TrieNode | None) -> builtins.set[str]:
 def _trie_delete_prefix(root: _TrieNode, prefix: str) -> builtins.set[str]:
     if prefix == "":
         keys = _dfs_collect(root)
-        root.__init__()
+        root.clear()
         return keys
     path: builtins.list[tuple[_TrieNode, str]] = []
     node: _TrieNode | None = root

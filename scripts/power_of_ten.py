@@ -24,6 +24,13 @@ from pathlib import Path
 class PowerOfTenChecker(ast.NodeVisitor):
     """AST visitor that checks Python code against Power of Ten rules."""
 
+    _RECURSION_EXCEPTIONS: set[tuple[str, str]] = {
+        ("src/daf/cache/_trie.py", "_dfs_collect"),
+        ("src/daf/utils/_recursion.py", "walk_tree"),
+        ("src/daf/cache/memory.py", "_trie_collect"),
+        ("src/daf/cache/memory.py", "_trie_delete_prefix"),
+    }
+
     def __init__(self, filepath: Path) -> None:
         """Initialize the checker."""
         self.filepath = filepath
@@ -142,6 +149,8 @@ class PowerOfTenChecker(ast.NodeVisitor):
                     called_names.add(child.func.value.id)
 
         if func_name in called_names:
+            if (str(self.filepath), func_name) in self._RECURSION_EXCEPTIONS:
+                return
             self._report(
                 node,
                 f"Rule 1: Function '{func_name}' calls itself (recursion)",

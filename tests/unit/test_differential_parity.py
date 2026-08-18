@@ -44,7 +44,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PARITY_BIN = REPO_ROOT / "target" / "debug" / "daf-parity"
 
 # Lazily resolved subprocess handle; None means "not yet checked".
-_PARITY_PROC: subprocess.Popen | None = None
 
 
 def _build_parity_bin() -> Path:
@@ -62,23 +61,22 @@ def _build_parity_bin() -> Path:
     return PARITY_BIN
 
 
-def _get_parity_proc() -> subprocess.Popen:
-    global _PARITY_PROC
-    if _PARITY_PROC is None:
-        bin_path = _build_parity_bin()
-        _PARITY_PROC = subprocess.Popen(
-            [str(bin_path)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
-    return _PARITY_PROC
+@pytest.fixture()
+def parity_proc() -> subprocess.Popen:
+    proc = subprocess.Popen(
+        [str(_build_parity_bin())],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    yield proc
+    proc.terminate()
+    proc.wait()
 
 
-def _rust_send(cmd: dict) -> dict:
-    proc = _get_parity_proc()
+def _rust_send(proc: subprocess.Popen, cmd: dict) -> dict:
     line = json.dumps(cmd, default=str) + "\n"
     try:
         proc.stdin.write(line)
@@ -122,12 +120,12 @@ def _python_factory():
 
 class TestPostParity:
     @pytest.mark.asyncio
-    async def test_post_mutation_result_matches(self) -> None:
+    async def test_post_mutation_result_matches(self, parity_proc) -> None:
         factory = _python_factory()
         daf = factory.create()
         py = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
 
-        rust = _rust_send({
+        rust = _rust_send(parity_proc, {
             "op": "post",
             "resource_type": "user",
             "data": {"name": "alice"},
@@ -143,17 +141,24 @@ class TestPostParity:
 
 class TestPutParity:
     @pytest.mark.asyncio
-    async def test_put_mutation_result_matches(self) -> None:
+    async def test_put_mutation_result_matches(self, parity_proc) -> None:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        py = await daf.put(PutInfo(resource_id=rid, data={"name": "bob"}))
+        rust_post = _rust_send(parity_proc, {
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
 
-        rust = _rust_send({
+        py = await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
+
+        rust = _rust_send(parity_proc, {
             "op": "put",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "data": {"name": "bob"},
         })
 
@@ -164,17 +169,24 @@ class TestPutParity:
 
 class TestDeleteParity:
     @pytest.mark.asyncio
-    async def test_delete_mutation_result_matches(self) -> None:
+    async def test_delete_mutation_result_matches(self, parity_proc) -> None:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        py = await daf.delete(DeleteInfo(resource_id=rid))
+        rust_post = _rust_send(parity_proc, {
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
 
-        rust = _rust_send({
+        py = await daf.delete(DeleteInfo(resource_id=py_rid))
+
+        rust = _rust_send(parity_proc, {
             "op": "delete",
-            "resource_id": rid,
+            "resource_id": rust_rid,
         })
 
         assert py.success == rust["success"]
@@ -184,17 +196,24 @@ class TestDeleteParity:
 
 class TestQueryCacheMissParity:
     @pytest.mark.asyncio
-    async def test_query_cache_miss_matches(self) -> None:
+    async def test_query_cache_miss_matches(self, parity_proc) -> None:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        py = await daf.query(QueryInfo(resource_id=rid))
+        rust_post = _rust_send(parity_proc, {
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
 
-        rust = _rust_send({
+        py = await daf.query(QueryInfo(resource_id=py_rid))
+
+        rust = _rust_send(parity_proc, {
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })
@@ -206,20 +225,33 @@ class TestQueryCacheMissParity:
 
 class TestQueryCacheHitParity:
     @pytest.mark.asyncio
-    async def test_query_cache_hit_matches(self) -> None:
+    async def test_query_cache_hit_matches(self, parity_proc) -> None:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        await daf.query(QueryInfo(resource_id=rid))  # warm cache
+        rust_post = _rust_send(parity_proc, {
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
 
-        py = await daf.query(QueryInfo(resource_id=rid))
+        await daf.query(QueryInfo(resource_id=py_rid))  # warm cache
+        _rust_send(parity_proc, {
+            "op": "query",
+            "resource_id": rust_rid,
+            "filters": None,
+            "algorithm": None,
+        })  # warm Rust cache
+
+        py = await daf.query(QueryInfo(resource_id=py_rid))
         assert py.cache_hit is True
 
-        rust = _rust_send({
+        rust = _rust_send(parity_proc, {
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })
@@ -231,24 +263,42 @@ class TestQueryCacheHitParity:
 
 class TestGenerationRoundTripParity:
     @pytest.mark.asyncio
-    async def test_generation_advances_after_put(self) -> None:
+    async def test_generation_advances_after_put(self, parity_proc) -> None:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        await daf.query(QueryInfo(resource_id=rid))  # establish gen=0
+        rust_post = _rust_send(parity_proc, {
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
 
-        await daf.put(PutInfo(resource_id=rid, data={"name": "bob"}))
+        await daf.query(QueryInfo(resource_id=py_rid))  # establish gen=0
+        _rust_send(parity_proc, {
+            "op": "query",
+            "resource_id": rust_rid,
+            "filters": None,
+            "algorithm": None,
+        })  # establish gen=0 on Rust
+
+        await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
+        _rust_send(parity_proc, {
+            "op": "put",
+            "resource_id": rust_rid,
+            "data": {"name": "bob"},
+        })  # mirror put on Rust
 
         # Second query must be a cache miss (stale rejection)
-        py = await daf.query(QueryInfo(resource_id=rid))
+        py = await daf.query(QueryInfo(resource_id=py_rid))
         assert py.cache_hit is False
         assert py.data == {"name": "bob"}
 
-        rust = _rust_send({
+        rust = _rust_send(parity_proc, {
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })
@@ -259,24 +309,42 @@ class TestGenerationRoundTripParity:
 
 class TestCacheInvalidationParity:
     @pytest.mark.asyncio
-    async def test_stale_rejected_after_put(self) -> None:
+    async def test_stale_rejected_after_put(self, parity_proc) -> None:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        r1 = await daf.query(QueryInfo(resource_id=rid))
+        rust_post = _rust_send(parity_proc, {
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
+
+        r1 = await daf.query(QueryInfo(resource_id=py_rid))
         assert r1.cache_hit is False
+        _rust_send(parity_proc, {
+            "op": "query",
+            "resource_id": rust_rid,
+            "filters": None,
+            "algorithm": None,
+        })  # warm Rust cache
 
-        await daf.put(PutInfo(resource_id=rid, data={"name": "bob"}))
+        await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
+        _rust_send(parity_proc, {
+            "op": "put",
+            "resource_id": rust_rid,
+            "data": {"name": "bob"},
+        })  # mirror put on Rust
 
-        r2 = await daf.query(QueryInfo(resource_id=rid))
+        r2 = await daf.query(QueryInfo(resource_id=py_rid))
         assert r2.cache_hit is False
         assert r2.data == {"name": "bob"}
 
-        rust = _rust_send({
+        rust = _rust_send(parity_proc, {
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })
