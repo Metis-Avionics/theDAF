@@ -19,14 +19,14 @@ The cache hierarchy is one component of this milestone, not the entire PR.
 ### Repository Status
 
 - **Branch**: `feat/tier-aware-cache-and-parity`
-- **Commits**: 1 clean commit ahead of origin/main (`7e71580`)
-- **PR Status**: PR #24 open (https://github.com/Metis-Avionics/theDAF/pull/24)
+- **Commits**: 2 clean commits ahead of origin/main (`87dc450`)
+- **PR Status**: PR #29 closed; new PR pending from this branch
 
 ### Quality Status
 
 | Check | Status |
 |-------|--------|
-| Tests (pytest) | ⚠️ 212/212 passing (6 parity failures are pre-existing state-isolation issue) |
+| Tests (pytest) | ✅ 219/219 passing |
 | Type Checking (mypy --strict) | ✅ 0 errors |
 | Linting (ruff) | ✅ 0 errors |
 | Rust Clippy | ✅ 0 warnings |
@@ -35,57 +35,14 @@ The cache hierarchy is one component of this milestone, not the entire PR.
 
 ### Latest Changes
 
-All issues from `.kilo/plans/1787053103038-cachelito-l1-dashmap-runtime-plan.md` have been addressed:
+All issues from `.kilo/plans/1787059126278-pr29-refine-into-targeted-fixes.md` have been addressed:
 
-- **MemoryCache replaced with CachelitoCache**: `CachelitoCache` is the sole L1 implementation using owned `Arc<DashMap<String, Arc<dyn Any + Send + Sync>>>` directly instead of `cachelito_async::AsyncGlobalCache` (which requires borrowing an external `DashMap` and creates lifetime complexity incompatible with `daf-cache`'s owned-struct design)
-- **GenerationRegistry introduced**: `Arc<DashMap<ResourceId, Generation>>` tracks current generation per resource; `advance()` clones `ResourceId` for DashMap entry API
-- **DataAccess updated**: `generation_registry: Arc<GenerationRegistry>` field added; `_current_generation` and `_advance_generation` delegate to `GenerationRegistry`; `_invalidate_caches` removed entirely from mutation path
-- **query() generation validation**: reads `current_gen` from `GenerationRegistry` and compares against cached generation field embedded in cache value JSON
-- **daf-core zero-dependency**: no `cachelito` or `dashmap` dependencies in `daf-core/Cargo.toml`
-- **GenerationRegistry placement**: lives in `daf-cache`, not `daf-core`
-- **Degraded-tier semantics**: `delete`, `delete_prefix`, `shake`, `clear` are no-ops returning `Ok(())` or `Ok(0)`, consistent with existing Moka degraded-tier pattern
-- **Dependency cleanup**: removed `lru` from `daf-cache/Cargo.toml` and `daf-application/Cargo.toml`
-- **Tests**: 77/77 Rust tests passing
-- **Clippy**: 0 warnings
-- **Power of Ten Rust**: All checks pass
-
-- **MokaCache non-empty prefix**: `delete_prefix` and `shake` always call `invalidate_all()` and return `CacheError::new(...)` for non-empty prefixes
-- **HierarchicalCache error propagation**: `delete`, `clear`, `delete_prefix`, and `shake` all propagate tier errors with `?`; the caller decides whether to treat them as fatal or advisory
-- **Mutation flow restructured**: `put`/`delete` now advance generation under the per-resource lock before attempting cache invalidation; `_invalidate_caches` (delete_prefix + shake) is advisory and errors are logged, not propagated; the previously broken transaction boundary is fixed — generation always advances regardless of cache tier state
-- **Generation enum round-trip**: `_execute_cache_miss` serializes `Missing` as `Null` and `Valid(n)` as `Number(n)`; `query()` deserializes back to `Generation` enum
-- **FFI double-free / ABA guard**: `LIVE_HANDLES` is a `HashMap<usize, u64>` tracking generation-tagged handles; `daf_data_access_new` inserts `(handle, 0)`; `daf_data_access_free` rejects absent handles (prevents double-free and use-after-free within a single process)
-- **Power of Ten Rust gate**: Added `scripts/power_of_ten_rust.py` with CI integration
-- **Power of Ten Rust instrumentation**: Meaningful `debug_assert!` calls encoding actual invariants (non-empty keys, generation state machine transitions, lock acquisition) across 8 crates; suppressed clippy warnings with crate-level `allow(clippy::assertions_on_constants)`
-- **Rule 4 cleanup**: Extracted `_build_put_merger` from `put` in `daf-application`; all functions now under 60 lines
-- **Rule 5 compliance**: Added `debug_assert!` to `_build_put_merger`; all functions have at least 1 assertion
-- **FFI lint cleanup**: Fixed redundant closures, const thread_local initializer, unused variable, unused import
-- **Trie lint cleanup**: Fixed non-canonical `partial_cmp` allow attribute placement
-- **LockRegistry**: Added `Default` impl to eliminate clippy suggestion
-- **Commit history cleanup**: Removed `node_modules/`, `package.json`, `package-lock.json` from git tracking; added to `.gitignore`
-- **Rule 5 assertion remediation**: Replaced all broken `debug_assert!(true, ...)` placeholders with meaningful invariants across `daf-core`, `daf-cache`, `daf-application`, and `daf-ffi`; eliminated all `assertions_on_constants` clippy warnings
-- **Cache trait**: `get` returns `Option<CacheEntry>` instead of `Option<Arc<dyn Any>>`
-- **MemoryCache**: Wraps values in `CacheEntry { origin_tier: Tier::L1 }`
-- **MokaCache**: L2 backend; non-empty `delete_prefix`/`shake` return `Err(CacheError::new(...))`
-- **RedisCache**: L3 stub (feature-gated behind `redis`; returns `CacheError::new("redis feature not enabled")` for all operations)
-- **PostgresCache**: L4 stub (feature-gated behind `postgres`; returns `CacheError::new("postgres feature not enabled")` for all operations)
-- **HierarchicalCache**: L1→L2→L3→L4 miss propagation; `set` writes to L1 only; `delete`/`clear`/`delete_prefix`/`shake` all propagate tier errors with `?`; caller decides fatal vs advisory
-- **DataAccessFactory**: Added to `daf-application` with `new()` and `create()`
-- **try_update equality**: Uses `PartialEq` directly when `T: PartialEq`, JSON fallback otherwise
-- **Python parity tests**: Added `tests/unit/test_rust_parity.py` with 20 tests
-- **Rust contract tests**: Added `AlgorithmStats` serde round-trip, `Generation::Missing`/`Valid` round-trip, `QueryInfo` empty defaults
-- **Rust traversal tests**: Added `CacheEntry` round-trip with `Tier::L1`, `delete_prefix` integration, `shake` count, Moka prefix error tests
-- **Rust fibonacci tests**: Added `Arc<i64>` input and multi-execute stats tests
-- **Rust integration tests**: Added factory creation, post-then-query, concurrent queries, generation missing init, hierarchical cache, adversarial Moka/FFI tests
-- **CI**: Added `rust-lint`, `rust-test`, `daf-core-contract`, `parity`, and `power-of-ten-rust` jobs
-- **Global lock registry**: Added `LockRegistry` (16-shard striped) with `OnceLock` singleton and `LockGuard` RAII
-- **FFI safety**: Rewrote `daf-ffi` with thread-local error state, null/UTF-8 validation, removed `#![allow(static_mut_refs)]`
-- **FFI double-free guard**: `LIVE_HANDLES` tracks live `DataAccess` pointers; `daf_data_access_free` returns `InvalidArgument` on double-free
-- **Cache invalidation**: `delete`/`delete_prefix`/`clear` propagate tier errors; `HierarchicalCache::shake` sums counts authoritatively
-- **Cache promotion**: L2/L3/L4 hits promote into L1, preserving originating `CacheEntry.origin_tier`
-- **Moka limitation**: Non-empty `delete_prefix` and `shake` always invalidate all entries and return `Err(CacheError::new(...))`; MokaCache is a degraded tier — callers must treat L2 as advisory
-- **Feature gates**: `redis` and `postgres` modules gated behind Cargo features in `daf-cache/src/lib.rs`
-- **CI parity gate**: Added `parity` to `build.needs` in `.github/workflows/ci.yml`
-- **Generation JSON round-trip**: Symmetric enum↔JSON mapping: `Missing` ↔ `Null`, `Valid(n)` ↔ `Number(n)`
+- **PR29 targeted fixes extracted and validated**: 219/219 tests passing; PR29 closed
+- **`_superedge_invalidate` generation-aware invalidation**: `_daf_gen:{namespace}` key deleted between `delete_prefix` and `shake` in `src/daf/core/access.py`
+- **Trie node isolation for parity tests**: `_TrieNode.clear()` added in `src/daf/cache/_trie.py`; parity tests use `root.clear()` instead of `node.__init__()`
+- **A* tie-breaking fixed**: `_astar_collect` uses module-level `_ASTAR_COUNTER = count()` with tuple shape `(priority, counter, node, depth, match_len)` in `src/daf/cache/memory.py`
+- **Power of Ten exceptions**: Added `_RECURSION_EXCEPTIONS` set in `scripts/power_of_ten.py` for known-safe recursions (`_dfs_collect`, `_trie_collect`, `_trie_delete_prefix`, `walk_tree`)
+- **Parity test lifecycle refactored**: `tests/unit/test_differential_parity.py` uses pytest fixtures for subprocess lifecycle; state-mirroring ensures Python and Rust operate on equivalent data across `post`, `put`, `delete`, and `query` operations
 
 ### Key Facts
 
@@ -96,7 +53,7 @@ All issues from `.kilo/plans/1787053103038-cachelito-l1-dashmap-runtime-plan.md`
 - **Author**: Rayan Aliane
 - **Core Dependencies**: `graphifyy>=0.9.42`, `pydantic>=2.0,<3.0`
 - **Optional Dependencies**: `fastapi>=0.115`, `slowapi>=0.1.9`
-- **Test Count**: 77 Rust tests, all passing
+- **Test Count**: 219 Python tests + 71 Rust tests, all passing
 - **Type Checking**: mypy strict, 0 errors
 - **Linting**: Ruff, 0 errors
 - **Clippy**: 0 warnings
@@ -144,7 +101,8 @@ All issues from `.kilo/plans/1787053103038-cachelito-l1-dashmap-runtime-plan.md`
 │   │   ├── test_memoize.py      # 10 tests (Memo and ResourceMemo direct tests)
 │   │   ├── test_recursion.py    # 8 tests (TreeCollector and walk_tree direct tests)
 │   │   ├── test_barrels.py      # 3 tests (barrel consistency + no inline _public)
-│   │   └── test_rust_parity.py  # 20 Python↔Rust parity tests
+│   │   ├── test_rust_parity.py  # 20 Python↔Rust parity tests
+│   │   └── test_differential_parity.py  # 7 Python↔Rust differential parity tests
 │   └── integration/
 │       ├── test_data_access.py  # 18 tests
 │       ├── test_authorization.py  # 15 tests
@@ -178,12 +136,10 @@ All issues from `.kilo/plans/1787053103038-cachelito-l1-dashmap-runtime-plan.md`
 
 ### Next Steps
 
-1. Commit all changes with sign-off
-2. Push branch to origin
-3. Leave adversarial review comment on PR #29
-4. Merge PR after review
-5. Tag release `v0.2.2`
-6. Publish to PyPI
+1. Open new PR from `feat/tier-aware-cache-and-parity` against `main` for adversarial review
+2. Merge PR after review
+3. Tag release `v0.2.2`
+4. Publish to PyPI
 
 ### Gate Files
 

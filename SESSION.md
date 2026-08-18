@@ -1592,3 +1592,65 @@ Each session entry should include:
 - `HierarchicalCache` and all downstream consumers are unaffected — trait signatures and behavior preserved
 - Cachelito is noted as future L1 backend per ADR-003; current implementation is the production-ready DashMap-based `MemoryCache`
 
+---
+
+## Session 018 - 2026-08-18
+
+### Agent: Kilo
+
+### Turn 1 Summary
+
+**Initial State**: Commit `87dc450` on branch `feat/tier-aware-cache-and-parity` passes 219 Python tests. PR29 (revert branch) was closed; fixes extracted and validated.
+
+**Actions Taken**:
+- Executed plan `.kilo/plans/1787059126278-pr29-refine-into-targeted-fixes.md`
+- Task 1: Injected `await self._cache.delete(f"_daf_gen:{namespace}")` between `delete_prefix` and `shake` in `_superedge_invalidate` in `src/daf/core/access.py`
+- Task 2: Added `_TrieNode.clear()` method in `src/daf/cache/_trie.py`; parity tests now use `root.clear()` instead of `node.__init__()`
+- Task 3: `_astar_collect` uses module-level `_ASTAR_COUNTER = count()` with tuple shape `(priority, counter, node, depth, match_len)` in `src/daf/cache/memory.py`
+- Task 4: Added `_RECURSION_EXCEPTIONS` set in `scripts/power_of_ten.py` for known-safe recursions (`_dfs_collect`, `_trie_collect`, `_trie_delete_prefix`, `walk_tree`)
+- Task 5: Converted parity tests from global `_PARITY_PROC` subprocess cache to fixture-based subprocess lifecycle in `tests/unit/test_differential_parity.py`; added state-mirroring so Python and Rust sides operate on equivalent data
+- Cleaned git workspace locally (committed changes, removed untracked plan artifact) and remotely (deleted `revert-24-feat/tier-aware-cache-and-parity` branch)
+- Updated living docs: HANDOVER.md, SESSION.md
+- Ran full validation: 219/219 tests passing, mypy --strict clean, ruff clean
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| src/daf/core/access.py | Modified | Task 1: injected `_daf_gen` delete in `_superedge_invalidate` |
+| src/daf/cache/_trie.py | Modified | Task 2: added `_TrieNode.clear()` |
+| src/daf/cache/memory.py | Modified | Task 3: `_astar_collect` uses module-level `_ASTAR_COUNTER` |
+| scripts/power_of_ten.py | Modified | Task 4: added `_RECURSION_EXCEPTIONS` set |
+| tests/unit/test_differential_parity.py | Modified | Task 5: fixture-based subprocess lifecycle + state mirroring |
+| HANDOVER.md | Modified | Updated quality status, latest changes, project structure |
+| SESSION.md | Modified | Added this session entry |
+
+### Project Status
+
+- **Branch**: `feat/tier-aware-cache-and-parity`
+- **Version**: 0.2.2
+- **Tests**: 219/219 passing
+- **Type Checking**: mypy strict, 0 errors
+- **Linting**: Ruff, 0 errors
+- **Rust**: 71/71 tests passing, clippy clean, Power of Ten clean
+- **PR**: https://github.com/RAliane-REBORN/theDAF (pending new PR from this branch)
+
+### Pending Work
+
+- [x] Stage all changes in git
+- [x] Commit changes with sign-off
+- [x] Push branch to origin
+- [x] Close PR29 and delete stale revert branch
+- [ ] Open new PR from `feat/tier-aware-cache-and-parity` against `main`
+- [ ] Merge PR after adversarial review
+- [ ] Tag release `v0.2.2`
+- [ ] Publish to PyPI
+
+### Notes
+
+- All 5 tasks from PR29 plan are implemented and validated
+- 219 tests pass (up from 212)
+- Parity tests use fixture-based subprocess lifecycle with one subprocess per test suite
+- State-mirroring ensures Python and Rust operate on equivalent data for accurate parity comparison
+- Remote revert branch `revert-24-feat/tier-aware-cache-and-parity` deleted; workspace is clean locally and remotely
+
