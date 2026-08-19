@@ -5,17 +5,16 @@ use std::sync::Arc;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 
-use daf_cache::GenerationRegistry;
+use daf_cache::CacheManager;
 use daf_core::{
-    Algorithm, AlgorithmError, AlgorithmStats, Authorizer, Cache, DataAccessError, DeleteInfo,
-    Generation, JsonValue, MutationResult, NotFoundError, PostInfo, PutInfo, QueryInfo,
-    QueryResult, Repository, ResourceId, UserId, ValidationError,
+    Algorithm, AlgorithmError, AlgorithmStats, Authorizer, Cache, CacheEntry, DataAccessError,
+    DeleteInfo, Generation, JsonValue, MutationResult, NotFoundError, PostInfo, PutInfo, QueryInfo,
+    QueryResult, Repository, ResourceId, Tier, UserId, ValidationError,
 };
 
 pub struct DataAccess {
     repository: Arc<dyn Repository<JsonValue>>,
-    cache: Arc<dyn Cache>,
-    generation_registry: Arc<GenerationRegistry>,
+    cache: Arc<CacheManager>,
     algorithms: HashMap<String, Arc<dyn Algorithm>>,
     authorizer: Option<Arc<dyn Authorizer>>,
 }
@@ -23,15 +22,13 @@ pub struct DataAccess {
 impl DataAccess {
     pub fn new(
         repository: Arc<dyn Repository<JsonValue>>,
-        cache: Arc<dyn Cache>,
-        generation_registry: Arc<GenerationRegistry>,
+        cache: Arc<CacheManager>,
         algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
         authorizer: Option<Arc<dyn Authorizer>>,
     ) -> Self {
         Self {
             repository,
             cache,
-            generation_registry,
             algorithms: algorithms.unwrap_or_default(),
             authorizer,
         }
@@ -42,8 +39,7 @@ impl DataAccess {
         &self,
     ) -> (
         Arc<dyn Repository<JsonValue>>,
-        Arc<dyn Cache>,
-        Arc<GenerationRegistry>,
+        Arc<CacheManager>,
         &HashMap<String, Arc<dyn Algorithm>>,
     ) {
         debug_assert!(
@@ -57,7 +53,6 @@ impl DataAccess {
         (
             self.repository.clone(),
             self.cache.clone(),
-            self.generation_registry.clone(),
             &self.algorithms,
         )
     }
@@ -132,13 +127,16 @@ impl DataAccess {
         daf_core::LockRegistry::global().acquire(resource_id).await
     }
 
-    async fn _current_generation(&self, resource_id: &str) -> Result<Generation, DataAccessError> {
+    async fn _resolve_current_generation(
+        &self,
+        resource_id: &str,
+    ) -> Result<Generation, DataAccessError> {
         debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
         let lock = self.generation_lock(resource_id).await;
         let _guard = lock;
         Ok(self
-            .generation_registry
-            .current(&ResourceId::new(resource_id))
+            .cache
+            .current(&self.resource_namespace(resource_id))
             .await)
     }
 
@@ -147,8 +145,8 @@ impl DataAccess {
         let lock = self.generation_lock(resource_id).await;
         let _guard = lock;
         let next = self
-            .generation_registry
-            .advance(&ResourceId::new(resource_id))
+            .cache
+            .advance(&self.resource_namespace(resource_id))
             .await;
         debug_assert!(
             matches!(next, Generation::Valid(_)),
@@ -180,17 +178,6 @@ impl DataAccess {
         Ok((result_value, Some(stats)))
     }
 
-    async fn _resolve_current_generation(
-        &self,
-        resource_id: &str,
-    ) -> Result<Generation, DataAccessError> {
-        debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
-        Ok(self
-            .generation_registry
-            .current(&ResourceId::new(resource_id))
-            .await)
-    }
-
     async fn _authorize_query(
         &self,
         resource_id: &str,
@@ -210,26 +197,10 @@ impl DataAccess {
         Ok(())
     }
 
-    fn _build_cache_value(
-        &self,
-        raw_data: JsonValue,
-        final_data: JsonValue,
-        current_generation: Generation,
-    ) -> JsonValue {
-        debug_assert!(
-            matches!(
-                current_generation,
-                Generation::Missing | Generation::Valid(_)
-            ),
-            "generation must be Missing or Valid"
-        );
+    fn _build_cache_value(&self, raw_data: JsonValue, final_data: JsonValue) -> JsonValue {
         serde_json::json!({
             "raw": raw_data,
             "transformed": final_data,
-            "generation": match current_generation {
-                Generation::Missing => serde_json::Value::Null,
-                Generation::Valid(n) => serde_json::Value::Number(n.into()),
-            },
         })
     }
 
@@ -280,8 +251,17 @@ impl DataAccess {
             (JsonValue::Null, None)
         };
 
-        let cache_value = self._build_cache_value(raw_data, final_data.clone(), current_generation);
-        self.cache.set(cache_key, Arc::new(cache_value)).await?;
+        let cache_value = self._build_cache_value(raw_data, final_data.clone());
+        self.cache
+            .set(
+                cache_key,
+                CacheEntry {
+                    value: Arc::new(cache_value),
+                    origin_tier: Tier::L1,
+                    generation: current_generation,
+                },
+            )
+            .await?;
 
         Ok(QueryResult {
             success: true,
@@ -299,7 +279,7 @@ impl DataAccess {
         _cache_key: String,
         resource_id: &str,
         user: Option<&UserId>,
-        cached: &serde_json::Map<String, JsonValue>,
+        cached: JsonValue,
     ) -> Result<QueryResult, DataAccessError> {
         debug_assert!(!resource_id.is_empty(), "resource_id must not be empty");
         let raw = cached.get("raw").cloned().unwrap_or(JsonValue::Null);
@@ -337,27 +317,30 @@ impl DataAccess {
         }
         let user_id = self.user_id(user);
         let cache_key = self.cache_key(&info, &user_id);
+        let lock = self.generation_lock(&info.resource_id.0).await;
+        let mut guard = Some(lock);
 
         let entry = self.cache.get(&cache_key).await?;
         if let Some(cached_entry) = entry {
-            let current_gen = self.generation_registry.current(&info.resource_id).await;
-            if let Some(cached_value) = cached_entry.value.downcast_ref::<serde_json::Value>() {
-                if let Some(cached_map) = cached_value.as_object() {
-                    let cached_gen = cached_map.get("generation").and_then(|g| {
-                        if g.is_null() {
-                            Some(Generation::Missing)
-                        } else {
-                            g.as_u64().map(Generation::Valid)
-                        }
-                    });
-                    if cached_gen == Some(current_gen) {
-                        return self
-                            ._handle_cache_hit(cache_key, &info.resource_id.0, user, cached_map)
-                            .await;
-                    }
+            let current_gen = self
+                .cache
+                .current(&self.resource_namespace(&info.resource_id.0))
+                .await;
+            if cached_entry.generation == current_gen {
+                guard.take();
+                if let Some(cached_value) = cached_entry.value.downcast_ref::<serde_json::Value>() {
+                    return self
+                        ._handle_cache_hit(
+                            cache_key,
+                            &info.resource_id.0,
+                            user,
+                            cached_value.clone(),
+                        )
+                        .await;
                 }
             }
         }
+        drop(guard);
         self._execute_cache_miss(cache_key, info, user).await
     }
 
@@ -523,8 +506,7 @@ impl DataAccess {
 
 pub struct DataAccessFactory {
     repository: Arc<dyn Repository<JsonValue>>,
-    cache: Arc<dyn Cache>,
-    generation_registry: Arc<GenerationRegistry>,
+    cache: Arc<CacheManager>,
     algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
     authorizer: Option<Arc<dyn Authorizer>>,
 }
@@ -532,15 +514,13 @@ pub struct DataAccessFactory {
 impl DataAccessFactory {
     pub fn new(
         repository: Arc<dyn Repository<JsonValue>>,
-        cache: Arc<dyn Cache>,
-        generation_registry: Arc<GenerationRegistry>,
+        cache: Arc<CacheManager>,
         algorithms: Option<HashMap<String, Arc<dyn Algorithm>>>,
         authorizer: Option<Arc<dyn Authorizer>>,
     ) -> Self {
         Self {
             repository,
             cache,
-            generation_registry,
             algorithms,
             authorizer,
         }
@@ -558,7 +538,6 @@ impl DataAccessFactory {
         DataAccess::new(
             self.repository,
             self.cache,
-            self.generation_registry,
             self.algorithms,
             self.authorizer,
         )

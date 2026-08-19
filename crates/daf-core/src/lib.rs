@@ -12,7 +12,7 @@ pub use lock_registry::{LockGuard, LockRegistry};
 
 pub type JsonValue = serde_json::Value;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Tier {
     L1,
     L2,
@@ -22,8 +22,9 @@ pub enum Tier {
 
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
-    pub value: Arc<dyn Any + Send + Sync>,
+    pub value: Arc<dyn std::any::Any + Send + Sync>,
     pub origin_tier: Tier,
+    pub generation: Generation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -267,7 +268,7 @@ pub trait Repository<T>: Send + Sync {
 #[async_trait]
 pub trait Cache: Send + Sync {
     async fn get(&self, key: &str) -> Result<Option<CacheEntry>, CacheError>;
-    async fn set(&self, key: String, value: Arc<dyn Any + Send + Sync>) -> Result<(), CacheError>;
+    async fn set(&self, key: String, entry: CacheEntry) -> Result<(), CacheError>;
     async fn delete(&self, key: &str) -> Result<(), CacheError>;
     async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError>;
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError>;

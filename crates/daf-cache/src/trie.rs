@@ -78,7 +78,6 @@ pub fn trie_delete_prefix(root: &mut TrieNode, prefix: &str) -> std::collections
 }
 
 pub fn dfs_collect(node: Option<&TrieNode>) -> std::collections::HashSet<String> {
-    debug_assert!(node.is_some() || true, "dfs_collect on None is valid");
     let mut result = std::collections::HashSet::new();
     if let Some(node) = node {
         if let Some(ref key) = node.key {

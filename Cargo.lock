@@ -185,6 +185,65 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "cachelito"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f7bd70ab6d1bcaa7fb7d8309f55834e3e3cf3d31b059cf6ecf6df828f8ff0d7"
+dependencies = [
+ "cachelito-core",
+ "cachelito-macros",
+ "once_cell",
+ "parking_lot",
+]
+
+[[package]]
+name = "cachelito-async-macros"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fea678ee321389569d060858bb2509fd40f794b05019875114f107657a5ac31c"
+dependencies = [
+ "cachelito-macro-utils",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "cachelito-core"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e178847c1c43a1c1ded1f4e42d90c88d09541363f982597fab2740621574219"
+dependencies = [
+ "dashmap",
+ "fastrand",
+ "once_cell",
+ "parking_lot",
+]
+
+[[package]]
+name = "cachelito-macro-utils"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "525201005e10b0eb2d3ba00b6c94b2a00a81c6d959da739db72df9622283b7b4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "cachelito-macros"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e5bce82d0a2a716b6d3c51bd2a2e6d142aef4bc3c265c0c3efd22007b9c1f5a"
+dependencies = [
+ "cachelito-macro-utils",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "cc"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -353,9 +412,12 @@ name = "daf-cache"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "cachelito",
+ "cachelito-async-macros",
  "daf-core",
  "dashmap",
  "moka",
+ "parking_lot",
  "redis",
  "serde",
  "serde_json",
@@ -439,15 +501,15 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "7.0.0-rc2"
+version = "6.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4a1e35a65fe0538a60167f0ada6e195ad5d477f6ddae273943596d4a1a5730b"
+checksum = "e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c"
 dependencies = [
  "cfg-if",
  "crossbeam-utils",
- "equivalent",
- "hashbrown 0.15.5",
+ "hashbrown 0.14.5",
  "lock_api",
+ "once_cell",
  "parking_lot_core",
 ]
 
@@ -693,6 +755,12 @@ dependencies = [
  "r-efi",
  "rand_core 0.10.1",
 ]
+
+[[package]]
+name = "hashbrown"
+version = "0.14.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
 name = "hashbrown"

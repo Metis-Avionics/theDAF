@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use daf_algorithms::FibonacciDP;
 use daf_application::DataAccess;
-use daf_cache::{CachelitoCache, GenerationRegistry};
+use daf_cache::{CacheManager, CachelitoCache, MokaCache};
 use daf_core::{
     DataAccessError, DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo, ResourceId, UserId,
     ValidationError,
@@ -113,14 +113,17 @@ pub extern "C" fn daf_data_access_new() -> *mut DataAccess {
     clear_last_error();
     match panic::catch_unwind(|| {
         let repo = Arc::new(MemoryRepository::<JsonValue>::new());
-        let cache = Arc::new(CachelitoCache::new());
-        let generation_registry = Arc::new(GenerationRegistry::new());
+        let cache = Arc::new({
+            let l1 = CachelitoCache::new();
+            let l2 = MokaCache::new(1024);
+            CacheManager::new(l1, l2, None, None)
+        });
         let mut algorithms = HashMap::new();
         algorithms.insert(
             "fib".to_string(),
             Arc::new(FibonacciDP::new()) as Arc<dyn daf_core::Algorithm>,
         );
-        let daf = DataAccess::new(repo, cache, generation_registry, Some(algorithms), None);
+        let daf = DataAccess::new(repo, cache, Some(algorithms), None);
         let raw = Box::into_raw(Box::new(daf));
         live_handles().lock().unwrap().insert(raw as usize, 0);
         raw

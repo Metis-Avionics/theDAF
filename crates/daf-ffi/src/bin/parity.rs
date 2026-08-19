@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use daf_algorithms::FibonacciDP;
 use daf_application::DataAccess;
-use daf_cache::{CachelitoCache, GenerationRegistry};
+use daf_cache::{CacheManager, CachelitoCache, MokaCache};
 use daf_core::{DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo, ResourceId};
 use daf_repository::MemoryRepository;
 
@@ -79,9 +79,12 @@ impl ParityState {
             Arc::new(FibonacciDP::new()) as Arc<dyn daf_core::Algorithm>,
         )]);
         let repo: Arc<dyn daf_core::Repository<JsonValue>> = Arc::new(MemoryRepository::new());
-        let cache = Arc::new(CachelitoCache::new());
-        let gen_reg = Arc::new(GenerationRegistry::new());
-        let daf = DataAccess::new(repo.clone(), cache, gen_reg, Some(algorithms), None);
+        let cache = Arc::new({
+            let l1 = CachelitoCache::new();
+            let l2 = MokaCache::new(1024);
+            CacheManager::new(l1, l2, None, None)
+        });
+        let daf = DataAccess::new(repo.clone(), cache, Some(algorithms), None);
         Self { daf, _repo: repo }
     }
 

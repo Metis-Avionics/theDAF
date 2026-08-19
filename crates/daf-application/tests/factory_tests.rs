@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use daf_application::DataAccessFactory;
-use daf_cache::{CachelitoCache, GenerationRegistry};
+use daf_cache::{CacheManager, CachelitoCache, MokaCache};
 use daf_core::{
-    Algorithm, AlgorithmError, AlgorithmStats, Authorizer, Cache, JsonValue, PostInfo, Repository,
+    Algorithm, AlgorithmError, AlgorithmStats, Authorizer, JsonValue, PostInfo, Repository,
     ResourceId, UserId,
 };
 use daf_repository::MemoryRepository;
@@ -44,8 +44,12 @@ impl Algorithm for CountingAlgorithm {
 #[tokio::test]
 async fn test_factory_stores_dependencies() {
     let repo: Arc<dyn Repository<JsonValue>> = Arc::new(MemoryRepository::new());
-    let cache: Arc<dyn Cache> = Arc::new(CachelitoCache::new());
-    let gen_reg = Arc::new(GenerationRegistry::new());
+    let cache = Arc::new(CacheManager::new(
+        CachelitoCache::new(),
+        MokaCache::new(1024),
+        None,
+        None,
+    ));
     let mut algorithms: HashMap<String, Arc<dyn Algorithm>> = HashMap::new();
     algorithms.insert("counting".to_string(), Arc::new(CountingAlgorithm));
     let authorizer: Arc<dyn Authorizer> = Arc::new(NoopAuthorizer);
@@ -53,16 +57,14 @@ async fn test_factory_stores_dependencies() {
     let factory = DataAccessFactory::new(
         repo.clone(),
         cache.clone(),
-        gen_reg.clone(),
         Some(algorithms.clone()),
         Some(authorizer.clone()),
     );
     let daf = factory.create();
 
-    let (repo_out, cache_out, gen_out, algs_out) = daf.get_components();
+    let (repo_out, cache_out, algs_out) = daf.get_components();
     assert!(Arc::ptr_eq(&repo_out, &repo));
     assert!(Arc::ptr_eq(&cache_out, &cache));
-    assert!(Arc::ptr_eq(&gen_out, &gen_reg));
     assert_eq!(algs_out.len(), 1);
     assert!(algs_out.contains_key("counting"));
 }
@@ -70,10 +72,14 @@ async fn test_factory_stores_dependencies() {
 #[tokio::test]
 async fn test_factory_create_returns_usable_data_access() {
     let repo: Arc<dyn Repository<JsonValue>> = Arc::new(MemoryRepository::new());
-    let cache: Arc<dyn Cache> = Arc::new(CachelitoCache::new());
-    let gen_reg = Arc::new(GenerationRegistry::new());
+    let cache = Arc::new(CacheManager::new(
+        CachelitoCache::new(),
+        MokaCache::new(1024),
+        None,
+        None,
+    ));
 
-    let factory = DataAccessFactory::new(repo, cache, gen_reg, None, None);
+    let factory = DataAccessFactory::new(repo, cache, None, None);
     let daf = factory.create();
 
     let result = daf

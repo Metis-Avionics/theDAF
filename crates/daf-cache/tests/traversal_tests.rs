@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use daf_cache::{trie::*, CachelitoCache};
-use daf_core::{Cache, Tier};
+use daf_core::{Cache, CacheEntry, Generation, Tier};
 
 fn build_trie(keys: &[&str]) -> TrieNode {
     let mut root = TrieNode::default();
@@ -141,7 +141,17 @@ fn astar_collect_no_mismatch_descendant_penalty() {
 async fn cachelito_cache_set_get_round_trip_with_tier() {
     let cache = CachelitoCache::new();
     let value = Arc::new(42_i64) as Arc<dyn std::any::Any + Send + Sync>;
-    cache.set("key:1".to_string(), value).await.unwrap();
+    cache
+        .set(
+            "key:1".to_string(),
+            CacheEntry {
+                value,
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
+        .await
+        .unwrap();
     let entry = cache.get("key:1").await.unwrap();
     assert!(entry.is_some());
     let entry = entry.unwrap();
@@ -153,15 +163,36 @@ async fn cachelito_cache_set_get_round_trip_with_tier() {
 async fn cachelito_cache_delete_prefix_is_noop() {
     let cache = CachelitoCache::new();
     cache
-        .set("ns:a:1".to_string(), Arc::new("v1"))
+        .set(
+            "ns:a:1".to_string(),
+            CacheEntry {
+                value: Arc::new("v1"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
         .await
         .unwrap();
     cache
-        .set("ns:a:2".to_string(), Arc::new("v2"))
+        .set(
+            "ns:a:2".to_string(),
+            CacheEntry {
+                value: Arc::new("v2"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
         .await
         .unwrap();
     cache
-        .set("ns:b:1".to_string(), Arc::new("v3"))
+        .set(
+            "ns:b:1".to_string(),
+            CacheEntry {
+                value: Arc::new("v3"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
         .await
         .unwrap();
 
@@ -176,15 +207,36 @@ async fn cachelito_cache_delete_prefix_is_noop() {
 async fn cachelito_cache_shake_returns_zero() {
     let cache = CachelitoCache::new();
     cache
-        .set("ns:a:1".to_string(), Arc::new("v1"))
+        .set(
+            "ns:a:1".to_string(),
+            CacheEntry {
+                value: Arc::new("v1"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
         .await
         .unwrap();
     cache
-        .set("ns:a:2".to_string(), Arc::new("v2"))
+        .set(
+            "ns:a:2".to_string(),
+            CacheEntry {
+                value: Arc::new("v2"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
         .await
         .unwrap();
     cache
-        .set("other:x".to_string(), Arc::new("v3"))
+        .set(
+            "other:x".to_string(),
+            CacheEntry {
+                value: Arc::new("v3"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
         .await
         .unwrap();
 
@@ -195,27 +247,91 @@ async fn cachelito_cache_shake_returns_zero() {
 }
 
 #[tokio::test]
-async fn moka_delete_prefix_non_empty_returns_error_and_clears() {
+async fn moka_delete_prefix_non_empty_returns_ok_and_clears_matching() {
     use daf_cache::MokaCache;
     let cache = MokaCache::new(1024);
-    cache.set("k1".to_string(), Arc::new("v1")).await.unwrap();
-    cache.set("k2".to_string(), Arc::new("v2")).await.unwrap();
+    cache
+        .set(
+            "ns:a:1".to_string(),
+            CacheEntry {
+                value: Arc::new("v1"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
+        .await
+        .unwrap();
+    cache
+        .set(
+            "ns:a:2".to_string(),
+            CacheEntry {
+                value: Arc::new("v2"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
+        .await
+        .unwrap();
+    cache
+        .set(
+            "other:x".to_string(),
+            CacheEntry {
+                value: Arc::new("v3"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
+        .await
+        .unwrap();
 
     let result = cache.delete_prefix("ns:").await;
-    assert!(result.is_err());
-    assert!(cache.get("k1").await.unwrap().is_none());
-    assert!(cache.get("k2").await.unwrap().is_none());
+    assert!(result.is_ok());
+    assert!(cache.get("ns:a:1").await.unwrap().is_none());
+    assert!(cache.get("ns:a:2").await.unwrap().is_none());
+    assert!(cache.get("other:x").await.unwrap().is_some());
 }
 
 #[tokio::test]
-async fn moka_shake_non_empty_returns_error_and_clears() {
+async fn moka_shake_non_empty_returns_ok_and_clears_matching() {
     use daf_cache::MokaCache;
     let cache = MokaCache::new(1024);
-    cache.set("k1".to_string(), Arc::new("v1")).await.unwrap();
-    cache.set("k2".to_string(), Arc::new("v2")).await.unwrap();
+    cache
+        .set(
+            "ns:a:1".to_string(),
+            CacheEntry {
+                value: Arc::new("v1"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
+        .await
+        .unwrap();
+    cache
+        .set(
+            "ns:a:2".to_string(),
+            CacheEntry {
+                value: Arc::new("v2"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
+        .await
+        .unwrap();
+    cache
+        .set(
+            "other:x".to_string(),
+            CacheEntry {
+                value: Arc::new("v3"),
+                origin_tier: Tier::L1,
+                generation: Generation::Missing,
+            },
+        )
+        .await
+        .unwrap();
 
     let result = cache.shake("ns:").await;
-    assert!(result.is_err());
-    assert!(cache.get("k1").await.unwrap().is_none());
-    assert!(cache.get("k2").await.unwrap().is_none());
+    assert!(result.is_ok());
+    assert!(cache.get("ns:a:1").await.unwrap().is_none());
+    assert!(cache.get("ns:a:2").await.unwrap().is_none());
+    assert!(cache.get("other:x").await.unwrap().is_some());
 }

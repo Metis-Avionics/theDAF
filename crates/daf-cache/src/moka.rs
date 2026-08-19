@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
-use daf_core::{Cache, CacheEntry, CacheError, Tier};
+use daf_core::{Cache, CacheEntry, CacheError};
 
 #[derive(Debug, Clone)]
 pub struct MokaCache {
@@ -12,7 +10,10 @@ impl MokaCache {
     pub fn new(max_capacity: u64) -> Self {
         debug_assert!(max_capacity > 0, "moka max_capacity must be positive");
         Self {
-            inner: moka::future::Cache::new(max_capacity),
+            inner: moka::future::Cache::builder()
+                .max_capacity(max_capacity)
+                .support_invalidation_closures()
+                .build(),
         }
     }
 }
@@ -24,16 +25,8 @@ impl Cache for MokaCache {
         Ok(self.inner.get(key).await)
     }
 
-    async fn set(
-        &self,
-        key: String,
-        value: Arc<dyn std::any::Any + Send + Sync>,
-    ) -> Result<(), CacheError> {
+    async fn set(&self, key: String, entry: CacheEntry) -> Result<(), CacheError> {
         debug_assert!(!key.is_empty(), "cache key must not be empty");
-        let entry = CacheEntry {
-            value,
-            origin_tier: Tier::L2,
-        };
         self.inner.insert(key, entry).await;
         Ok(())
     }
@@ -49,27 +42,20 @@ impl Cache for MokaCache {
             !prefix.is_empty(),
             "prefix must not be empty for delete_prefix"
         );
-        self.inner.invalidate_all();
-        if prefix.is_empty() {
-            Ok(())
-        } else {
-            Err(CacheError::new(format!(
-                "MokaCache does not support prefix-scoped invalidation; full tier invalidated for prefix '{prefix}'",
-            )))
-        }
+        let p = prefix.to_string();
+        let _ = self
+            .inner
+            .invalidate_entries_if(move |key, _| key.starts_with(&p));
+        Ok(())
     }
 
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
         debug_assert!(!prefix.is_empty(), "prefix must not be empty for shake");
-        let count = self.inner.entry_count() as usize;
-        self.inner.invalidate_all();
-        if prefix.is_empty() {
-            Ok(count)
-        } else {
-            Err(CacheError::new(format!(
-                "MokaCache does not support prefix-scoped shake; full tier invalidated for prefix '{prefix}'",
-            )))
-        }
+        let p = prefix.to_string();
+        self.inner
+            .invalidate_entries_if(move |key, _| key.starts_with(&p))
+            .map_err(|e| CacheError::new(format!("moka shake error: {e}")))?;
+        Ok(0)
     }
 
     async fn clear(&self) -> Result<(), CacheError> {

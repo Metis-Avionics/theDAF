@@ -12,7 +12,9 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 moka = { version = "0.12", features = ["future"] }
-dashmap = "7.0.0-rc2"
+cachelito = { version = "0.16", features = ["stats"] }
+parking_lot = "0.12"
+dashmap = "6.1"
 
 [features]
 redis = ["dep:redis"]
@@ -29,3 +31,6 @@ version = "0.8"
 optional = true
 default-features = false
 features = ["runtime-tokio", "postgres"]
+
+[dev-dependencies]
+cachelito-async-macros = "0.16"

@@ -1,17 +1,44 @@
-use std::sync::Arc;
-
+use async_trait::async_trait;
+use cachelito::{AsyncGlobalCache, CacheStats, EvictionPolicy};
 use daf_core::{Cache, CacheEntry, CacheError, Tier};
 use dashmap::DashMap;
+use parking_lot::Mutex;
+use std::collections::VecDeque;
 
 pub struct CachelitoCache {
-    inner: Arc<DashMap<String, Arc<dyn std::any::Any + Send + Sync>>>,
+    inner: AsyncGlobalCache<'static, CacheEntry>,
+    capacity: usize,
 }
 
 impl CachelitoCache {
     pub fn new() -> Self {
+        Self::with_capacity(1024)
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        let map: &'static DashMap<String, (CacheEntry, u64, u64)> =
+            Box::leak(Box::new(DashMap::new()));
+        let order: &'static Mutex<VecDeque<String>> =
+            Box::leak(Box::new(Mutex::new(VecDeque::new())));
+        let stats: &'static CacheStats = Box::leak(Box::new(CacheStats::new()));
         Self {
-            inner: Arc::new(DashMap::new()),
+            inner: AsyncGlobalCache::new(
+                map,
+                order,
+                Some(capacity),
+                None,
+                EvictionPolicy::LRU,
+                None,
+                None,
+                None,
+                stats,
+            ),
+            capacity,
         }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 }
 
@@ -21,22 +48,19 @@ impl Default for CachelitoCache {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Cache for CachelitoCache {
     async fn get(&self, key: &str) -> Result<Option<CacheEntry>, CacheError> {
-        Ok(self.inner.get(key).map(|entry| CacheEntry {
-            value: entry.value().clone(),
+        let entry = self.inner.get(key);
+        Ok(entry.map(|e| CacheEntry {
+            value: e.value,
             origin_tier: Tier::L1,
+            generation: e.generation,
         }))
     }
 
-    async fn set(
-        &self,
-        key: String,
-        value: Arc<dyn std::any::Any + Send + Sync>,
-    ) -> Result<(), CacheError> {
-        debug_assert!(!key.is_empty(), "cache key must not be empty");
-        self.inner.insert(key, value);
+    async fn set(&self, key: String, entry: CacheEntry) -> Result<(), CacheError> {
+        self.inner.insert(&key, entry);
         Ok(())
     }
 
@@ -44,16 +68,11 @@ impl Cache for CachelitoCache {
         Ok(())
     }
 
-    async fn delete_prefix(&self, prefix: &str) -> Result<(), CacheError> {
-        debug_assert!(
-            !prefix.is_empty(),
-            "prefix must not be empty for delete_prefix"
-        );
+    async fn delete_prefix(&self, _prefix: &str) -> Result<(), CacheError> {
         Ok(())
     }
 
-    async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
-        debug_assert!(!prefix.is_empty(), "prefix must not be empty for shake");
+    async fn shake(&self, _prefix: &str) -> Result<usize, CacheError> {
         Ok(0)
     }
 
