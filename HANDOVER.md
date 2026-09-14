@@ -18,9 +18,10 @@ The cache hierarchy is one component of this milestone, not the entire PR.
 
 ### Repository Status
 
-- **Branch**: `feat/tier-aware-cache-and-parity`
-- **Commits**: 1 clean commit ahead of origin/main (`7e71580`)
-- **PR Status**: PR #24 open (https://github.com/Metis-Avionics/theDAF/pull/24)
+- **Branch**: `feat/l0-l5-hierarchical-cache`
+- **Commits**: `0dedac3` (crates.io publishing prep) on top of `37d54d7`
+- **PR Status**: PR #44 open (https://github.com/Metis-Avionics/theDAF/pull/44)
+- **crates.io**: `daf-core v0.1.0` published; remaining 8 workspace crates publishing via background `scripts/publish_crates_io.sh` run
 
 ### Quality Status
 
@@ -34,6 +35,8 @@ The cache hierarchy is one component of this milestone, not the entire PR.
 | Build | ✅ Verified |
 
 ### Latest Changes
+
+- **crates.io publishing prep (Session 022)**: `description`/`repository`/`keywords` metadata added to all 9 crate manifests; intra-workspace path deps pinned with `version = "0.1.0"`; `daf-core v0.1.0` published to crates.io; `scripts/publish_crates_io.sh` schedules the remaining 8 crates in dependency order with 429 backoff
 
 All issues from `.kilo/plans/1786886032141-pr24-adversarial-fixes.md` and `.kilo/plans/1786888887462-rust-power-of-ten-remediation.md` have been addressed:
 
@@ -149,6 +152,7 @@ All issues from `.kilo/plans/1786886032141-pr24-adversarial-fixes.md` and `.kilo
 │   ├── daf-http/                # Axum router
 │   └── daf-ffi/                 # C-compatible ABI
 ├── scripts/
+│   ├── publish_crates_io.sh   # Delayed, ordered, rate-limit-aware crates.io publisher
 │   ├── power_of_ten.py         # NASA/JPL Power of Ten AST checker (Python)
 │   ├── power_of_ten_rust.py    # NASA/JPL Power of Ten checker (Rust)
 │   ├── graphify_report.py      # graphify extract+diagnose+tree+callflow pipeline (deduplicated diagnose)
