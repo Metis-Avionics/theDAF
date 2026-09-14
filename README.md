@@ -61,6 +61,17 @@ Transport (FastAPI / Axum / FFI)
 | `daf-http` | Axum router translating HTTP to `DataAccess` |
 | `daf-ffi` | C-compatible ABI with opaque pointers and stable error codes |
 
+### Installing from crates.io
+
+The workspace crates are published to [crates.io](https://crates.io) under the `daf-*` prefix.
+`daf-core v0.1.0` is live; the remaining crates roll out in dependency order:
+
+```bash
+cargo add daf-core
+```
+
+Automated, rate-limit-aware publishing is handled by `scripts/publish_crates_io.sh`.
+
 ### Rust invariants enforced by the type system
 
 - `Generation` is an explicit enum (`Missing` / `Valid(u64)`), preventing the Python sentinel-`0` conflation.

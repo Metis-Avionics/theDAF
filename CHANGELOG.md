@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- crates.io publishing metadata (`description`, `repository`, `keywords`) for all 9 workspace crates
+- `scripts/publish_crates_io.sh` — ordered, rate-limit-aware crates.io publisher (dependency order, 429 backoff with server-provided retry time, index-propagation settling, idempotent skip of already-published crates)
+- `daf-core v0.1.0` published to crates.io; remaining 8 crates scheduled via `scripts/publish_crates_io.sh`
+
+### Changed
+
+- Intra-workspace path dependencies now pin `version = "0.1.0"` alongside `path` (required by `cargo publish`)
+
 ## [0.2.2] - 2026-08-17
 
 ### Added
