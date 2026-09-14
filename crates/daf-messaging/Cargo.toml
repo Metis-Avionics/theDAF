@@ -3,9 +3,12 @@ name = "daf-messaging"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Messaging primitives for the Data Access Factory (DAF)"
+repository = "https://github.com/RAliane-REBORN/theDAF"
+keywords = ["data-access", "messaging", "events"]
 
 [dependencies]
-daf-core = { path = "../daf-core" }
-daf-algorithms = { path = "../daf-algorithms" }
+daf-core = { path = "../daf-core", version = "0.1.0" }
+daf-algorithms = { path = "../daf-algorithms", version = "0.1.0" }
 async-trait.workspace = true
 tokio.workspace = true

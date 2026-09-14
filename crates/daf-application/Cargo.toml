@@ -3,12 +3,15 @@ name = "daf-application"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Application DataAccess layer wiring DAF repositories, cache, and algorithms"
+repository = "https://github.com/RAliane-REBORN/theDAF"
+keywords = ["data-access", "repository", "cache"]
 
 [dependencies]
-daf-core = { path = "../daf-core" }
-daf-cache = { path = "../daf-cache" }
-daf-repository = { path = "../daf-repository" }
-daf-algorithms = { path = "../daf-algorithms" }
+daf-core = { path = "../daf-core", version = "0.1.0" }
+daf-cache = { path = "../daf-cache", version = "0.1.0" }
+daf-repository = { path = "../daf-repository", version = "0.1.0" }
+daf-algorithms = { path = "../daf-algorithms", version = "0.1.0" }
 async-trait.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
