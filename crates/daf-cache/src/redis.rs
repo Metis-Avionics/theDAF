@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use daf_core::{Cache, CacheEntry, CacheError, Tier};
+use redis::AsyncCommands;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RedisCache {
     conn: redis::aio::ConnectionManager,
 }
@@ -41,7 +42,8 @@ impl Cache for RedisCache {
             CacheError::new("RedisCache requires Vec<u8> values; serialize before set")
         })?;
         let mut conn = self.conn.clone();
-        conn.set(&key, bytes.as_ref())
+        let (): () = conn
+            .set(&key, bytes.as_ref())
             .await
             .map_err(|e| CacheError::new(format!("redis set error: {}", e)))?;
         Ok(())
@@ -49,7 +51,8 @@ impl Cache for RedisCache {
 
     async fn delete(&self, key: &str) -> Result<(), CacheError> {
         let mut conn = self.conn.clone();
-        conn.del(key)
+        let (): () = conn
+            .del(key)
             .await
             .map_err(|e| CacheError::new(format!("redis del error: {}", e)))?;
         Ok(())
@@ -58,12 +61,13 @@ impl Cache for RedisCache {
     async fn delete_prefix(&self, prefix: &str) -> Result<u64, CacheError> {
         let mut conn = self.conn.clone();
         let keys: Vec<String> = conn
-            .keys(prefix)
+            .keys(prefix.to_string())
             .await
             .map_err(|e| CacheError::new(format!("redis keys error: {}", e)))?;
         let count = keys.len();
         if !keys.is_empty() {
-            conn.del(keys)
+            let (): () = conn
+                .del(keys)
                 .await
                 .map_err(|e| CacheError::new(format!("redis del error: {}", e)))?;
         }
@@ -76,7 +80,8 @@ impl Cache for RedisCache {
 
     async fn clear(&self) -> Result<(), CacheError> {
         let mut conn = self.conn.clone();
-        conn.flushdb::<()>()
+        let (): () = redis::cmd("FLUSHDB")
+            .query_async(&mut conn)
             .await
             .map_err(|e| CacheError::new(format!("redis flushdb error: {}", e)))?;
         Ok(())

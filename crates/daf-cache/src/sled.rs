@@ -42,7 +42,7 @@ impl Cache for SledCache {
             CacheError::new("SledCache requires Vec<u8> values; serialize before set")
         })?;
         self.db
-            .insert(key, bytes.as_ref())
+            .insert(key.as_bytes(), bytes.as_slice())
             .map_err(|e| CacheError::new(format!("sled insert error: {}", e)))?;
         Ok(())
     }

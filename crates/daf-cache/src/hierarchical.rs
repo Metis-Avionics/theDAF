@@ -167,8 +167,13 @@ impl Cache for HierarchicalCache {
             .ok_or_else(|| CacheError::new("L5 cache tier is not configured"))?;
         let tiers: [&Arc<dyn Cache>; 6] = [l0, &self.l1, &self.l2, &self.l3, &self.l4, l5];
         let mut total: u64 = 0;
+        // INV-001: per-tier invalidation is advisory (the generation check guards
+        // staleness), so a tier's prefix failure degrades with a warn, never aborts.
         for tier in tiers {
-            total += tier.delete_prefix(prefix).await?;
+            match tier.delete_prefix(prefix).await {
+                Ok(n) => total += n,
+                Err(e) => tracing::warn!(error = %e, "delete_prefix degraded; tier left intact"),
+            }
         }
         Ok(total)
     }
@@ -201,8 +206,12 @@ impl Cache for HierarchicalCache {
             .ok_or_else(|| CacheError::new("L5 cache tier is not configured"))?;
         let tiers: [&Arc<dyn Cache>; 6] = [l0, &self.l1, &self.l2, &self.l3, &self.l4, l5];
         let mut total: usize = 0;
+        // INV-001: per-tier eviction is advisory, same contract as delete_prefix.
         for tier in tiers {
-            total += tier.shake(prefix).await?;
+            match tier.shake(prefix).await {
+                Ok(n) => total += n,
+                Err(e) => tracing::warn!(error = %e, "shake degraded; tier left intact"),
+            }
         }
         Ok(total)
     }
