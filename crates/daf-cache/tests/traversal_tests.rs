@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use daf_cache::trie::{
-    astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete, trie_delete_prefix,
-    trie_insert, TrieNode,
-};
 use daf_cache::MemoryCache;
+use daf_cache::trie::{
+    TrieNode, astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete,
+    trie_delete_prefix, trie_insert,
+};
 use daf_core::{Cache, Tier};
 
 fn build_trie(keys: &[&str]) -> TrieNode {

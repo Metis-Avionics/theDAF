@@ -264,7 +264,7 @@ impl DataAccess {
             "transformed": final_data,
             "generation": match current_generation {
                 Generation::Missing => serde_json::Value::Null,
-                Generation::Valid(n) => serde_json::Value::Number(n.into()),
+                Generation::Valid(n) => serde_json::Value::Number(n.0.into()),
             },
         })
     }
@@ -383,25 +383,23 @@ impl DataAccess {
         let _gen_guard = self.generation_lock(&resource_id).await;
 
         let entry = self.cache.get(&cache_key).await?;
-        if let Some(cached_entry) = entry {
-            if let Ok(current_gen) = self._read_generation(&resource_id).await {
-                if let Some(cached_value) = cached_entry.value.downcast_ref::<serde_json::Value>() {
-                    if let Some(cached_map) = cached_value.as_object() {
-                        let cached_gen = cached_map.get("generation").and_then(|g| {
-                            if g.is_null() {
-                                Some(Generation::Missing)
-                            } else {
-                                g.as_u64().map(Generation::Valid)
-                            }
-                        });
-                        if cached_gen == Some(current_gen) {
-                            drop(_gen_guard);
-                            return self
-                                ._handle_cache_hit(cache_key, &resource_id, user, cached_map)
-                                .await;
-                        }
-                    }
+        if let Some(cached_entry) = entry
+            && let Ok(current_gen) = self._read_generation(&resource_id).await
+            && let Some(cached_value) = cached_entry.value.downcast_ref::<serde_json::Value>()
+            && let Some(cached_map) = cached_value.as_object()
+        {
+            let cached_gen = cached_map.get("generation").and_then(|g| {
+                if g.is_null() {
+                    Some(Generation::Missing)
+                } else {
+                    g.as_u64().map(Generation::valid)
                 }
+            });
+            if cached_gen == Some(current_gen) {
+                drop(_gen_guard);
+                return self
+                    ._handle_cache_hit(cache_key, &resource_id, user, cached_map)
+                    .await;
             }
         }
         drop(_gen_guard);

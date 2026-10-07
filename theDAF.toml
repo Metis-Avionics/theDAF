@@ -1,0 +1,120 @@
+# theDAF — architectural contract.
+#
+# This file is the SOURCE OF TRUTH for the architecture. README.md, AGENTS.md,
+# CHANGELOG.md and code comments derive from it; none of them may restate a
+# requirement in a form that can disagree with it.
+#
+# It is machine-checked, not merely read:
+#   * `tests/` parses it and asserts each pinned clause is bound to a real test
+#     or a public API shape.
+#   * The version must match the workspace `[workspace.package].version` — the
+#     drift between "what the contract says" and "what ships" is the failure
+#     mode this format exists to close.
+#
+# Anything not expressible here does not belong in the architecture.
+
+[spec]
+name = "theDAF"
+version = "0.1.0"
+kind = "data-access-facade"
+status = "architectural-revision"
+
+[spec.purpose]
+description = "Data Access Facade: one trait surface (DataAccess) over repository SQL, algorithms and cache, exposing resource-addressed queries and mutations with structured authorization subjects."
+
+[architecture]
+ontology = "data-access"
+tier_topology = "implementation"
+consumer_backend_coupling = false
+authority_is_explicit = true
+capability_state_is_explicit = false
+
+[architecture.boundary]
+consumer_depends_on = "data-access-contract"
+data_access_contract_depends_on = "subject-and-info-shapes"
+repository_knows_consumer_identity = false
+
+# ---------------------------------------------------------------------------
+# Repository mandate
+# ---------------------------------------------------------------------------
+
+[repository]
+# daf.toml [api.Repository]: repositories MUST NOT authorize. Admission is a
+# resolver/boundary concern; a repository that receives a subject has already
+# been admitted, and its tenant scoping is acquisition, not authorization.
+repository_authorizes = false
+# Repository SQL is the single source of truth for a read's data shape. The
+# transport layer projects it; it never recomputes it.
+sql_is_authoritative_for_shape = true
+
+[subject]
+# Who the caller is, once, at the boundary. Carries identity, tenant, roles
+# and the global-admin flag; every repository decision records which field it
+# consumed.
+identity_is_single_field = true
+tenant_is_single_field = true
+global_admin_is_explicit_flag = true
+
+# ---------------------------------------------------------------------------
+# Cache + generation
+# ---------------------------------------------------------------------------
+
+[cache]
+# Ladder order mirrors daf-cache: L1 memory (LRU + trie), L2 moka (degraded:
+# non-empty delete_prefix/shake error), L3 redis (feature-gated stub), L4
+# postgres (feature-gated stub). Tier::L1..L4 is the whole ladder; there is no
+# authority rung below the repositories themselves.
+ladder_count = 4
+origin_tier_is_recorded = true
+
+[cache.generation]
+# The counter authority is `thesix::Generation` (pinned =0.4.0): DAF wraps it
+# as `Missing | Valid(thesix::Generation)` rather than declaring a second u64
+# counter for the same concept. `Missing` is DAF's addition — thesix encodes
+# absence in its EntryState, which a u64 counter cannot. Wrap, do not fork:
+# a second authority for one concept is how the two drift.
+counter_authority = "thesix::Generation"
+counter_pin = "=0.4.0"
+daf_adds_absence_variant = true
+serde_wire_is_legacy_stable = true
+# advance(): Missing -> Valid(1); Valid(n) -> Valid(n+1) with an overflow
+# debug-assert. Monotone, wrap-free, no external input.
+advance_is_monotone = true
+
+# ---------------------------------------------------------------------------
+# Error taxonomy
+# ---------------------------------------------------------------------------
+
+[errors]
+# Every failure mode the facade can surface is an enum variant here, not a
+# stringly-typed message. Structured codes beat prose at every boundary.
+errors_are_enums = true
+generation_key_error_is_distinct = true
+
+# ---------------------------------------------------------------------------
+# Gate binding
+# ---------------------------------------------------------------------------
+
+[gates]
+# Each clause above names the test that fails if it rots. A clause with no
+# binding is a comment, and comments do not stop regressions.
+
+[[gates.binding]]
+clause = "cache.generation.counter_authority"
+proof = "crates/daf-core/tests/contract_tests.rs: generation_wire_shape_is_stable_for_valid proves the wrapper still decodes the legacy wire and wraps thesix's counter, not a copy"
+
+[[gates.binding]]
+clause = "cache.generation.daf_adds_absence_variant"
+proof = "crates/daf-core/tests/contract_tests.rs: generation_as_u64 proves Missing maps to None while Valid maps to Some"
+
+[[gates.binding]]
+clause = "cache.generation.advance_is_monotone"
+proof = "crates/daf-core/tests/contract_tests.rs: generation_advancement proves Missing -> Valid(1) -> Valid(2)"
+
+[[gates.binding]]
+clause = "repository.repository_authorizes"
+proof = "crates/daf-application/src/lib.rs: repositories receive an admitted DafSubject and return DataAccessError; no repository holds an admission predicate"
+
+[[gates.binding]]
+clause = "errors.errors_are_enums"
+proof = "crates/daf-core/src/lib.rs: QueryError/DataAccessError are #[derive(Error)] enums; no String error escapes the facade surface"

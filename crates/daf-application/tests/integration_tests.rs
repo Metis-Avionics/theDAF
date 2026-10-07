@@ -306,14 +306,14 @@ async fn test_concurrent_mutations_generation_monotonic() {
     let namespace = hex::encode(Sha256::digest("123"));
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
-    let gen = gen_val
+    let generation = gen_val
         .and_then(|v| {
             v.value
                 .downcast_ref::<Generation>()
                 .and_then(Generation::as_u64)
         })
         .unwrap_or(0);
-    assert!(gen >= 1);
+    assert!(generation >= 1);
 }
 
 #[tokio::test]
@@ -869,7 +869,7 @@ async fn test_generation_advances_on_post() {
     let namespace = hex::encode(Sha256::digest(&resource_id.0));
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
-    let gen = gen_val
+    let generation = gen_val
         .and_then(|v| {
             v.value
                 .downcast_ref::<daf_core::Generation>()
@@ -877,7 +877,7 @@ async fn test_generation_advances_on_post() {
                 .and_then(|g| g.as_u64())
         })
         .unwrap_or(0);
-    assert_eq!(gen, 1);
+    assert_eq!(generation, 1);
 }
 
 #[tokio::test]
@@ -1223,14 +1223,14 @@ async fn test_generation_missing_initializes_to_zero_on_miss() {
     let namespace = hex::encode(Sha256::digest("123"));
     let gen_key = format!("_daf_gen:{namespace}");
     let gen_val = cache.get(&gen_key).await.unwrap();
-    let gen = gen_val
+    let generation = gen_val
         .and_then(|v| {
             v.value
                 .downcast_ref::<Generation>()
                 .and_then(Generation::as_u64)
         })
         .unwrap_or(0);
-    assert_eq!(gen, 0);
+    assert_eq!(generation, 0);
 }
 
 #[tokio::test]

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use daf_algorithms::FibonacciDP;
 use daf_application::DataAccess;
 use daf_cache::MemoryCache;
-use daf_core::{DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo, ResourceId, UserId};
+use daf_core::{DeleteInfo, JsonValue, PostInfo, PutInfo, QueryInfo, ResourceId};
 use daf_repository::MemoryRepository;
 
 #[derive(serde::Serialize)]
@@ -69,7 +69,6 @@ enum Command {
 
 struct ParityState {
     daf: DataAccess,
-    repo: Arc<dyn daf_core::Repository<JsonValue>>,
 }
 
 impl ParityState {
@@ -81,7 +80,7 @@ impl ParityState {
         let repo: Arc<dyn daf_core::Repository<JsonValue>> = Arc::new(MemoryRepository::new());
         let cache = Arc::new(MemoryCache::new(1024));
         let daf = DataAccess::new(repo.clone(), cache, Some(algorithms), None);
-        Self { daf, repo }
+        Self { daf }
     }
 
     async fn execute(&self, cmd: Command) -> OkResponse {
