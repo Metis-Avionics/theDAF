@@ -1455,3 +1455,64 @@ Each session entry should include:
 - `assertions_on_constants` clippy warnings eliminated across all 8 crates
 - Power of Ten Rule 5 (assertion density ≥ 1 per non-trivial function) now fully satisfied
 - Python parity test failures are pre-existing: `daf-parity` binary maintains independent state from Python `DataAccess` instances, so cross-backend sequential operations (post-then-put/delete/query) cannot be tested with current design
+
+---
+
+## Session 022 - 2026-09-14
+
+### Agent: opencode-cratesio
+
+### Turn 1 Summary
+
+**Initial State**: Branch `feat/l0-l5-hierarchical-cache` (PR #44 open). All 9 workspace crates at version 0.1.0 had no `description` and used bare intra-workspace `path` dependencies, both of which `cargo publish` rejects. Cargo registry token already configured in `~/.cargo/credentials.toml`.
+
+**Actions Taken**:
+- Added `description`, `repository`, and `keywords` metadata to all 9 crate manifests (`crates/*/Cargo.toml`)
+- Pinned all intra-workspace path dependencies with `version = "0.1.0"` (required by crates.io)
+- Verified `cargo publish --dry-run` for leaf crates `daf-core` and `daf-runtime` (both pass packaging + verification)
+- Published `daf-core v0.1.0` to crates.io (confirmed live via registry API)
+- Hit crates.io new-crate rate limit (429) on `daf-runtime`; wrote `scripts/publish_crates_io.sh` — delayed (default 4h), ordered, rate-limit-aware publisher with 429 backoff (server-provided retry time + buffer), index-propagation settling, and idempotent skip of already-published crates
+- Fixed script's registry pre-check to send a `User-Agent` header (crates.io API returns 403 without one)
+- Launched publisher in background via `nohup` (first publish ~15:28 UTC); progress in `/tmp/crates-publish.log`
+- Committed manifests + script as `0dedac3` and pushed to `feat/l0-l5-hierarchical-cache` (PR #44)
+- Updated living docs: CHANGELOG.md, HANDOVER.md, SESSION.md, README.md
+
+### Files Modified/Created
+
+| File | Action | Description |
+|------|--------|-------------|
+| `crates/daf-core/Cargo.toml` | Modified | Added description/repository/keywords |
+| `crates/daf-runtime/Cargo.toml` | Modified | Added description/repository/keywords |
+| `crates/daf-repository/Cargo.toml` | Modified | Added metadata; `daf-core` dep pinned with version |
+| `crates/daf-algorithms/Cargo.toml` | Modified | Added metadata; `daf-core` dep pinned with version |
+| `crates/daf-cache/Cargo.toml` | Modified | Added metadata; `daf-core` dep pinned with version |
+| `crates/daf-messaging/Cargo.toml` | Modified | Added metadata; `daf-core`/`daf-algorithms` deps pinned with version |
+| `crates/daf-application/Cargo.toml` | Modified | Added metadata; 4 internal deps pinned with version |
+| `crates/daf-http/Cargo.toml` | Modified | Added metadata; `daf-core`/`daf-application` deps pinned with version |
+| `crates/daf-ffi/Cargo.toml` | Modified | Added metadata; 5 internal deps pinned with version |
+| `scripts/publish_crates_io.sh` | Created | Delayed, ordered, rate-limit-aware crates.io publisher |
+| `CHANGELOG.md` | Modified | Added Unreleased crates.io entries |
+| `HANDOVER.md` | Modified | Updated branch/PR status, scripts list |
+| `SESSION.md` | Modified | Added this session entry |
+| `README.md` | Modified | Added crates.io install note |
+
+### Project Status
+
+- **Branch**: `feat/l0-l5-hierarchical-cache`
+- **Version**: 0.1.0 (Rust workspace) / 0.2.2 (Python package)
+- **Rust Tests**: 77/77 passing (unchanged; docs + manifest metadata only)
+- **crates.io**: `daf-core v0.1.0` live; remaining 8 crates publishing via background script (~15:28 UTC)
+- **PR**: https://github.com/Metis-Avionics/theDAF/pull/44
+
+### Pending Work
+
+- [x] Stage manifest + script changes in git
+- [x] Commit changes and push branch to origin (updates PR #44)
+- [ ] Monitor `/tmp/crates-publish.log` for completion of remaining 8 crates
+- [ ] Merge PR after review
+
+### Notes
+
+- `cargo publish` requires a clean tree or `--allow-dirty`; the script uses `--allow-dirty` so no intermediate commit was needed for publishing
+- crates.io new-crate rate limits re-trigger per crate; the script's 429 backoff + 120s inter-crate settling handles this
+- Publish order enforced by the script: daf-core → daf-runtime → daf-repository, daf-algorithms, daf-cache → daf-messaging → daf-application → daf-http, daf-ffi

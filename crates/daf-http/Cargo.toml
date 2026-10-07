@@ -3,10 +3,13 @@ name = "daf-http"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Axum HTTP transport adapters for the Data Access Factory (DAF)"
+repository = "https://github.com/RAliane-REBORN/theDAF"
+keywords = ["data-access", "http", "axum"]
 
 [dependencies]
-daf-core = { path = "../daf-core" }
-daf-application = { path = "../daf-application" }
+daf-core = { path = "../daf-core", version = "0.1.0" }
+daf-application = { path = "../daf-application", version = "0.1.0" }
 async-trait.workspace = true
 tokio.workspace = true
 axum = { version = "0.7", features = ["macros"] }

@@ -3,6 +3,9 @@ name = "daf-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Core traits, types, and error envelopes for the Data Access Factory (DAF)"
+repository = "https://github.com/RAliane-REBORN/theDAF"
+keywords = ["data-access", "repository", "cache"]
 
 [dependencies]
 async-trait.workspace = true

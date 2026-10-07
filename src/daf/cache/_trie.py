@@ -62,15 +62,20 @@ def _dfs_collect(node: _TrieNode | None) -> builtins.set[str]:
     result = builtins.set()
     if node.key is not None:
         result.add(node.key)
-    for child in node.children.values():
-        result.update(_dfs_collect(child))
+    stack: builtins.list[_TrieNode] = list(node.children.values())
+    while stack:
+        current = stack.pop()
+        if current.key is not None:
+            result.add(current.key)
+        stack.extend(current.children.values())
     return result
 
 
 def _trie_delete_prefix(root: _TrieNode, prefix: str) -> builtins.set[str]:
     if prefix == "":
         keys = _dfs_collect(root)
-        root.__init__()
+        root.children.clear()
+        root.key = None
         return keys
     path: builtins.list[tuple[_TrieNode, str]] = []
     node: _TrieNode | None = root

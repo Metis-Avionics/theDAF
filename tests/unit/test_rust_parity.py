@@ -1,6 +1,5 @@
 """Parity tests between Python and Rust implementations."""
 
-import copy
 
 import pytest
 
@@ -19,7 +18,10 @@ from daf.repositories import MemoryRepository
 
 
 class TestContractRoundTrip:
-    """Serialise/deserialise every daf.contracts.query model and assert field preservation."""
+    """Serialise/deserialise every daf.contracts.query model.
+
+    Asserts field preservation across the round trip.
+    """
 
     def test_query_info_round_trip(self) -> None:
         info = QueryInfo(
@@ -220,7 +222,7 @@ class TestGenerationAdvancement:
 
         await daf.delete(DeleteInfo(resource_id="123"))
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 — contract-level failure class
             await daf.query(QueryInfo(resource_id="123"))
 
 
