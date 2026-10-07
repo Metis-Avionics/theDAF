@@ -56,11 +56,13 @@ class TreeCollector:
 
     def _dfs(self, node: Any) -> builtins.set[str]:
         result = builtins.set()
-        key = self._key_extractor(node)
-        if key is not None:
-            result.add(key)
-        for child in self._children_extractor(node):
-            result.update(self._dfs(child))
+        stack: builtins.list[Any] = [node]
+        while stack:
+            current = stack.pop()
+            key = self._key_extractor(current)
+            if key is not None:
+                result.add(key)
+            stack.extend(self._children_extractor(current))
         return result
 
     def _bfs(self, root: Any) -> builtins.set[str]:
@@ -95,12 +97,17 @@ def walk_tree(
     children_fn: Callable[[Any], Iterable[Any]],
     callback: Callable[[Any], None],
 ) -> None:
-    """Recursively walk *node* and all descendants, calling *callback* on each.
+    """Walk *node* and all descendants in pre-order, calling *callback* on each.
 
-    This is a synchronous, side-effect-only walker: *callback* is called
-    for every node in pre-order and its return value is discarded.
-    Suitable for AST walks in scripts such as ``power_of_ten.py``.
+    This is a synchronous, side-effect-only iterative walker (explicit stack,
+    no recursion): *callback* is called for every node in pre-order and its
+    return value is discarded. Suitable for AST walks in scripts such as
+    ``power_of_ten.py``.
     """
-    callback(node)
-    for child in children_fn(node):
-        walk_tree(child, children_fn, callback)
+    stack: builtins.list[Any] = [node]
+    while stack:
+        current = stack.pop()
+        callback(current)
+        children = list(children_fn(current))
+        for child in reversed(children):
+            stack.append(child)

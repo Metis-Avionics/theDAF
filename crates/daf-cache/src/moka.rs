@@ -98,7 +98,9 @@ impl Cache for MokaCache {
     }
 
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
-        self.delete_prefix(prefix).await.map(|n| n as usize)
+        let n = self.delete_prefix(prefix).await? as usize;
+        debug_assert!(n <= u64::MAX as usize, "count fits the wire counter domain");
+        Ok(n)
     }
 
     async fn clear(&self) -> Result<(), CacheError> {
@@ -108,6 +110,12 @@ impl Cache for MokaCache {
     }
 
     fn tier(&self) -> Tier {
+        // Tier-ordering post-condition: L2 must order strictly between L1 and
+        // L3, so renumbering the enum cannot silently re-tier a live cache.
+        debug_assert!(
+            (Tier::L1 as u8) < (Tier::L2 as u8) && (Tier::L2 as u8) < (Tier::L3 as u8),
+            "L2 orders strictly between L1 and L3"
+        );
         Tier::L2
     }
 }

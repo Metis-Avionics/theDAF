@@ -67,7 +67,9 @@ impl Cache for SledCache {
     }
 
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
-        self.delete_prefix(prefix).await.map(|n| n as usize)
+        let n = self.delete_prefix(prefix).await? as usize;
+        debug_assert!(n <= u64::MAX as usize, "count fits the wire counter domain");
+        Ok(n)
     }
 
     async fn clear(&self) -> Result<(), CacheError> {
@@ -78,6 +80,10 @@ impl Cache for SledCache {
     }
 
     fn tier(&self) -> Tier {
+        debug_assert!(
+            (Tier::L3 as u8) < (Tier::L4 as u8) && (Tier::L4 as u8) < (Tier::L5 as u8),
+            "L4 orders strictly between L3 and L5"
+        );
         Tier::L4
     }
 }

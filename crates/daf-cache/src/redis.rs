@@ -75,7 +75,9 @@ impl Cache for RedisCache {
     }
 
     async fn shake(&self, prefix: &str) -> Result<usize, CacheError> {
-        self.delete_prefix(prefix).await.map(|n| n as usize)
+        let n = self.delete_prefix(prefix).await? as usize;
+        debug_assert!(n <= u64::MAX as usize, "count fits the wire counter domain");
+        Ok(n)
     }
 
     async fn clear(&self) -> Result<(), CacheError> {
@@ -88,6 +90,10 @@ impl Cache for RedisCache {
     }
 
     fn tier(&self) -> Tier {
+        debug_assert!(
+            (Tier::L2 as u8) < (Tier::L3 as u8) && (Tier::L3 as u8) < (Tier::L4 as u8),
+            "L3 orders strictly between L2 and L4"
+        );
         Tier::L3
     }
 }

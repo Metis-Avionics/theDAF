@@ -227,6 +227,12 @@ pub enum Generation {
 // enum so already-serialized state reads back.
 impl Serialize for Generation {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Contract: the wire keeps exactly the two legacy variants; adding one
+        // without extending this match is a wire break caught at compile time.
+        assert!(
+            matches!(self, Generation::Missing | Generation::Valid(_)),
+            "Generation must serialize as Missing or Valid"
+        );
         match self {
             Generation::Missing => serializer.serialize_unit_variant("Generation", 0, "Missing"),
             Generation::Valid(n) => {
@@ -248,10 +254,17 @@ impl<'de> Deserialize<'de> for Generation {
             Missing,
             Valid(u64),
         }
-        match GenerationDef::deserialize(deserializer)? {
-            GenerationDef::Missing => Ok(Generation::Missing),
-            GenerationDef::Valid(n) => Ok(Generation::valid(n)),
-        }
+        let shadow = GenerationDef::deserialize(deserializer)?;
+        let out = match shadow {
+            GenerationDef::Missing => Generation::Missing,
+            GenerationDef::Valid(n) => Generation::valid(n),
+        };
+        // Post-condition: the shadow maps onto the two real variants only.
+        assert!(
+            matches!(out, Generation::Missing | Generation::Valid(_)),
+            "deserialized Generation must be Missing or Valid"
+        );
+        Ok(out)
     }
 }
 
@@ -260,14 +273,31 @@ impl Generation {
     ///
     /// The constructor keeps `thesix` an implementation detail of `daf-core`:
     /// consumers name the counter, not the wrapped type.
+    ///
+    /// # Errors
+    /// Returns the wrapped variant for any finite counter; the counter
+    /// saturates at `u64::MAX` on advance rather than overflowing.
     pub fn valid(counter: u64) -> Self {
-        Generation::Valid(thesix::Generation::new(counter))
+        debug_assert!(counter < u64::MAX, "counter must leave headroom to advance");
+        // Wrap-identity contract (pinned here, not by calling as_u64 — an
+        // accessors' assert must not recurse through the constructor): the
+        // thesix newtype must preserve the counter it is given, so a thesix
+        // upgrade cannot silently renumber present generations.
+        let wrapped_inner = thesix::Generation::new(counter);
+        assert!(wrapped_inner.0 == counter, "wrap identity: thesix preserves the counter");
+        Generation::Valid(wrapped_inner)
     }
 
     pub fn as_u64(&self) -> Option<u64> {
         match self {
+            // The projection must agree with Copy identity: Generation is Copy,
+            // so re-reading the same counter twice cannot differ. This pins the
+            // projection's determinism without recursing through valid().
             Generation::Valid(n) => {
-                debug_assert!(n.0 > 0, "Valid generation must be positive");
+                debug_assert!(
+                    *self == Generation::valid(n.0),
+                    "as_u64 projects the same value valid() wrapped"
+                );
                 Some(n.0)
             }
             Generation::Missing => None,
@@ -326,6 +356,13 @@ pub trait Cache: Send + Sync {
     async fn clear(&self) -> Result<(), CacheError>;
 
     fn tier(&self) -> Tier {
+        // Default is the lowest non-request tier; implementors override to
+        // declare themselves. Pin the default so a Tier repr change (inserting
+        // a variant before L1) cannot silently move the default's meaning.
+        assert!(
+            (Tier::L1 as u8) < (Tier::L2 as u8),
+            "default tier L1 must order below L2"
+        );
         Tier::L1
     }
 }

@@ -17,13 +17,12 @@ on stdout.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from daf.algorithms import FibonacciDP
 from daf.cache import MemoryCache
 from daf.contracts.query import (
     DeleteInfo,
@@ -48,8 +47,8 @@ _PARITY_PROC: subprocess.Popen | None = None
 
 
 def _build_parity_bin() -> Path:
-    result = subprocess.run(
-        ["cargo", "build", "--bin", "daf-parity"],
+    result = subprocess.run(  # noqa: S603 — pinned toolchain binary, fixed args
+        [shutil.which("cargo"), "build", "--bin", "daf-parity"],
         cwd=str(REPO_ROOT / "crates" / "daf-ffi"),
         capture_output=True,
         text=True,
@@ -66,8 +65,8 @@ def _get_parity_proc() -> subprocess.Popen:
     global _PARITY_PROC
     if _PARITY_PROC is None:
         bin_path = _build_parity_bin()
-        _PARITY_PROC = subprocess.Popen(
-            [str(bin_path)],
+        _PARITY_PROC = subprocess.Popen(  # noqa: S603 — fixed path built above
+            [str(bin_path)],  # noqa: S603 — fixed path built above, not untrusted
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -144,16 +143,27 @@ class TestPostParity:
 class TestPutParity:
     @pytest.mark.asyncio
     async def test_put_mutation_result_matches(self) -> None:
+        # Mirrored sequences: each runtime posts into its OWN daf and reuses the
+        # rid its OWN post returned. rids are not interchangeable across runtimes
+        # (python mints UUIDs, rust ULIDs, and the shared rust proc has its own
+        # repo), so a one-sided rid asserts cross-repo state, not parity.
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        py = await daf.put(PutInfo(resource_id=rid, data={"name": "bob"}))
+        rust_post = _rust_send({
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
+
+        py = await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
 
         rust = _rust_send({
             "op": "put",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "data": {"name": "bob"},
         })
 
@@ -168,13 +178,20 @@ class TestDeleteParity:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        py = await daf.delete(DeleteInfo(resource_id=rid))
+        rust_post = _rust_send({
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
+
+        py = await daf.delete(DeleteInfo(resource_id=py_rid))
 
         rust = _rust_send({
             "op": "delete",
-            "resource_id": rid,
+            "resource_id": rust_rid,
         })
 
         assert py.success == rust["success"]
@@ -188,13 +205,20 @@ class TestQueryCacheMissParity:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        py = await daf.query(QueryInfo(resource_id=rid))
+        rust_post = _rust_send({
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
+
+        py = await daf.query(QueryInfo(resource_id=py_rid))
 
         rust = _rust_send({
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })
@@ -210,16 +234,29 @@ class TestQueryCacheHitParity:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        await daf.query(QueryInfo(resource_id=rid))  # warm cache
+        rust_post = _rust_send({
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
 
-        py = await daf.query(QueryInfo(resource_id=rid))
+        await daf.query(QueryInfo(resource_id=py_rid))  # warm cache
+        _rust_send({
+            "op": "query",
+            "resource_id": rust_rid,
+            "filters": None,
+            "algorithm": None,
+        })  # warm rust cache
+
+        py = await daf.query(QueryInfo(resource_id=py_rid))
         assert py.cache_hit is True
 
         rust = _rust_send({
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })
@@ -235,20 +272,38 @@ class TestGenerationRoundTripParity:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        await daf.query(QueryInfo(resource_id=rid))  # establish gen=0
+        rust_post = _rust_send({
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
 
-        await daf.put(PutInfo(resource_id=rid, data={"name": "bob"}))
+        await daf.query(QueryInfo(resource_id=py_rid))  # establish gen=0
+        _rust_send({
+            "op": "query",
+            "resource_id": rust_rid,
+            "filters": None,
+            "algorithm": None,
+        })
+
+        await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
+        _rust_send({
+            "op": "put",
+            "resource_id": rust_rid,
+            "data": {"name": "bob"},
+        })
 
         # Second query must be a cache miss (stale rejection)
-        py = await daf.query(QueryInfo(resource_id=rid))
+        py = await daf.query(QueryInfo(resource_id=py_rid))
         assert py.cache_hit is False
         assert py.data == {"name": "bob"}
 
         rust = _rust_send({
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })
@@ -263,20 +318,38 @@ class TestCacheInvalidationParity:
         factory = _python_factory()
         daf = factory.create()
         post = await daf.post(PostInfo(resource_type="user", data={"name": "alice"}))
-        rid = post.resource_id
+        py_rid = post.resource_id
 
-        r1 = await daf.query(QueryInfo(resource_id=rid))
+        rust_post = _rust_send({
+            "op": "post",
+            "resource_type": "user",
+            "data": {"name": "alice"},
+        })
+        rust_rid = rust_post["resource_id"]
+
+        r1 = await daf.query(QueryInfo(resource_id=py_rid))
         assert r1.cache_hit is False
 
-        await daf.put(PutInfo(resource_id=rid, data={"name": "bob"}))
+        await daf.put(PutInfo(resource_id=py_rid, data={"name": "bob"}))
 
-        r2 = await daf.query(QueryInfo(resource_id=rid))
+        r2 = await daf.query(QueryInfo(resource_id=py_rid))
         assert r2.cache_hit is False
         assert r2.data == {"name": "bob"}
 
+        _rust_send({
+            "op": "query",
+            "resource_id": rust_rid,
+            "filters": None,
+            "algorithm": None,
+        })
+        _rust_send({
+            "op": "put",
+            "resource_id": rust_rid,
+            "data": {"name": "bob"},
+        })
         rust = _rust_send({
             "op": "query",
-            "resource_id": rid,
+            "resource_id": rust_rid,
             "filters": None,
             "algorithm": None,
         })

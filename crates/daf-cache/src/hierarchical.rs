@@ -35,7 +35,12 @@ impl HierarchicalCache {
     }
 
     pub fn l0(&self) -> Option<&Arc<dyn Cache>> {
-        self.l0.as_ref()
+        let out = self.l0.as_ref();
+        debug_assert!(
+            out.is_some() == self.l0.is_some(),
+            "accessor output must mirror configured presence"
+        );
+        out
     }
 
     pub fn l1(&self) -> &Arc<dyn Cache> {
@@ -71,7 +76,12 @@ impl HierarchicalCache {
     }
 
     pub fn l5(&self) -> Option<&Arc<dyn Cache>> {
-        self.l5.as_ref()
+        let out = self.l5.as_ref();
+        debug_assert!(
+            out.is_some() == self.l5.is_some(),
+            "accessor output must mirror configured presence"
+        );
+        out
     }
 }
 
@@ -191,6 +201,12 @@ impl Cache for HierarchicalCache {
         for tier in tiers {
             tier.clear().await?;
         }
+        // Post-condition: the six declared tiers cover every Tier variant, so a
+        // new variant cannot silently bypass clear (compile-time arity pin).
+        assert!(
+            tiers.len() == 6,
+            "hierarchy spans all six tier slots — extend tiers when Tier grows"
+        );
         Ok(())
     }
 
@@ -217,6 +233,11 @@ impl Cache for HierarchicalCache {
     }
 
     fn tier(&self) -> daf_core::Tier {
+        debug_assert!(
+            (daf_core::Tier::L0 as u8) < (daf_core::Tier::L1 as u8)
+                && (daf_core::Tier::L1 as u8) < (daf_core::Tier::L2 as u8),
+            "hierarchy L1 orders strictly between L0 and L2"
+        );
         daf_core::Tier::L1
     }
 }

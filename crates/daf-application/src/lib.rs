@@ -165,13 +165,50 @@ impl DataAccess {
     }
 
     async fn _current_generation(&self, resource_id: &str) -> Result<Generation, DataAccessError> {
+        debug_assert!(
+            !resource_id.is_empty(),
+            "generation reads require a named resource"
+        );
         let _guard = self.generation_lock(resource_id).await;
         self._read_generation(resource_id).await
     }
 
     async fn _advance_generation(&self, resource_id: &str) -> Result<(), DataAccessError> {
+        debug_assert!(
+            !resource_id.is_empty(),
+            "generation advances require a named resource"
+        );
         let _guard = self.generation_lock(resource_id).await;
         self._advance_generation_locked(resource_id).await
+    }
+
+    /// COH-003: generation advance is best-effort. A cache write failure after a
+    /// committed repository mutation must not make the mutation appear uncommitted.
+    async fn _finish_committed_mutation(&self, resource_id: &str) {
+        if let Err(e) = self._advance_generation_locked(resource_id).await {
+            tracing::warn!(
+                resource_id = %resource_id,
+                error = %e,
+                "generation advance failed after committed mutation; proceeding"
+            );
+        }
+        self._invalidate_caches(resource_id).await;
+    }
+
+    /// The shared CAS-conflict result for `try_update`/`try_delete` misses.
+    fn _conflict_result(resource_id: &ResourceId) -> MutationResult {
+        debug_assert!(
+            !resource_id.0.is_empty(),
+            "conflict result must name the contended resource"
+        );
+        MutationResult {
+            success: false,
+            resource_id: Some(resource_id.clone()),
+            data: None,
+            error: Some("Conflict".to_string()),
+            error_type: Some("conflict".to_string()),
+            timestamp: Utc::now(),
+        }
     }
 
     async fn _invalidate_caches(&self, resource_id: &str) {
@@ -492,26 +529,12 @@ impl DataAccess {
             .await?;
 
         if result.is_none() {
-            return Ok(MutationResult {
-                success: false,
-                resource_id: Some(info.resource_id),
-                data: None,
-                error: Some("Conflict".to_string()),
-                error_type: Some("conflict".to_string()),
-                timestamp: Utc::now(),
-            });
+            return Ok(Self::_conflict_result(&info.resource_id));
         }
 
         // COH-003: generation advance is best-effort. A cache write failure after a
         // committed repository mutation must not make the mutation appear uncommitted.
-        if let Err(e) = self._advance_generation_locked(&info.resource_id.0).await {
-            tracing::warn!(
-                resource_id = %info.resource_id.0,
-                error = %e,
-                "generation advance failed after committed mutation; proceeding"
-            );
-        }
-        self._invalidate_caches(&info.resource_id.0).await;
+        self._finish_committed_mutation(&info.resource_id.0).await;
 
         Ok(MutationResult {
             success: true,
@@ -571,14 +594,7 @@ impl DataAccess {
             });
         }
 
-        if let Err(e) = self._advance_generation_locked(&info.resource_id.0).await {
-            tracing::warn!(
-                resource_id = %info.resource_id.0,
-                error = %e,
-                "generation advance failed after committed mutation; proceeding"
-            );
-        }
-        self._invalidate_caches(&info.resource_id.0).await;
+        self._finish_committed_mutation(&info.resource_id.0).await;
 
         Ok(MutationResult {
             success: true,

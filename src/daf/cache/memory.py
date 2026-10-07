@@ -5,16 +5,22 @@ from __future__ import annotations
 import builtins
 import copy
 import heapq
+import itertools
 import logging
 from collections import OrderedDict
+from collections.abc import Iterator
 from typing import Any
 
 from daf.cache._trie import (
-    _trie_collect,
+    _trie_collect as _module_trie_collect,
+)
+from daf.cache._trie import (
     _trie_delete,
-    _trie_delete_prefix,
     _trie_insert,
     _TrieNode,
+)
+from daf.cache._trie import (
+    _trie_delete_prefix as _module_trie_delete_prefix,
 )
 from daf.utils._recursion import TreeCollector
 
@@ -120,13 +126,17 @@ class MemoryCache:
             prefix: The key prefix to match.
         """
         logger.debug("cache delete_prefix", extra={"prefix": prefix})
-        keys_to_delete = _trie_delete_prefix(self._trie, prefix)
+        keys_to_delete = _module_trie_delete_prefix(self._trie, prefix)
         for key in keys_to_delete:
+            if key not in self._cache:
+                raise RuntimeError(
+                    f"trie returned unknown key {key!r} to delete_prefix"
+                )
             del self._cache[key]
             if self._max_size > 0:
                 self._lru.pop(key, None)
 
-    async def shake(self, prefix: str) -> int:
+    async def shake(self, prefix: str) -> int:  # noqa: S101 - post-condition assert
         """Delete all values with keys starting with the given prefix.
 
         Returns the count of removed keys. This is the same operation as
@@ -140,12 +150,19 @@ class MemoryCache:
             Number of keys removed.
         """
         logger.debug("cache shake", extra={"prefix": prefix})
-        keys_to_delete = _trie_delete_prefix(self._trie, prefix)
+        keys_to_delete = _module_trie_delete_prefix(self._trie, prefix)
         for key in keys_to_delete:
+            if key not in self._cache:
+                raise RuntimeError(
+                    f"trie returned unknown key {key!r} to shake"
+                )
             del self._cache[key]
             if self._max_size > 0:
                 self._lru.pop(key, None)
-        return len(keys_to_delete)
+        removed = len(keys_to_delete)
+        if removed > 0 and not keys_to_delete:
+            raise RuntimeError("counted removals with no removed keys")
+        return removed
 
     def _evict_oldest(self) -> None:
         """Evict the least-recently-used entry from the cache."""
@@ -175,12 +192,18 @@ class MemoryCache:
         common prefix against ``target``.
 
         **Experimental** — no production consumer yet.
+
+        Raises:
+            ValueError: If ``target`` is empty, matching the fail-closed
+                contract of the other collectors.
         """
         if node is None:
             return builtins.set()
+        if not target:
+            raise ValueError("target must be a non-empty string")
         best_keys: builtins.set[str] = builtins.set()
         best_match_len = 0
-        counter = 0
+        counter: Iterator[int] = itertools.count(1)
         heap: list[tuple[int, int, _TrieNode, int, int]] = [(0, 0, node, 0, 0)]
         while heap:
             _neg_match, _cnt, current, depth, match_len = heapq.heappop(heap)
@@ -200,15 +223,15 @@ class MemoryCache:
                     child_match = match_len + 1
                 else:
                     child_match = match_len
-                counter += 1
+                counter_seq = next(counter)
                 heapq.heappush(
                     heap,
-                    (-child_match, counter, child, child_depth, child_match),
+                    (-child_match, counter_seq, child, child_depth, child_match),
                 )
         return best_keys
 
     def _trie_collect(self, prefix: str) -> builtins.set[str]:
-        return _trie_collect(self._trie, prefix)
+        return _module_trie_collect(self._trie, prefix)
 
     def _trie_delete_prefix(self, prefix: str) -> builtins.set[str]:
         """Detach the subtree rooted at ``prefix`` and return its terminal keys.
@@ -218,7 +241,7 @@ class MemoryCache:
         collected keys for bulk ``_cache`` cleanup. Complexity is
         O(prefix_length + subtree_nodes) where K is the number of matching entries.
         """
-        return _trie_delete_prefix(self._trie, prefix)
+        return _module_trie_delete_prefix(self._trie, prefix)
 
     async def clear(self) -> None:
         """Clear all values from cache."""

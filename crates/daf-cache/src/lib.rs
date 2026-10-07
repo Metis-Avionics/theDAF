@@ -232,6 +232,11 @@ impl daf_core::Cache for MemoryCache {
     }
 
     fn tier(&self) -> daf_core::Tier {
+        debug_assert!(
+            (daf_core::Tier::L0 as u8) < (daf_core::Tier::L1 as u8)
+                && (daf_core::Tier::L1 as u8) < (daf_core::Tier::L2 as u8),
+            "L1 orders strictly between L0 and L2"
+        );
         daf_core::Tier::L1
     }
 }
