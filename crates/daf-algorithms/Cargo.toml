@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Data-access algorithms for the Data Access Factory (DAF)"
-repository = "https://github.com/RAliane-REBORN/theDAF"
+repository.workspace = true
 keywords = ["data-access", "algorithms", "query"]
 
 [dependencies]
-daf-core = { path = "../daf-core", version = "0.1.0" }
+daf-core = { path = "../daf-core", version = "0.2.0" }
 async-trait.workspace = true
 tokio.workspace = true
