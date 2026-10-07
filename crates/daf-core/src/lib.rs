@@ -284,7 +284,10 @@ impl Generation {
         // thesix newtype must preserve the counter it is given, so a thesix
         // upgrade cannot silently renumber present generations.
         let wrapped_inner = thesix::Generation::new(counter);
-        assert!(wrapped_inner.0 == counter, "wrap identity: thesix preserves the counter");
+        assert!(
+            wrapped_inner.0 == counter,
+            "wrap identity: thesix preserves the counter"
+        );
         Generation::Valid(wrapped_inner)
     }
 
