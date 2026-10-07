@@ -13,9 +13,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
+repository = "https://github.com/Metis-Avionics/theDAF"
+homepage = "https://github.com/Metis-Avionics/theDAF"
+description = "Data Access Factory (DAF): tiered caching, CAS repositories, and generation-tracked data access, wrapping the six-tier cache authority thesix."
+keywords = ["data-access", "cache", "repository"]
+categories = ["caching", "data-structures"]
 
 [workspace.dependencies]
 async-trait = { version = "0.1", default-features = false }

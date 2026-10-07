@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Async runtime utilities for the Data Access Factory (DAF)"
-repository = "https://github.com/RAliane-REBORN/theDAF"
+repository.workspace = true
 keywords = ["data-access", "async", "runtime"]
 
 [dependencies]
