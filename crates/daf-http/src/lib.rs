@@ -5,10 +5,10 @@ use std::sync::Arc;
 
 use axum::response::{IntoResponse, Response};
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post, put},
-    Json, Router,
 };
 
 use daf_application::DataAccess;

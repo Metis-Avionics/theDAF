@@ -108,7 +108,7 @@ fn validate_utf8_cstr(ptr: *const c_char, label: &str) -> Result<&'static str, D
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn daf_data_access_new() -> *mut DataAccess {
     clear_last_error();
     match panic::catch_unwind(|| {
@@ -132,7 +132,7 @@ pub extern "C" fn daf_data_access_new() -> *mut DataAccess {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn daf_data_access_free(ptr: *mut DataAccess) -> c_int {
     if ptr.is_null() {
         return DafErrorCode::InvalidArgument as c_int;
@@ -161,7 +161,7 @@ where
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn daf_query(
     ptr: *mut DataAccess,
     resource_id: *const c_char,
@@ -201,7 +201,7 @@ pub extern "C" fn daf_query(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn daf_post(
     ptr: *mut DataAccess,
     resource_type: *const c_char,
@@ -238,7 +238,7 @@ pub extern "C" fn daf_post(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn daf_put(
     ptr: *mut DataAccess,
     resource_id: *const c_char,
@@ -275,7 +275,7 @@ pub extern "C" fn daf_put(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn daf_delete(
     ptr: *mut DataAccess,
     resource_id: *const c_char,
@@ -311,7 +311,7 @@ pub extern "C" fn daf_delete(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn daf_last_error_message() -> *const c_char {
     LAST_ERROR.with(|slot| {
         slot.borrow()

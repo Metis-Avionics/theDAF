@@ -28,8 +28,8 @@ pub use crate::postgres::PostgresCache;
 #[cfg(feature = "redis")]
 pub use crate::redis::RedisCache;
 pub use crate::trie::{
-    astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete, trie_delete_prefix,
-    trie_insert, AStarEntry, TrieNode,
+    AStarEntry, TrieNode, astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete,
+    trie_delete_prefix, trie_insert,
 };
 
 use async_trait::async_trait;

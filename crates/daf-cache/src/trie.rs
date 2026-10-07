@@ -152,14 +152,14 @@ pub fn astar_collect(root: &TrieNode, target: &str) -> std::collections::HashSet
     });
 
     while let Some(entry) = heap.pop() {
-        if entry.match_len > 0 {
-            if let Some(ref key) = entry.node.key {
-                if entry.match_len > best_match_len {
-                    best_match_len = entry.match_len;
-                    best_keys = std::collections::HashSet::from([key.clone()]);
-                } else if entry.match_len == best_match_len {
-                    best_keys.insert(key.clone());
-                }
+        if entry.match_len > 0
+            && let Some(ref key) = entry.node.key
+        {
+            if entry.match_len > best_match_len {
+                best_match_len = entry.match_len;
+                best_keys = std::collections::HashSet::from([key.clone()]);
+            } else if entry.match_len == best_match_len {
+                best_keys.insert(key.clone());
             }
         }
         for (ch, child) in entry.node.children {

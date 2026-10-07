@@ -165,29 +165,71 @@ fn algorithm_stats_serde_round_trip() {
 
 #[test]
 fn generation_advancement() {
-    assert_eq!(Generation::Missing.advance(), Generation::Valid(1));
-    assert_eq!(Generation::Valid(1).advance(), Generation::Valid(2));
-    assert_eq!(Generation::Valid(0).advance(), Generation::Valid(1));
+    assert_eq!(Generation::Missing.advance(), Generation::valid(1));
+    assert_eq!(Generation::valid(1).advance(), Generation::valid(2));
+    assert_eq!(Generation::valid(0).advance(), Generation::valid(1));
 }
 
 #[test]
 fn generation_as_u64() {
     assert_eq!(Generation::Missing.as_u64(), None);
-    assert_eq!(Generation::Valid(7).as_u64(), Some(7));
+    assert_eq!(Generation::valid(7).as_u64(), Some(7));
 }
 
 #[test]
 fn generation_missing_serde_round_trip() {
-    let gen = Generation::Missing;
-    let json = serde_json::to_value(gen).unwrap();
+    let generation = Generation::Missing;
+    let json = serde_json::to_value(generation).unwrap();
     let decoded: Generation = serde_json::from_value(json).unwrap();
     assert_eq!(decoded, Generation::Missing);
 }
 
 #[test]
 fn generation_valid_serde_round_trip() {
-    let gen = Generation::Valid(42);
-    let json = serde_json::to_value(gen).unwrap();
+    let generation = Generation::valid(42);
+    let json = serde_json::to_value(generation).unwrap();
     let decoded: Generation = serde_json::from_value(json).unwrap();
-    assert_eq!(decoded, Generation::Valid(42));
+    assert_eq!(decoded, Generation::valid(42));
+}
+
+// ── thesix-backed Generation: wire compatibility pins ───────────────────
+// The wrapper moved its counter into `thesix::Generation`, but the serde wire
+// must stay exactly the old derived shape (`{"Missing"}` / `{"Valid": n}`) or
+// already-serialized cache state would fail to decode. These pins hold the
+// claim to the actual bytes, not intent.
+
+#[test]
+fn generation_wire_shape_is_stable_for_missing() {
+    let json = serde_json::to_value(Generation::Missing).unwrap();
+    assert_eq!(json, serde_json::json!("Missing"));
+    // And the old raw form decodes back.
+    let decoded: Generation = serde_json::from_value(serde_json::json!("Missing")).unwrap();
+    assert_eq!(decoded, Generation::Missing);
+}
+
+#[test]
+fn generation_wire_shape_is_stable_for_valid() {
+    let json = serde_json::to_value(Generation::valid(42)).unwrap();
+    assert_eq!(json, serde_json::json!({"Valid": 42}));
+    // Old raw `Valid(u64)` payload decodes into the thesix-backed wrapper.
+    let decoded: Generation = serde_json::from_value(serde_json::json!({"Valid": 42})).unwrap();
+    assert_eq!(decoded, Generation::valid(42));
+}
+
+#[test]
+fn generation_wraps_the_thesix_counter_not_a_copy() {
+    // as_u64 reads through the wrapped newtype — the single counter authority.
+    let generation = Generation::valid(9);
+    assert_eq!(generation.as_u64(), Some(9));
+    assert_eq!(generation.advance(), Generation::valid(10));
+    // And a thesix Generation compares against its own counter directly.
+    let wrapped = match generation {
+        Generation::Valid(n) => n,
+        Generation::Missing => unreachable!("constructed Valid"),
+    };
+    assert_eq!(wrapped, thesix::Generation::new(9));
+    // is_stale = self Older than current: 9 is stale against 10, Equal against itself.
+    assert!(wrapped.is_stale(thesix::Generation::new(10)));
+    assert!(!wrapped.is_stale(thesix::Generation::new(9)));
+    assert!(!thesix::Generation::new(11).is_stale(wrapped));
 }

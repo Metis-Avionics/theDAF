@@ -1,6 +1,6 @@
 use std::ffi::c_int;
 
-use daf_ffi::{daf_data_access_free, daf_data_access_new, DafErrorCode};
+use daf_ffi::{DafErrorCode, daf_data_access_free, daf_data_access_new};
 
 #[test]
 fn ffi_double_free_returns_invalid_argument() {
