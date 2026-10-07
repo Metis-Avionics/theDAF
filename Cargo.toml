@@ -14,7 +14,7 @@ members = [
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
@@ -27,3 +27,7 @@ tokio = { version = "1", features = ["full"] }
 lru = "0.12"
 sha2 = "0.10"
 hex = "0.4"
+# Cache-generation authority: DAF's `Generation` wraps thesix's present-only
+# counter instead of declaring a second authority for one concept. Exact pin —
+# the wrapper's semantics follow the pinned upstream, not a range.
+thesix = { version = "=0.4.0", default-features = false }

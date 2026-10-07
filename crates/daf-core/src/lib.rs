@@ -206,19 +206,69 @@ impl AlgorithmStats {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+/// Cache generation for one resource instance.
+///
+/// DAF semantics: a resource that has never been written has `Missing`
+/// generation; every write advances a `Valid` counter. The counter itself is
+/// [`thesix::Generation`] — the published authority for the concept — so a
+/// cache layer can compare DAF generations against its own entries without a
+/// translation step, and the two cannot drift. `Missing` is DAF's addition:
+/// thesix encodes absence in its `EntryState` instead, which a `u64` cannot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Generation {
     #[default]
     Missing,
-    Valid(u64),
+    Valid(thesix::Generation),
+}
+
+// serde is hand-written, not derived: thesix's `Generation` is a plain u64
+// newtype with no serde impls (its wire is EntryState, not this wrapper), and
+// the impls below stay byte-compatible with the old `Valid(u64)`/`Missing`
+// enum so already-serialized state reads back.
+impl Serialize for Generation {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Generation::Missing => serializer.serialize_unit_variant("Generation", 0, "Missing"),
+            Generation::Valid(n) => {
+                serializer.serialize_newtype_variant("Generation", 1, "Valid", &n.0)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Generation {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Shadow of the old derived enum: deserialization goes through a
+        // `Valid(u64)` payload so the serde behavior is the derived one —
+        // byte-compatible with already-serialized state — and the mapping to
+        // the thesix newtype happens after. Extending `Generation` without
+        // extending this shadow fails loudly at the `match` below.
+        #[derive(Deserialize)]
+        enum GenerationDef {
+            Missing,
+            Valid(u64),
+        }
+        match GenerationDef::deserialize(deserializer)? {
+            GenerationDef::Missing => Ok(Generation::Missing),
+            GenerationDef::Valid(n) => Ok(Generation::valid(n)),
+        }
+    }
 }
 
 impl Generation {
+    /// Wrap a raw counter in the thesix-backed `Valid` variant.
+    ///
+    /// The constructor keeps `thesix` an implementation detail of `daf-core`:
+    /// consumers name the counter, not the wrapped type.
+    pub fn valid(counter: u64) -> Self {
+        Generation::Valid(thesix::Generation::new(counter))
+    }
+
     pub fn as_u64(&self) -> Option<u64> {
         match self {
             Generation::Valid(n) => {
-                debug_assert!(*n > 0, "Valid generation must be positive");
-                Some(*n)
+                debug_assert!(n.0 > 0, "Valid generation must be positive");
+                Some(n.0)
             }
             Generation::Missing => None,
         }
@@ -226,10 +276,10 @@ impl Generation {
 
     pub fn advance(self) -> Self {
         match self {
-            Generation::Missing => Generation::Valid(1),
+            Generation::Missing => Generation::valid(1),
             Generation::Valid(n) => {
-                debug_assert!(n < u64::MAX, "Valid(n) -> Valid(n+1) overflow guard");
-                Generation::Valid(n + 1)
+                debug_assert!(n.0 < u64::MAX, "Valid(n) -> Valid(n+1) overflow guard");
+                Generation::valid(n.0 + 1)
             }
         }
     }

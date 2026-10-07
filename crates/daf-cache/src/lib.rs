@@ -28,8 +28,8 @@ pub use crate::redis::RedisCache;
 #[cfg(feature = "sled")]
 pub use crate::sled::SledCache;
 pub use crate::trie::{
-    astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete, trie_delete_prefix,
-    trie_insert, AStarEntry, TrieNode,
+    AStarEntry, TrieNode, astar_collect, bfs_collect, dfs_collect, trie_collect, trie_delete,
+    trie_delete_prefix, trie_insert,
 };
 
 use async_trait::async_trait;

@@ -103,10 +103,15 @@ impl Cache for HierarchicalCache {
         for (i, tier) in tiers.iter().enumerate() {
             match tier.get(key).await {
                 Ok(Some(e)) => {
-                    if i > 0 {
-                        self.l1
-                            .set(key.to_string(), Arc::clone(&e.value))
-                            .await?;
+                    if i > 0
+                        && let Err(promo_err) =
+                            self.l1.set(key.to_string(), Arc::clone(&e.value)).await
+                    {
+                        tracing::warn!(
+                            tier = %i,
+                            error = %promo_err,
+                            "l1 promotion failed; serving value without caching at l1"
+                        );
                     }
                     return Ok(Some(e));
                 }
