@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "daf-algorithms"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "daf-core",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "daf-application"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "daf-cache"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "daf-core",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "daf-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "daf-ffi"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "daf-algorithms",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "daf-http"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -388,7 +388,7 @@ dependencies = [
 
 [[package]]
 name = "daf-messaging"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "daf-algorithms",
@@ -398,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "daf-repository"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "daf-core",
@@ -411,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "daf-runtime"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "tokio",
 ]
@@ -1380,9 +1380,9 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
 name = "thesix"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "235934ad10d9af1dac40e0e6d20a194d88779a0f86a63be5f8652a2887f454b8"
+checksum = "1449270f98f35cd2798bc0708a91ef0fc6154e804ccdabea2bf00bc0b4b6fe4b"
 dependencies = [
  "async-trait",
  "thiserror",

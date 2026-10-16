@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/Metis-Avionics/theDAF"
@@ -34,5 +34,9 @@ sha2 = "0.10"
 hex = "0.4"
 # Cache-generation authority: DAF's `Generation` wraps thesix's present-only
 # counter instead of declaring a second authority for one concept. Exact pin —
-# the wrapper's semantics follow the pinned upstream, not a range.
-thesix = { version = "=0.4.0", default-features = false }
+# the wrapper's semantics follow the pinned upstream, not a range. 0.5.0 moves
+# to the HPA data-continuity contract + the governor subsystem (env-detected
+# ladder, loud degradation, rebindable rungs, census-bounded autonomy); the
+# base surface (`Generation`, default = no redis/sled/oxigraph features) is
+# unchanged for the wrapper: daf-core re-verified at the site.
+thesix = { version = "=0.5.0", default-features = false }
