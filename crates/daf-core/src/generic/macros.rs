@@ -28,7 +28,7 @@ macro_rules! daf_query {
 
             async fn run(
                 &self,
-                $pool_name: &$pool,
+                $pool_name: Option<&$pool>,
                 $input_name: Self::Input,
                 $subject_name: &$crate::generic::Subject,
             ) -> ::core::result::Result<
@@ -71,14 +71,9 @@ macro_rules! daf_query {
                         $resource, info.resource
                     ))));
                 }
-                let Some(pool) = self.pool.as_ref() else {
-                    return Err($crate::DataAccessError::Repository($crate::RepositoryError::new(format!(
-                        "Postgres pool not configured; {} unavailable", $resource
-                    ))));
-                };
                 let arguments = info.arguments.clone().unwrap_or_default();
                 let input = <$domain as $crate::generic::QueryDomain<$pool>>::parse_arguments(&arguments).await?;
-                let output = <$domain as $crate::generic::QueryDomain<$pool>>::run(&$domain, pool, input, subject).await?;
+                let output = <$domain as $crate::generic::QueryDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject).await?;
                 ::serde_json::to_value(&output).map_err(|error| {
                     $crate::DataAccessError::Internal($crate::InternalError::new(format!(
                         "{} output encode: {error}", $resource
@@ -132,7 +127,7 @@ macro_rules! daf_mutation {
 
             async fn run(
                 &self,
-                $pool_name: &$pool,
+                $pool_name: Option<&$pool>,
                 $input_name: Self::Input,
                 $subject_name: &$crate::generic::Subject,
                 $context_name: &$crate::generic::MutationContext,
@@ -192,13 +187,8 @@ macro_rules! daf_mutation {
                         "the registered mutation adapter serves '{}', not '{}'", $resource, info.resource
                     ))));
                 }
-                let Some(pool) = self.pool.as_ref() else {
-                    return Err($crate::DataAccessError::Repository($crate::RepositoryError::new(format!(
-                        "Postgres pool not configured; {} unavailable", $resource
-                    ))));
-                };
                 let input = <$domain as $crate::generic::MutationDomain<$pool>>::parse_arguments(&info.arguments).await?;
-                let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, pool, input, subject, context).await?;
+                let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject, context).await?;
                 ::serde_json::to_value(&output).map_err(|error| {
                     $crate::DataAccessError::Internal($crate::InternalError::new(format!(
                         "{} output encode: {error}", $resource
@@ -237,7 +227,7 @@ macro_rules! daf_mutation {
 
             async fn run(
                 &self,
-                $pool_name: &$pool,
+                $pool_name: Option<&$pool>,
                 $input_name: Self::Input,
                 $subject_name: &$crate::generic::Subject,
                 $context_name: &$crate::generic::MutationContext,
@@ -297,18 +287,13 @@ macro_rules! daf_mutation {
                         "the registered mutation adapter serves '{}', not '{}'", $resource, info.resource
                     ))));
                 }
-                let Some(pool) = self.pool.as_ref() else {
-                    return Err($crate::DataAccessError::Repository($crate::RepositoryError::new(format!(
-                        "Postgres pool not configured; {} unavailable", $resource
-                    ))));
-                };
                 let input = <$domain as $crate::generic::MutationDomain<$pool>>::parse_arguments(&info.arguments).await?;
                 if let Some(store) = self.idempotency.as_ref() {
                     if let Some(key) = <$domain as $crate::generic::MutationDomain<$pool>>::idempotency_key(&$domain, subject, &input) {
                         if let Some(replayed) = store.replay(&key).await? {
                             return Ok(replayed);
                         }
-                        let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, pool, input, subject, context).await?;
+                        let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject, context).await?;
                         let encoded = ::serde_json::to_value(&output).map_err(|error| {
                             $crate::DataAccessError::Internal($crate::InternalError::new(format!(
                                 "{} output encode: {error}", $resource
@@ -318,7 +303,7 @@ macro_rules! daf_mutation {
                         return Ok(encoded);
                     }
                 }
-                let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, pool, input, subject, context).await?;
+                let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject, context).await?;
                 ::serde_json::to_value(&output).map_err(|error| {
                     $crate::DataAccessError::Internal($crate::InternalError::new(format!(
                         "{} output encode: {error}", $resource

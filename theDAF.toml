@@ -15,7 +15,7 @@
 
 [spec]
 name = "theDAF"
-version = "0.3.0"
+version = "0.3.1"
 kind = "data-access-facade"
 status = "architectural-revision"
 
@@ -69,6 +69,7 @@ typed_domains = true
 object_safe_boundary = true
 resource_matching_is_fail_closed = true
 pool_denial_names_resource = true
+tenant_before_pool_is_domain_owned = true
 idempotency_replays_before_execution = true
 static_policy_is_fail_closed = true
 

@@ -41,10 +41,11 @@ impl QueryDomain<()> for EchoQueryDomain {
 
     async fn run(
         &self,
-        _pool: &(),
+        pool: Option<&()>,
         input: Self::Input,
         subject: &Subject,
     ) -> Result<Self::Output, DataAccessError> {
+        let _ = daf_core::generic::required_pool(pool, "echo")?;
         Ok(EchoOutput {
             value: input.value,
             caller: subject.identity_id.clone(),
@@ -93,11 +94,12 @@ impl MutationDomain<String> for EchoMutationDomain {
 
     async fn run(
         &self,
-        pool: &String,
+        pool: Option<&String>,
         input: Self::Input,
         _subject: &Subject,
         _context: &MutationContext,
     ) -> Result<Self::Output, DataAccessError> {
+        let pool = daf_core::generic::required_pool(pool, "write")?;
         if pool.is_empty() {
             return Err(DataAccessError::Repository(daf_core::RepositoryError::new(
                 "pool refused",

@@ -40,7 +40,7 @@ pub trait QueryDomain<P: Send + Sync + 'static>: Send + Sync {
     /// Domain-owned failures are mapped to DAF's structured taxonomy.
     async fn run(
         &self,
-        pool: &P,
+        pool: Option<&P>,
         input: Self::Input,
         subject: &Subject,
     ) -> Result<Self::Output, DataAccessError>;
@@ -86,7 +86,7 @@ pub trait MutationDomain<P: Send + Sync + 'static>: Send + Sync {
     /// Domain-owned failures are mapped to DAF's structured taxonomy.
     async fn run(
         &self,
-        pool: &P,
+        pool: Option<&P>,
         input: Self::Input,
         subject: &Subject,
         context: &MutationContext,

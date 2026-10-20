@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `0.3.1` keeps the tenant-before-pool ordering domain-owned: domain functions receive `Option<&P>` and decide the B-281 denial after scope rules. The published contract now matches the migration pin behavior.
+
 
 ### Added
 

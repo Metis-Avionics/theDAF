@@ -11,9 +11,9 @@ pub mod macros;
 pub mod policy;
 pub mod types;
 
-pub use access::subject_json_key;
 pub use access::{
-    DataAccess, DomainDataAccess, Idempotency, MutationAccess, QueryAccess, typed_access_row,
+    DataAccess, DomainDataAccess, Idempotency, MutationAccess, QueryAccess, required_pool,
+    subject_json_key, typed_access_row,
 };
 pub use authorized::PolicyAccess;
 pub use authorizer::{PolicyTable, StaticPolicyAuthorizer};

@@ -55,6 +55,18 @@ pub trait Idempotency: Send + Sync {
     ) -> Result<(), DataAccessError>;
 }
 
+/// Domain-owned post-scope pool gate with DAF's B-281 wording.
+///
+/// # Errors
+/// Repository denial naming the requested resource when no pool was bound.
+pub fn required_pool<'pool, P>(
+    pool: Option<&'pool P>,
+    resource: &'static str,
+) -> Result<&'pool P, DataAccessError> {
+    debug_assert!(!resource.is_empty(), "pool checks name the resource");
+    pool.ok_or_else(|| pool_denial(resource))
+}
+
 fn pool_denial(resource: &str) -> DataAccessError {
     debug_assert!(!resource.is_empty(), "pool denials name the resource");
     DataAccessError::Repository(crate::RepositoryError::new(format!(
@@ -154,10 +166,9 @@ where
         if info.resource != Q::RESOURCE {
             return Err(wrong_query_route(Q::RESOURCE, &info.resource));
         }
-        let pool = self.pool.as_ref().ok_or_else(|| pool_denial(Q::RESOURCE))?;
         let arguments = info.arguments.clone().unwrap_or_default();
         let input = Q::parse_arguments(&arguments).await?;
-        let output = self.domain.run(pool, input, subject).await?;
+        let output = self.domain.run(self.pool.as_ref(), input, subject).await?;
         encode(Q::RESOURCE, output)
     }
 
@@ -244,8 +255,8 @@ where
         if info.resource != M::RESOURCE {
             return Err(wrong_mutation_route(M::RESOURCE, &info.resource));
         }
-        let pool = self.pool.as_ref().ok_or_else(|| pool_denial(M::RESOURCE))?;
-        // Decode before side effects, but after the pool check: a malformed
+        // Keep pool availability under domain scope/tenant validation: DAF
+        // exposes the optional pool, but never preempts a tenant rule., but after the pool check: a malformed
         // request must not hide an unconfigured deployment's hard denial.
         let input = M::parse_arguments(&info.arguments).await?;
         if let Some(idem) = self.idempotency.as_ref()
@@ -254,12 +265,18 @@ where
             if let Some(replayed) = idem.replay(&key).await? {
                 return Ok(replayed);
             }
-            let output = self.domain.run(pool, input, subject, context).await?;
+            let output = self
+                .domain
+                .run(self.pool.as_ref(), input, subject, context)
+                .await?;
             let encoded = encode(M::RESOURCE, &output)?;
             idem.record(&key, &encoded, None).await?;
             return Ok(encoded);
         }
-        let output = self.domain.run(pool, input, subject, context).await?;
+        let output = self
+            .domain
+            .run(self.pool.as_ref(), input, subject, context)
+            .await?;
         encode(M::RESOURCE, output)
     }
 }

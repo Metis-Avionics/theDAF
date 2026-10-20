@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "daf-algorithms"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "daf-core",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "daf-application"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "daf-cache"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "daf-core",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "daf-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "daf-ffi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "daf-algorithms",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "daf-http"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "daf-messaging"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "daf-algorithms",
@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "daf-repository"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "daf-core",
@@ -413,7 +413,7 @@ dependencies = [
 
 [[package]]
 name = "daf-runtime"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tokio",
 ]

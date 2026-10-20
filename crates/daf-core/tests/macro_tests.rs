@@ -26,7 +26,8 @@ daf_query! {
     pool = (),
     input = MacroInput,
     output = MacroOutput,
-    run(_pool, input, subject) {
+    run(pool, input, subject) {
+        let _pool = daf_core::generic::required_pool(pool, "macro_query")?;
         Ok(MacroOutput {
             value: input.value,
             caller: subject.identity_id.clone(),
@@ -42,7 +43,8 @@ daf_mutation! {
     input = MacroInput,
     output = MacroOutput,
     idempotency = none,
-    run(_pool, input, subject, _context) {
+    run(pool, input, subject, _context) {
+        let _pool = daf_core::generic::required_pool(pool, "macro_mutation")?;
         Ok(MacroOutput {
             value: input.value,
             caller: subject.identity_id.clone(),
@@ -58,7 +60,8 @@ daf_mutation! {
     input = MacroInput,
     output = MacroOutput,
     idempotency = subject_and_input,
-    run(_pool, input, subject, _context) {
+    run(pool, input, subject, _context) {
+        let _pool = daf_core::generic::required_pool(pool, "macro_mutation")?;
         Ok(MacroOutput {
             value: input.value,
             caller: subject.identity_id.clone(),
