@@ -9,6 +9,8 @@ Released files:
 - theDAF.toml, CHANGELOG.md, scripts/power_of_ten_rust.py
 
 Local gates run:
+- tenant-before-pool regression, generic seam, macro, policy and 0.2 bridge tests.
+
 - cargo fmt --all --check equivalent (cargo fmt then check)
 - cargo clippy --workspace --all-targets --all-features -- -D warnings
 - cargo test --workspace --offline

@@ -45,6 +45,11 @@ impl QueryDomain<()> for EchoQueryDomain {
         input: Self::Input,
         subject: &Subject,
     ) -> Result<Self::Output, DataAccessError> {
+        if subject.tenant_id.is_empty() {
+            return Err(DataAccessError::Authorization(
+                daf_core::AuthorizationError::new("echo requires a tenant subject"),
+            ));
+        }
         let _ = daf_core::generic::required_pool(pool, "echo")?;
         Ok(EchoOutput {
             value: input.value,
@@ -305,4 +310,23 @@ async fn daf_rows_composes_the_object_safe_row() {
         .await
         .unwrap();
     assert_eq!(result["value"], 4);
+}
+
+#[tokio::test]
+async fn tenant_refusal_precedes_the_pool_denial() {
+    let access = QueryAccess::<EchoQueryDomain, ()>::new(EchoQueryDomain, None);
+    let error = access
+        .query(
+            &QueryInfo {
+                resource: "echo".to_string(),
+                arguments: Some(json!({"value": 1})),
+            },
+            &Subject::default(),
+        )
+        .await
+        .unwrap_err();
+    let DataAccessError::Authorization(message) = error else {
+        panic!("tenant refusal must precede the pool denial");
+    };
+    assert_eq!(message.0, "echo requires a tenant subject");
 }
