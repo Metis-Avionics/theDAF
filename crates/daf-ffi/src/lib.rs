@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #![allow(clippy::not_unsafe_ptr_arg_deref, clippy::assertions_on_constants)]
 
 use std::collections::HashMap;

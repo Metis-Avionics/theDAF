@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
 ### Added
 
 - crates.io publishing metadata (`description`, `repository`, `keywords`) for all 9 workspace crates
@@ -16,6 +17,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Intra-workspace path dependencies now pin `version = "0.1.0"` alongside `path` (required by `cargo publish`)
+
+## [0.3.0] - 2026-10-20
+
+### Added
+
+- `daf-core::generic`: `Subject`, `QueryDomain`/`MutationDomain`, object-safe
+  `QueryAccess`/`MutationAccess`, `DomainDataAccess`, static policy tables and
+  declaration macros.
+- Compatibility bridge: `subject_from_legacy_user` moves the legacy 0.2 user
+  identity into a tenant-scoped typed subject.
+
+### Changed
+
+- `UserId`, the old `Algorithm` and the old `Authorizer` are deprecated; the
+  0.2 JSON/FFI facade remains available, while the generic contract is the 0.3
+  surface.
+
+### Deprecated
+
+- The 0.2 JSON/FFI-facing `UserId`, `Algorithm`, and `Authorizer` contracts.
 
 ## [0.2.2] - 2026-08-17
 

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #![allow(clippy::assertions_on_constants)]
 use std::collections::HashMap;
 use std::sync::Arc;

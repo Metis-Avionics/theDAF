@@ -8,6 +8,6 @@ repository.workspace = true
 keywords = ["data-access", "algorithms", "query"]
 
 [dependencies]
-daf-core = { path = "../daf-core", version = "0.2.0" }
+daf-core = { path = "../daf-core", version = "0.3.0" }
 async-trait.workspace = true
 tokio.workspace = true

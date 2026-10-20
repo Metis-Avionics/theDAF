@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #![allow(clippy::assertions_on_constants)]
 use std::future::Future;
 use std::pin::Pin;

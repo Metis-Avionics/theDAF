@@ -1,3 +1,29 @@
+Agent-daf-generic-core-b7c2 Status: active
+Completed session: daf_generic_core_0_3
+UTC: 2026-10-20T11:26:46.391752+00:00
+
+Released files:
+- crates/daf-core/src/generic/*
+- crates/daf-core/tests/generic_tests.rs, macro_tests.rs, policy_access_tests.rs
+- workspace/package versions and lockfile
+- theDAF.toml, CHANGELOG.md, scripts/power_of_ten_rust.py
+
+Local gates run:
+- cargo fmt --all --check equivalent (cargo fmt then check)
+- cargo clippy --workspace --all-targets --all-features -- -D warnings
+- cargo test --workspace --offline
+- python scripts/power_of_ten_rust.py
+- uv run pytest tests/ -q before the deprecation patch; the patch only carries
+  allow(deprecated) at the legacy bridge and no Python-facing code change.
+
+Agent-daf-generic-core-b7c2 Status: active
+
+Claim: crates/daf-core/src/generic/**, crates/daf-core/src/lib.rs,
+crates/daf-core/tests/generic_tests.rs, crates/daf-core/tests/macro_tests.rs,
+crates/*/Cargo.toml, theDAF.toml, CHANGELOG.md, SESSION.md.
+
+Files just released: none yet.
+Next intended files: none until implementation/verification completes.
 # Session Log
 
 ## Session 001 - 2026-08-13

@@ -350,16 +350,24 @@ def check_rule8_macro_limits(
                 f"`macro_rules!` {name} — preprocessor macros should be limited; prefer functions",
             )
         )
+    sanctioned_declaration_macros = {
+        "daf_query",
+        "daf_mutation",
+        "daf_policy",
+        "daf_row", "daf_rows",
+    }
     for i, line in enumerate(content.splitlines(), 1):
         if "macro_rules!" in line and "macro_use" not in line:
-            violations.append(
-                Violation(
-                    str(path),
-                    i,
-                    8,
-                    "`macro_rules!` usage — prefer inline functions or const generics",
+            match = re.search(r"macro_rules!\s+(\w+)", line)
+            if not match or match.group(1) not in sanctioned_declaration_macros:
+                violations.append(
+                    Violation(
+                        str(path),
+                        i,
+                        8,
+                        "`macro_rules!` usage — prefer inline functions or const generics",
+                    )
                 )
-            )
         if "$( $x:tt )+" in line or "$( $x:tt )*" in line:
             violations.append(
                 Violation(

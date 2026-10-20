@@ -8,8 +8,8 @@ repository.workspace = true
 keywords = ["data-access", "http", "axum"]
 
 [dependencies]
-daf-core = { path = "../daf-core", version = "0.2.0" }
-daf-application = { path = "../daf-application", version = "0.2.0" }
+daf-core = { path = "../daf-core", version = "0.3.0" }
+daf-application = { path = "../daf-application", version = "0.3.0" }
 async-trait.workspace = true
 tokio.workspace = true
 axum = { version = "0.7", features = ["macros"] }
