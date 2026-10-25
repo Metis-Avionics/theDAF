@@ -1,3 +1,33 @@
+Agent-daf-v03-utilflag-7e2a Status: active
+Completed session: 0.3 utilization flag (AST-grade, sanitized) on docs/utilization-flag
+UTC: 2026-10-25T03:40Z
+
+Released files:
+- docs/daf-utilization-flag.md — the sanitized flag doc (consumers
+  pseudonymized; zero consumer names per the sanitization law).
+- docs/daf-utilization-flag.json — the machine ledger beside it.
+- CHANGELOG.md, SESSION.md.
+
+Method (no cargo/rustc anywhere; stdlib-only pass):
+- inventory from engine sources (daf-* = main post-#50; themql/prv = the
+  exact crates.io-pinned sources the consumer resolves),
+- use-path symbol-set parsing + body-token verification (strings blanked)
+  + macro-keyed use sites + one-hop barrel credit to the origin engine,
+- consumers fail-closed pseudonymized by the sanitizer script; the
+  sanitized artifact scrub-checked (no consumer token survives).
+
+Verdict rows worth carrying:
+- daf-core 16/82 = 19.5% used; the generic-access seam IS the consumption
+  (Subject ~880 body refs = the heaviest surface); ALL five declaration
+  macros = 0 invocations; the policy-table kit + Idempotency trait
+  unconsumed (the consumer re-implements the twins locally - verified).
+- daf-cache/application/runtime/http/ffi/messaging/repository/algorithms
+  = 0% (the transport/runtime/FFI/store legs are the consumer's own).
+- themql-core 15/87: the error + query/response envelope half; the tenant
+  pattern matcher + the envelope identity family unused.
+- prv engines: narrow cores (filter 27.3%, optimizer 24.3%, evaluation
+  20.0% = 4 point metrics only; monte-carlo 8.3% = Simulator one).
+
 Agent-daf-v03-publishprep-9d41 Status: active
 Completed session: 0.3.2 release-prep band + the utilization-flag docs lane (chore/release-0.3.2)
 UTC: 2026-10-25T02:20:Z
