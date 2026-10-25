@@ -1,3 +1,32 @@
+Agent-daf-prod-plan-4c19 Status: active
+Completed session: the production-readiness program + the GraphQL seam annex (design-first, docs only)
+UTC: 2026-10-25T04:05Z
+
+Released files:
+- docs/proposals/daf-production-readiness.md — the gap audit (8 axes x the
+  crate family, evidence-cited), the facade retirement arc (0.3.x deprecated
+  -> 0.4.0 facade-0-2 feature default-on -> 0.5.0 removal), the wave plan
+  (W-P1..W-P6), the honest downstream-integration-test row.
+- docs/daf-graphql-seam-design.md — the seam annex: the daf-graphql member
+  (the daf-http precedent extended), the macro-authored field/wired-types
+  thesis, SDL/DDL agreement artifacts (checked, CI-diffed), the
+  generation-driven subscription design re-homing the daf-messaging shell.
+- CHANGELOG.md, SESSION.md.
+
+Method (design-first; NO implementation landed; no cargo/rustc anywhere):
+- the gap audit = source-verified per axis (absence rows verified by grep
+  against .github/workflows/ci.yml + the manifests; presence rows cited
+  file:line),
+- the GraphQL positions are bounded by the 0.3 band's own laws
+  (transport-blind; tenant-owned pool denial ordering at generic/access.rs:257),
+- the seam thesis's consumer-side scale (the hand-wiring count) = the
+  owner's own seam inventory, referenced as such.
+
+Waves for the record: W-P2 ops legs (deny/machete/audit CI + daf-cache
+config/env + the no-op hook trait) -> W-P3 daf-graphql skeleton -> W-P4
+macro field clause + typed schema + SDL/DDL artifacts -> W-P5 subscriptions
++ the facade gate -> W-P6 facade removal.
+
 Agent-daf-v03-utilflag-7e2a Status: active
 Completed session: 0.3 utilization flag (AST-grade, sanitized) on docs/utilization-flag
 UTC: 2026-10-25T03:40Z
