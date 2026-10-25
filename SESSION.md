@@ -15,6 +15,10 @@ Local gates run:
 - python scripts/power_of_ten_rust.py — green (pure; no cargo/rustc on
   this box, even as --check: CI owns the Rust verdicts on the pushed head).
 - Brace/token balance sanity on both edited .rs files.
+- CI on the first pushed head (4473966): rust-test green; rust-lint +
+  power-of-ten-rust red on exactly one fmt diff (a missing final
+  newline in macros.rs) — repaired by 608a486 (style) and re-pushed;
+  the re-run's verdict is CI's.
 - Rust fmt/clippy/test NOT run locally (box rule); the branch's own
   prior gates (fmt/clippy/test at cde42ab) remain the baseline.
 
