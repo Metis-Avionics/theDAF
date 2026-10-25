@@ -12,11 +12,11 @@ name = "daf-parity"
 path = "src/bin/parity.rs"
 
 [dependencies]
-daf-core = { path = "../daf-core", version = "0.3.1" }
-daf-application = { path = "../daf-application", version = "0.3.1" }
-daf-cache = { path = "../daf-cache", version = "0.3.1" }
-daf-repository = { path = "../daf-repository", version = "0.3.1" }
-daf-algorithms = { path = "../daf-algorithms", version = "0.3.1" }
+daf-core = { path = "../daf-core", version = "0.3.2" }
+daf-application = { path = "../daf-application", version = "0.3.2" }
+daf-cache = { path = "../daf-cache", version = "0.3.2" }
+daf-repository = { path = "../daf-repository", version = "0.3.2" }
+daf-algorithms = { path = "../daf-algorithms", version = "0.3.2" }
 async-trait.workspace = true
 tokio.workspace = true
 thiserror.workspace = true

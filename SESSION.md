@@ -1,3 +1,29 @@
+Agent-daf-v03-publishprep-9d41 Status: active
+Completed session: 0.3.2 release-prep band + the utilization-flag docs lane (chore/release-0.3.2)
+UTC: 2026-10-25T02:20:Z
+
+Released files:
+- Cargo.toml, theDAF.toml — workspace band 0.3.1 → 0.3.2.
+- crates/*/Cargo.toml — the 16 intra-workspace version reqs 0.3.1 → 0.3.2.
+- Cargo.lock — the 9 daf-* package rows → 0.3.2 (no dependency-graph change;
+  thesix stays =0.5.0; pure text edit, tomllib-verified).
+- CHANGELOG.md — [Unreleased] promoted to [0.3.2] (2026-10-25); [0.3.1]
+  dated 2026-10-20 (crates.io API: 11:40–11:42 UTC); the 0.3.1-describing
+  tenant-before-pool bullet moved under [0.3.1]; the stale 0.1.0-era
+  crates.io-metadata bullets re-homed into the lower 0.1.0-era Unreleased
+  section (they no longer sit under the current band).
+
+Local gates run (NO cargo/rustc anywhere on this lane — the publish
+window is the owner's; every Rust verdict transfers to CI):
+- Semver scan of the post-#50 delta vs the published 0.3.1: only
+  crates/daf-core/src/generic/{macros,access}.rs changed (+ CHANGELOG/
+  SESSION); no new public symbol (typed_access_row pre-existed on the
+  published 0.3.1), no signature or macro-grammar change, Default bound
+  relaxed — verdict: patch band, 0.3.2, no 0.4.0 and no facade removal.
+- The 16 intra-workspace version reqs + 9 lock rows + 2 manifest rows
+  verified by scripted grep counts (16/9/2) and tomllib parse of both
+  TOMLs.
+
 Agent-daf-kit-law-9f2c Status: active
 Completed session: seam-law audit + access-kit adoption (feat/daf-generic-core-0-3)
 UTC: 2026-10-25T00:28:17.422702+00:00

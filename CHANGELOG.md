@@ -5,30 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.1]
+## [0.3.2] - 2026-10-25
+
+### Changed
+
+- Seam composition law: the declaration macros adopt the hand-written access adapters at birth — `daf_query!`/`daf_mutation!` build their access rows by wrapping `QueryAccess`/`MutationAccess` instead of re-authoring the JSON boundary (route refusal, replay ordering, output encoding), and `daf_row!` delegates to `typed_access_row`. One author per pattern; the generated access surface is unchanged — no new public symbols, no signature or macro-grammar change (patch-band release).
+- Access hygiene: dropped the dead `duplicate` shadow loop in `DomainDataAccess::new` (its construction-time duplicate check was running the comparison twice and kept an unused flag), the unused `std::any::Any` import and its trailing no-op const, and restored the garbled 0.3.1 pool-ordering comment.
+- Release band: workspace `0.3.1` → `0.3.2` (manifests, `theDAF.toml`, lockfile, intra-workspace version reqs). The content delta lives in `daf-core`'s generic module; the other eight crates are same-content band carriers and re-publish in the `scripts/publish_crates_io.sh` dependency order.
+
+## [0.3.1] - 2026-10-20
 
 ### Changed
 
 - query/mutation domain functions receive `Option<&P>` so tenant scoping owns its own B-281 pool gate; DAF still never imports a storage/transport crate.
-
-## [Unreleased]
-
-### Changed
-
 - `0.3.1` keeps the tenant-before-pool ordering domain-owned: domain functions receive `Option<&P>` and decide the B-281 denial after scope rules. The published contract now matches the migration pin behavior.
-- Seam composition law: the declaration macros adopt the hand-written access adapters at birth — `daf_query!`/`daf_mutation!` build their access rows by wrapping `QueryAccess`/`MutationAccess` instead of re-authoring the JSON boundary (route refusal, replay ordering, output encoding), and `daf_row!` delegates to `typed_access_row`. One author per pattern; the generated access surface is unchanged.
-- Access hygiene: dropped the dead `duplicate` shadow loop in `DomainDataAccess::new` (its construction-time duplicate check was running the comparison twice and kept an unused flag), the unused `std::any::Any` import and its trailing no-op const, and restored the garbled 0.3.1 pool-ordering comment.
-
-
-### Added
-
-- crates.io publishing metadata (`description`, `repository`, `keywords`) for all 9 workspace crates
-- `scripts/publish_crates_io.sh` — ordered, rate-limit-aware crates.io publisher (dependency order, 429 backoff with server-provided retry time, index-propagation settling, idempotent skip of already-published crates)
-- `daf-core v0.1.0` published to crates.io; remaining 8 crates scheduled via `scripts/publish_crates_io.sh`
-
-### Changed
-
-- Intra-workspace path dependencies now pin `version = "0.1.0"` alongside `path` (required by `cargo publish`)
 
 ## [0.3.0] - 2026-10-20
 
@@ -151,6 +141,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- crates.io publishing metadata (`description`, `repository`, `keywords`) for all 9 workspace crates (0.1.0-era, re-homed here from the retired top-level Unreleased section)
+- `scripts/publish_crates_io.sh` — ordered, rate-limit-aware crates.io publisher (dependency order, 429 backoff with server-provided retry time, index-propagation settling, idempotent skip of already-published crates)
+- `daf-core v0.1.0` published to crates.io; remaining 8 crates scheduled via `scripts/publish_crates_io.sh`
 - theDAF-LLVM Rust workspace with 9 crates (`daf-core`, `daf-application`, `daf-cache`, `daf-repository`, `daf-algorithms`, `daf-runtime`, `daf-messaging`, `daf-http`, `daf-ffi`) implementing the same data-access semantics as the Python reference
 - `Generation` enum (`Missing` / `Valid(u64)`) preventing sentinel-`0` conflation from Python
 - C-compatible FFI boundary (`daf-ffi`) with opaque pointers and `i32` error codes for reverse compatibility
@@ -182,6 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Intra-workspace path dependencies now pin `version = "0.1.0"` alongside `path` (required by `cargo publish`) — 0.1.0-era, re-homed here
 - `DataAccess._resource_namespace` computes SHA-256 inline (no `_namespace_cache` dict)
 - `MemoryCache._trie_delete` tracks insertion path and prunes empty branches bottom-up
 - `MemoryCache._trie_insert` and `_trie_delete` include root node in key tracking
