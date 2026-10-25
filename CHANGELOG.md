@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `docs/daf-utilization-flag.md` + `docs/daf-utilization-flag.json` — the 0.3
+  utilization flag: an AST-grade structural-resolution pass (use-path symbol
+  sets, body-verified references with string literals blanked, macro-keyed use
+  sites, one-hop barrel crediting) over the `daf-*` / `themql-*` / `prv-*`
+  engine surface against a downstream consumer's resolved tree. Per-engine
+  utilization (`daf-core` 19.5%, `themql-core` 17.2%, `prv-filter` 27.3%,
+  `prv-optimizer` 24.3%, `prv-evaluation` 20.0%; the transport/runtime/FFI/
+  messaging legs 0%), the unused-capability groups (types/traits/macros/
+  adapters/policy), and the sanitized value cases. No source change.
+
 ## [0.3.2] - 2026-10-25
 
 ### Changed

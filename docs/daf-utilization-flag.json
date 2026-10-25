@@ -1,0 +1,2209 @@
+{
+ "generated": "2026-10-25T01:01:23+00:00",
+ "method": "AST-grade structural resolution: use-path symbol-set parsing per file, verified body references (definition-site vs use-site counts, string literals blanked), macro-aware (declaration-macro inputs and generated impls count as use sites keyed by the macro input), transitive re-exports credited one hop to the origin engine crate. Consumers pseudonymized per the sanitization law.",
+ "inventory_sources": {
+  "daf_algorithms": {
+   "total": 2,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-algorithms/src"
+  },
+  "daf_application": {
+   "total": 9,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-application/src"
+  },
+  "daf_cache": {
+   "total": 39,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-cache/src"
+  },
+  "daf_core": {
+   "total": 82,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-core/src"
+  },
+  "daf_ffi": {
+   "total": 8,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-ffi/src"
+  },
+  "daf_http": {
+   "total": 4,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-http/src"
+  },
+  "daf_messaging": {
+   "total": 2,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-messaging/src"
+  },
+  "daf_repository": {
+   "total": 3,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-repository/src"
+  },
+  "daf_runtime": {
+   "total": 7,
+   "source": "/home/leo/metis-work/theDAF/crates/daf-runtime/src"
+  },
+  "prv_cache": {
+   "total": 33,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-cache-0.2.1/src"
+  },
+  "prv_core": {
+   "total": 32,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-core-0.2.1/src"
+  },
+  "prv_data": {
+   "total": 18,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-data-0.2.1/src"
+  },
+  "prv_evaluation": {
+   "total": 20,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-evaluation-0.2.2/src"
+  },
+  "prv_filter": {
+   "total": 22,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-filter-0.2.1/src"
+  },
+  "prv_monte_carlo": {
+   "total": 12,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-monte-carlo-0.2.1/src"
+  },
+  "prv_optimizer": {
+   "total": 37,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-optimizer-0.2.1/src"
+  },
+  "prv_policy": {
+   "total": 9,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/prv-policy-0.2.1/src"
+  },
+  "themql_core": {
+   "total": 87,
+   "source": "/home/leo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/themql-core-0.2.0/src"
+  }
+ },
+ "consumers": {
+  "consumer-A01": {
+   "role": "admin domain",
+   "files_scanned": 20
+  },
+  "consumer-A02": {
+   "role": "advisory domain",
+   "files_scanned": 11
+  },
+  "consumer-A03": {
+   "role": "agent domain",
+   "files_scanned": 1
+  },
+  "consumer-A04": {
+   "role": "ai domain",
+   "files_scanned": 5
+  },
+  "consumer-A05": {
+   "role": "analytics domain",
+   "files_scanned": 3
+  },
+  "consumer-A06": {
+   "role": "asset domain",
+   "files_scanned": 5
+  },
+  "consumer-A07": {
+   "role": "auth domain",
+   "files_scanned": 3
+  },
+  "consumer-A09": {
+   "role": "command-center domain",
+   "files_scanned": 5
+  },
+  "consumer-A10": {
+   "role": "typed read seam plane",
+   "files_scanned": 5
+  },
+  "consumer-A11": {
+   "role": "feed domain",
+   "files_scanned": 6
+  },
+  "consumer-A13": {
+   "role": "governance domain",
+   "files_scanned": 16
+  },
+  "consumer-A14": {
+   "role": "graph domain",
+   "files_scanned": 3
+  },
+  "consumer-A15": {
+   "role": "tenant/compat plane",
+   "files_scanned": 20
+  },
+  "consumer-A16": {
+   "role": "ops domain",
+   "files_scanned": 3
+  },
+  "consumer-A17": {
+   "role": "overview domain",
+   "files_scanned": 6
+  },
+  "consumer-A18": {
+   "role": "portfolio / risk-simulation domain",
+   "files_scanned": 2
+  },
+  "consumer-A19": {
+   "role": "regulation domain",
+   "files_scanned": 6
+  },
+  "consumer-A20": {
+   "role": "report domain",
+   "files_scanned": 4
+  },
+  "consumer-A21": {
+   "role": "risk domain",
+   "files_scanned": 15
+  },
+  "consumer-A22": {
+   "role": "search domain",
+   "files_scanned": 3
+  },
+  "consumer-A23": {
+   "role": "security domain",
+   "files_scanned": 7
+  },
+  "consumer-A24": {
+   "role": "supplier domain",
+   "files_scanned": 14
+  },
+  "consumer-A25": {
+   "role": "task domain",
+   "files_scanned": 4
+  },
+  "consumer-A26": {
+   "role": "decision-classification plane",
+   "files_scanned": 1
+  },
+  "consumer-A27": {
+   "role": "serving plane",
+   "files_scanned": 10
+  },
+  "consumer-A28": {
+   "role": "estimation/filtering plane",
+   "files_scanned": 2
+  },
+  "harness-A08": {
+   "role": "bench harness",
+   "files_scanned": 1
+  },
+  "harness-A12": {
+   "role": "fuzz harness",
+   "files_scanned": 1
+  },
+  "harness-A29": {
+   "role": "integration-test harness",
+   "files_scanned": 10
+  }
+ },
+ "non_consuming_crates_scanned": 18,
+ "engine_pins": {
+  "daf_core": "=0.3.1 (band \"=0.3.x\" exact; re-point target = this repo's current band)",
+  "themql_core": "=0.2.0 exact",
+  "prv_core": "0.2.1 caret (default-features off at the optimizer/evaluation rows)",
+  "prv_filter": "0.2.1 caret",
+  "prv_monte_carlo": "0.2.1 caret",
+  "prv_optimizer": "0.2.1 caret, default-features = false",
+  "prv_evaluation": "0.2.2 caret, default-features = false (0.2.1 predates the tail-risk module)",
+  "prv_cache": "transitive (not pinned)",
+  "prv_data": "transitive (not pinned)",
+  "prv_policy": "transitive (not pinned)"
+ },
+ "per_engine": {
+  "daf_algorithms": {
+   "total_public": 2,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "new"
+    ],
+    "struct": [
+     "FibonacciDP"
+    ]
+   }
+  },
+  "daf_application": {
+   "total_public": 9,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "create",
+     "delete",
+     "get_components",
+     "new",
+     "post",
+     "put",
+     "query"
+    ],
+    "struct": [
+     "DataAccess",
+     "DataAccessFactory"
+    ]
+   }
+  },
+  "daf_cache": {
+   "total_public": 39,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "_astar_collect",
+     "_bfs_collect",
+     "_dfs_collect",
+     "_trie_collect",
+     "_trie_delete_prefix",
+     "astar_collect",
+     "bfs_collect",
+     "clear",
+     "delete",
+     "delete_prefix",
+     "dfs_collect",
+     "get",
+     "has",
+     "l0",
+     "l1",
+     "l2",
+     "l3",
+     "l4",
+     "l5",
+     "new",
+     "set",
+     "shake",
+     "trie_collect",
+     "trie_delete",
+     "trie_delete_prefix",
+     "trie_insert"
+    ],
+    "mod": [
+     "hierarchical",
+     "moka",
+     "redis",
+     "sled",
+     "trie"
+    ],
+    "struct": [
+     "AStarEntry",
+     "HierarchicalCache",
+     "MemoryCache",
+     "MokaCache",
+     "PostgresCache",
+     "RedisCache",
+     "SledCache",
+     "TrieNode"
+    ]
+   }
+  },
+  "daf_core": {
+   "total_public": 82,
+   "used": 16,
+   "utilization_pct": 19.5,
+   "pinned": "=0.3.1 (band \"=0.3.x\" exact; re-point target = this repo's current band)",
+   "used_symbols": {
+    "AlgorithmError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::AlgorithmError::new"
+      }
+     ]
+    },
+    "AuthorizationError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::AuthorizationError::new"
+      }
+     ]
+    },
+    "CacheError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::CacheError::new"
+      }
+     ]
+    },
+    "ConflictError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::ConflictError::new"
+      }
+     ]
+    },
+    "DataAccess": {
+     "kinds": [
+      "trait"
+     ],
+     "use_refs": 243,
+     "def_sites": 18,
+     "consumers": [
+      "consumer-A01",
+      "consumer-A02",
+      "consumer-A03",
+      "consumer-A04",
+      "consumer-A05",
+      "consumer-A06"
+     ],
+     "site_count": 6,
+     "buckets": {
+      "consumer-A01[src]": 14,
+      "consumer-A02[src]": 12,
+      "consumer-A03[src]": 23,
+      "consumer-A04[src]": 7,
+      "consumer-A05[src]": 17,
+      "consumer-A06[src]": 7,
+      "harness-A08[src]": 1,
+      "consumer-A09[src]": 5,
+      "consumer-A10[src]": 1,
+      "consumer-A11[src]": 5,
+      "consumer-A13[src]": 13,
+      "consumer-A14[src]": 2,
+      "consumer-A15[src]": 22,
+      "consumer-A15[test]": 2,
+      "consumer-A16[src]": 3,
+      "consumer-A17[src]": 13,
+      "consumer-A18[src]": 10,
+      "consumer-A19[src]": 5,
+      "consumer-A20[src]": 3,
+      "consumer-A21[src]": 24,
+      "consumer-A22[src]": 2,
+      "consumer-A23[src]": 9,
+      "consumer-A24[src]": 9,
+      "consumer-A25[src]": 4,
+      "consumer-A27[src]": 25,
+      "harness-A29[src]": 5
+     },
+     "use_keys_head": []
+    },
+    "DataAccessError": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 22,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10",
+      "harness-A29"
+     ],
+     "site_count": 4,
+     "buckets": {
+      "consumer-A10[qualified]": 3,
+      "consumer-A10[src]": 19,
+      "harness-A29[src]": 3
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::DataAccessError::Conflict"
+      },
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::DataAccessError::Internal"
+      },
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::DataAccessError::GenerationKeyError"
+      }
+     ]
+    },
+    "Generation": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 159,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A01"
+     ],
+     "site_count": 6,
+     "buckets": {
+      "consumer-A01[src]": 8,
+      "consumer-A02[src]": 9,
+      "consumer-A04[src]": 3,
+      "consumer-A05[src]": 2,
+      "consumer-A06[src]": 5,
+      "harness-A08[src]": 1,
+      "consumer-A09[src]": 3,
+      "consumer-A09[test]": 1,
+      "consumer-A10[src]": 4,
+      "consumer-A11[src]": 2,
+      "consumer-A13[src]": 9,
+      "consumer-A14[test]": 8,
+      "consumer-A15[src]": 18,
+      "consumer-A16[src]": 1,
+      "consumer-A17[src]": 6,
+      "consumer-A18[src]": 3,
+      "consumer-A19[src]": 3,
+      "consumer-A20[src]": 1,
+      "consumer-A21[src]": 7,
+      "consumer-A22[src]": 1,
+      "consumer-A23[src]": 4,
+      "consumer-A24[src]": 6,
+      "consumer-A25[src]": 2,
+      "consumer-A27[src]": 6,
+      "harness-A29[src]": 46
+     },
+     "use_keys_head": []
+    },
+    "InternalError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::InternalError::new"
+      }
+     ]
+    },
+    "NotFoundError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 2,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10",
+      "harness-A29"
+     ],
+     "site_count": 3,
+     "buckets": {
+      "consumer-A10[qualified]": 1,
+      "harness-A29[src]": 2
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::NotFoundError::new"
+      }
+     ]
+    },
+    "QueryAccess": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[qualified]": 4
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::generic::QueryAccess"
+      },
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::generic::QueryAccess::new"
+      },
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::generic::QueryAccess"
+      },
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::generic::QueryAccess::new"
+      }
+     ]
+    },
+    "QueryDomain": {
+     "kinds": [
+      "trait"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "QueryInfo": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 2,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 2,
+     "buckets": {
+      "consumer-A10[qualified]": 1,
+      "consumer-A10[src]": 1,
+      "consumer-A10[test]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::generic::QueryInfo"
+      }
+     ]
+    },
+    "RepositoryError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10",
+      "harness-A29"
+     ],
+     "site_count": 2,
+     "buckets": {
+      "consumer-A10[qualified]": 1,
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::RepositoryError::new"
+      }
+     ]
+    },
+    "ResourceId": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 11,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10",
+      "consumer-A15",
+      "harness-A29"
+     ],
+     "site_count": 6,
+     "buckets": {
+      "consumer-A10[src]": 3,
+      "consumer-A15[src]": 2,
+      "harness-A29[src]": 6
+     },
+     "use_keys_head": []
+    },
+    "Subject": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 880,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A01"
+     ],
+     "site_count": 6,
+     "buckets": {
+      "consumer-A01[src]": 108,
+      "consumer-A01[test]": 2,
+      "consumer-A02[src]": 43,
+      "consumer-A02[test]": 3,
+      "consumer-A03[src]": 9,
+      "consumer-A04[src]": 30,
+      "consumer-A05[src]": 27,
+      "consumer-A06[src]": 23,
+      "consumer-A06[test]": 2,
+      "consumer-A07[src]": 15,
+      "consumer-A07[test]": 7,
+      "harness-A08[src]": 4,
+      "consumer-A09[src]": 17,
+      "consumer-A09[test]": 2,
+      "consumer-A10[src]": 4,
+      "consumer-A10[test]": 2,
+      "consumer-A11[src]": 13,
+      "consumer-A11[test]": 2,
+      "consumer-A13[src]": 84,
+      "consumer-A13[test]": 2,
+      "consumer-A14[src]": 5,
+      "consumer-A14[test]": 2,
+      "consumer-A15[src]": 69,
+      "consumer-A15[test]": 15,
+      "consumer-A16[src]": 16,
+      "consumer-A16[test]": 4,
+      "consumer-A17[src]": 27,
+      "consumer-A18[src]": 13,
+      "consumer-A19[src]": 24,
+      "consumer-A19[test]": 2,
+      "consumer-A20[src]": 14,
+      "consumer-A20[test]": 2,
+      "consumer-A21[src]": 87,
+      "consumer-A21[test]": 2,
+      "consumer-A22[src]": 8,
+      "consumer-A22[test]": 2,
+      "consumer-A23[src]": 30,
+      "consumer-A23[test]": 4,
+      "consumer-A24[src]": 57,
+      "consumer-A24[test]": 4,
+      "consumer-A25[src]": 18,
+      "consumer-A27[src]": 48,
+      "harness-A29[src]": 28
+     },
+     "use_keys_head": []
+    },
+    "ValidationError": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A10[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A10",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "daf_core::ValidationError::new"
+      }
+     ]
+    }
+   },
+   "imported_but_unused": {
+    "DomainDataAccess": {
+     "consumers": [
+      "consumer-A10"
+     ]
+    },
+    "MutationAccess": {
+     "consumers": [
+      "consumer-A10"
+     ]
+    },
+    "MutationDomain": {
+     "consumers": [
+      "consumer-A10"
+     ]
+    },
+    "StaticPolicyAuthorizer": {
+     "consumers": [
+      "consumer-A10"
+     ]
+    },
+    "generic": {
+     "consumers": [
+      "consumer-A10"
+     ]
+    }
+   },
+   "never_imported_by_kind": {
+    "enum": [
+     "AdmissionMode",
+     "QueryError",
+     "Tier"
+    ],
+    "fn": [
+     "access",
+     "acquire",
+     "advance",
+     "as_u64",
+     "authorize",
+     "authorize_mutation",
+     "authorize_query",
+     "belongs_to_tenant",
+     "capability",
+     "domain",
+     "global",
+     "insert",
+     "new",
+     "policies",
+     "pool",
+     "required_pool",
+     "row",
+     "subject_from_legacy_user",
+     "subject_json_key",
+     "typed_access_row",
+     "valid",
+     "with_global_admin",
+     "with_idempotency",
+     "with_policy",
+     "with_role"
+    ],
+    "macro": [
+     "daf_mutation",
+     "daf_policy",
+     "daf_query",
+     "daf_row",
+     "daf_rows"
+    ],
+    "mod": [
+     "access",
+     "authorized",
+     "authorizer",
+     "contracts",
+     "lock_registry",
+     "macros",
+     "policy",
+     "types"
+    ],
+    "struct": [
+     "AlgorithmStats",
+     "CacheEntry",
+     "DeleteInfo",
+     "LockGuard",
+     "LockRegistry",
+     "MutationContext",
+     "MutationInfo",
+     "MutationResult",
+     "PolicyAccess",
+     "PostInfo",
+     "PutInfo",
+     "QueryResult",
+     "ResourcePolicy",
+     "UserId"
+    ],
+    "trait": [
+     "Algorithm",
+     "Authorizer",
+     "Cache",
+     "Idempotency",
+     "PolicyTable",
+     "Repository"
+    ],
+    "type": [
+     "JsonValue"
+    ]
+   }
+  },
+  "daf_ffi": {
+   "total_public": 8,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "DafErrorCode"
+    ],
+    "fn": [
+     "daf_data_access_free",
+     "daf_data_access_new",
+     "daf_delete",
+     "daf_last_error_message",
+     "daf_post",
+     "daf_put",
+     "daf_query"
+    ]
+   }
+  },
+  "daf_http": {
+   "total_public": 4,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "into_router",
+     "new"
+    ],
+    "struct": [
+     "AppError",
+     "DataAccessRouter"
+    ]
+   }
+  },
+  "daf_messaging": {
+   "total_public": 2,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "new"
+    ],
+    "struct": [
+     "Messaging"
+    ]
+   }
+  },
+  "daf_repository": {
+   "total_public": 3,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "new"
+    ],
+    "mod": [
+     "memory"
+    ],
+    "struct": [
+     "MemoryRepository"
+    ]
+   }
+  },
+  "daf_runtime": {
+   "total_public": 7,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": null,
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "block_on",
+     "current",
+     "handle",
+     "new",
+     "spawn"
+    ],
+    "struct": [
+     "Handle",
+     "Runtime"
+    ]
+   }
+  },
+  "prv_cache": {
+   "total_public": 33,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": "transitive (not pinned)",
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "anonymous_ctx",
+     "ctx",
+     "ekf_state_key",
+     "exists",
+     "get",
+     "get_or_fetch",
+     "historical_data_key",
+     "insert",
+     "invalidate",
+     "invalidate_many",
+     "is_empty",
+     "keys_for_subject",
+     "len",
+     "namespace_of",
+     "new",
+     "policy_decision_key",
+     "record",
+     "refresh",
+     "remove",
+     "set",
+     "simulation_results_key",
+     "snapshot",
+     "stats_snapshot",
+     "subject_for",
+     "warm_many",
+     "with_tiers"
+    ],
+    "mod": [
+     "index",
+     "keys",
+     "manager",
+     "stats"
+    ],
+    "struct": [
+     "CacheStats",
+     "KeyIndex",
+     "NsCache"
+    ]
+   }
+  },
+  "prv_core": {
+   "total_public": 32,
+   "used": 2,
+   "utilization_pct": 6.2,
+   "pinned": "0.2.1 caret (default-features off at the optimizer/evaluation rows)",
+   "used_symbols": {
+    "PrvError": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_core::PrvError"
+      }
+     ]
+    },
+    "State": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 6,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18",
+      "consumer-A26",
+      "consumer-A28"
+     ],
+     "site_count": 3,
+     "buckets": {
+      "consumer-A18[src]": 2,
+      "consumer-A26[qualified]": 1,
+      "consumer-A26[src]": 2,
+      "consumer-A28[src]": 2
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A26",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_core::State::capacity"
+      }
+     ]
+    }
+   },
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "Regime"
+    ],
+    "fn": [
+     "as_vector",
+     "capacity",
+     "demand_pressure",
+     "fiscal_capacity",
+     "frequency",
+     "from_pressure",
+     "geopolitical_load",
+     "housing_pressure",
+     "interpolate",
+     "investment",
+     "is_empty",
+     "labour_absorption",
+     "len",
+     "migration_pressure",
+     "new",
+     "resample",
+     "validate_quarterly",
+     "value",
+     "with_frequency"
+    ],
+    "mod": [
+     "error",
+     "observation",
+     "prv",
+     "regime",
+     "state",
+     "time"
+    ],
+    "struct": [
+     "Observation",
+     "PressureReleaseValve",
+     "TimeSeries"
+    ],
+    "type": [
+     "Control"
+    ]
+   }
+  },
+  "prv_data": {
+   "total_public": 18,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": "transitive (not pinned)",
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "DataError"
+    ],
+    "fn": [
+     "clear",
+     "get",
+     "load_historical",
+     "load_historical_cached",
+     "new",
+     "preprocess",
+     "set",
+     "source",
+     "to_observations",
+     "with_source"
+    ],
+    "mod": [
+     "cache",
+     "error",
+     "loader"
+    ],
+    "struct": [
+     "DataCache",
+     "DataFrame",
+     "DataLoader"
+    ],
+    "type": [
+     "DataResult"
+    ]
+   }
+  },
+  "prv_evaluation": {
+   "total_public": 20,
+   "used": 4,
+   "utilization_pct": 20.0,
+   "pinned": "0.2.2 caret, default-features = false (0.2.1 predates the tail-risk module)",
+   "used_symbols": {
+    "expected_shortfall": {
+     "kinds": [
+      "fn"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_evaluation::expected_shortfall"
+      }
+     ]
+    },
+    "mae": {
+     "kinds": [
+      "fn"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_evaluation::metrics::mae"
+      }
+     ]
+    },
+    "rmse": {
+     "kinds": [
+      "fn"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_evaluation::metrics::rmse"
+      }
+     ]
+    },
+    "value_at_risk": {
+     "kinds": [
+      "fn"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_evaluation::value_at_risk"
+      }
+     ]
+    }
+   },
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "Baseline",
+     "MetricError"
+    ],
+    "fn": [
+     "backtest",
+     "brier_score",
+     "log_loss",
+     "new"
+    ],
+    "mod": [
+     "backtest",
+     "metrics",
+     "tail"
+    ],
+    "struct": [
+     "EvaluationResults",
+     "Evaluator",
+     "LinearStateModel",
+     "MetricResults",
+     "MovingAverageModel",
+     "NaiveModel",
+     "NonQuaternionStateModel"
+    ],
+    "trait": [
+     "Model"
+    ]
+   }
+  },
+  "prv_filter": {
+   "total_public": 22,
+   "used": 6,
+   "utilization_pct": 27.3,
+   "pinned": "0.2.1 caret",
+   "used_symbols": {
+    "Ekf": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 2,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A28"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A28[src]": 2
+     },
+     "use_keys_head": []
+    },
+    "EkfResult": {
+     "kinds": [
+      "type"
+     ],
+     "use_refs": 2,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A28"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A28[src]": 2
+     },
+     "use_keys_head": []
+    },
+    "Observation": {
+     "kinds": [],
+     "use_refs": 3,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A28"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A28[src]": 3
+     },
+     "use_keys_head": []
+    },
+    "ObservationModel": {
+     "kinds": [
+      "trait"
+     ],
+     "use_refs": 1,
+     "def_sites": 1,
+     "consumers": [
+      "consumer-A28"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A28[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "State": {
+     "kinds": [],
+     "use_refs": 7,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A28"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A28[src]": 7
+     },
+     "use_keys_head": []
+    },
+    "TransitionModel": {
+     "kinds": [
+      "trait"
+     ],
+     "use_refs": 1,
+     "def_sites": 1,
+     "consumers": [
+      "consumer-A28"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A28[src]": 1
+     },
+     "use_keys_head": []
+    }
+   },
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "EkfError"
+    ],
+    "fn": [
+     "covariance_psd",
+     "covariance_symmetry",
+     "finite_covariance",
+     "finite_state",
+     "innovation_statistics",
+     "jacobian_f",
+     "new",
+     "predict",
+     "quaternion_normalize",
+     "stabilize_covariance",
+     "update",
+     "with_dim"
+    ],
+    "mod": [
+     "ekf",
+     "observation",
+     "transition"
+    ],
+    "struct": [
+     "DefaultObservation",
+     "DefaultTransition"
+    ]
+   }
+  },
+  "prv_monte_carlo": {
+   "total_public": 12,
+   "used": 1,
+   "utilization_pct": 8.3,
+   "pinned": "0.2.1 caret",
+   "used_symbols": {
+    "Simulator": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 5,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18",
+      "consumer-A26",
+      "consumer-A28"
+     ],
+     "site_count": 3,
+     "buckets": {
+      "consumer-A18[src]": 1,
+      "consumer-A26[src]": 2,
+      "consumer-A28[src]": 2
+     },
+     "use_keys_head": []
+    }
+   },
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "ShockType"
+    ],
+    "fn": [
+     "apply",
+     "new",
+     "run_path",
+     "sample_state",
+     "simulate"
+    ],
+    "mod": [
+     "shocks",
+     "simulator"
+    ],
+    "struct": [
+     "MonteCarloProbabilities",
+     "MonteCarloResults",
+     "ShockSpec"
+    ]
+   }
+  },
+  "prv_optimizer": {
+   "total_public": 37,
+   "used": 9,
+   "utilization_pct": 24.3,
+   "pinned": "0.2.1 caret, default-features = false",
+   "used_symbols": {
+    "Bounds": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Bounds::new"
+      }
+     ]
+    },
+    "LinearConstraint": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 2
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::LinearConstraint"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::LinearConstraint::new"
+      }
+     ]
+    },
+    "Objective": {
+     "kinds": [
+      "trait"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 2
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Objective::value"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Objective"
+      }
+     ]
+    },
+    "OptimizationOutcome": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 3
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::OptimizationOutcome::Optimal"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::OptimizationOutcome::Infeasible"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::OptimizationOutcome::NonConvergent"
+      }
+     ]
+    },
+    "OptimizerError": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 2,
+     "buckets": {
+      "consumer-A18[qualified]": 7
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::OptimizerError"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::OptimizerError"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::OptimizerError::ConstraintLength"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::OptimizerError"
+      }
+     ]
+    },
+    "Problem": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Problem::new"
+      }
+     ]
+    },
+    "SolverConfig": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::SolverConfig::default"
+      }
+     ]
+    },
+    "Trajectory": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 6
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Trajectory::new"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Trajectory"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Trajectory"
+      },
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::Trajectory"
+      }
+     ]
+    },
+    "minimize": {
+     "kinds": [
+      "fn"
+     ],
+     "use_refs": 0,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A18"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A18[qualified]": 1
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A18",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "prv_optimizer::minimize"
+      }
+     ]
+    }
+   },
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "fn": [
+     "as_slice",
+     "bounds",
+     "coeffs",
+     "constant",
+     "constraints",
+     "fixed",
+     "id",
+     "is_empty",
+     "is_optimal",
+     "len",
+     "lhs",
+     "lower",
+     "max_violation",
+     "new",
+     "non_finite",
+     "objective",
+     "project_box",
+     "project_halfspace",
+     "rhs",
+     "single",
+     "trajectory",
+     "unbounded",
+     "upper",
+     "values_mut",
+     "violated_ids",
+     "violation"
+    ],
+    "struct": [
+     "SolverReport",
+     "WeightedObjective"
+    ]
+   }
+  },
+  "prv_policy": {
+   "total_public": 9,
+   "used": 0,
+   "utilization_pct": 0.0,
+   "pinned": "transitive (not pinned)",
+   "used_symbols": {},
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "PolicyBias",
+     "PolicyInstrument"
+    ],
+    "fn": [
+     "evaluate",
+     "new",
+     "regime_response"
+    ],
+    "mod": [
+     "engine"
+    ],
+    "struct": [
+     "PolicyDistribution",
+     "PolicyEngine",
+     "PolicyWeights"
+    ]
+   }
+  },
+  "themql_core": {
+   "total_public": 87,
+   "used": 15,
+   "utilization_pct": 17.2,
+   "pinned": "=0.2.0 exact",
+   "used_symbols": {
+    "Comparison": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "Context": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "CorrelationId": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 3,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A15"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A15[src]": 3
+     },
+     "use_keys_head": []
+    },
+    "Error": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 16,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10",
+      "consumer-A15",
+      "harness-A12",
+      "harness-A29"
+     ],
+     "site_count": 4,
+     "buckets": {
+      "consumer-A10[src]": 11,
+      "harness-A12[qualified]": 1,
+      "consumer-A15[src]": 2,
+      "harness-A29[src]": 3
+     },
+     "use_keys_head": [
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::Error"
+      }
+     ]
+    },
+    "ErrorCode": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 20,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A10",
+      "consumer-A15",
+      "consumer-A27",
+      "harness-A12"
+     ],
+     "site_count": 6,
+     "buckets": {
+      "consumer-A10[src]": 8,
+      "harness-A12[fuzz]": 1,
+      "consumer-A15[src]": 4,
+      "consumer-A15[qualified]": 4,
+      "consumer-A27[src]": 3,
+      "harness-A29[src]": 4
+     },
+     "use_keys_head": [
+      {
+       "crate": "consumer-A15",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::ErrorCode::NotFound"
+      },
+      {
+       "crate": "consumer-A15",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::ErrorCode::AuthorizationError"
+      },
+      {
+       "crate": "consumer-A15",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::ErrorCode::Conflict"
+      },
+      {
+       "crate": "consumer-A15",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::ErrorCode::ResolverError"
+      }
+     ]
+    },
+    "FieldPath": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 2,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 2
+     },
+     "use_keys_head": []
+    },
+    "MessageId": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 3,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A15"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "consumer-A15[src]": 3
+     },
+     "use_keys_head": []
+    },
+    "Predicate": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "Principal": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "Projection": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "Query": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 5,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A15",
+      "harness-A12",
+      "harness-A29"
+     ],
+     "site_count": 3,
+     "buckets": {
+      "harness-A12[qualified]": 2,
+      "consumer-A15[src]": 2,
+      "harness-A29[src]": 3
+     },
+     "use_keys_head": [
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::Query"
+      },
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::Query"
+      }
+     ]
+    },
+    "Resource": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": []
+    },
+    "Response": {
+     "kinds": [
+      "struct"
+     ],
+     "use_refs": 8,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A15",
+      "harness-A12",
+      "harness-A29"
+     ],
+     "site_count": 3,
+     "buckets": {
+      "harness-A12[qualified]": 2,
+      "consumer-A15[src]": 6,
+      "harness-A29[src]": 2
+     },
+     "use_keys_head": [
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::Response"
+      },
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::Response"
+      }
+     ]
+    },
+    "ResponseValue": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 10,
+     "def_sites": 0,
+     "consumers": [
+      "consumer-A15",
+      "harness-A12",
+      "harness-A29"
+     ],
+     "site_count": 3,
+     "buckets": {
+      "harness-A12[qualified]": 3,
+      "consumer-A15[src]": 7,
+      "harness-A29[src]": 3
+     },
+     "use_keys_head": [
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::ResponseValue::Json"
+      },
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::ResponseValue::Bytes"
+      },
+      {
+       "crate": "harness-A12",
+       "file": "<consumer-file>",
+       "kind": "qualified-inline",
+       "path": "themql_core::ResponseValue::Unit"
+      }
+     ]
+    },
+    "Selection": {
+     "kinds": [
+      "enum"
+     ],
+     "use_refs": 1,
+     "def_sites": 0,
+     "consumers": [
+      "harness-A29"
+     ],
+     "site_count": 1,
+     "buckets": {
+      "harness-A29[src]": 1
+     },
+     "use_keys_head": []
+    }
+   },
+   "imported_but_unused": {},
+   "never_imported_by_kind": {
+    "enum": [
+     "CacheTier",
+     "FormatTag",
+     "InvalidationHint",
+     "Operation",
+     "PatternSegment",
+     "Payload",
+     "SubjectError",
+     "TimestampKind"
+    ],
+    "fn": [
+     "all",
+     "as_str",
+     "as_uuid",
+     "authorization_error",
+     "cache_miss",
+     "cancel",
+     "conflict",
+     "disabled",
+     "err",
+     "exclude",
+     "filter",
+     "for_request",
+     "from_segments",
+     "from_str",
+     "from_subject",
+     "include",
+     "internal_error",
+     "is_cancelled",
+     "is_concrete",
+     "is_err",
+     "is_expired",
+     "is_ok",
+     "is_valid",
+     "matches",
+     "new",
+     "not_found",
+     "now_monotonic",
+     "now_wall_clock",
+     "ok",
+     "resolver_error",
+     "segments",
+     "timeout",
+     "transport_error",
+     "validation_error",
+     "with_arguments",
+     "with_bypass",
+     "with_cache_policy",
+     "with_causation",
+     "with_correlation",
+     "with_deadline",
+     "with_details",
+     "with_extension",
+     "with_principal",
+     "with_projection",
+     "with_selection",
+     "with_subject",
+     "with_tier",
+     "with_trace",
+     "with_ttl"
+    ],
+    "struct": [
+     "CachePolicy",
+     "Cancellation",
+     "CausationId",
+     "Deadline",
+     "Message",
+     "Metadata",
+     "Subject",
+     "SubjectPattern",
+     "SubjectSegment",
+     "Timestamp",
+     "TraceId"
+    ],
+    "trait": [
+     "MessageHandler",
+     "QueryExecutor",
+     "Resolver",
+     "ResolverBoxed"
+    ]
+   }
+  }
+ },
+ "macronames_exported": [
+  "daf_mutation",
+  "daf_policy",
+  "daf_query",
+  "daf_row",
+  "daf_rows"
+ ]
+}
