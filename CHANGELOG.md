@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   messaging legs 0%), the unused-capability groups (types/traits/macros/
   adapters/policy), and the sanitized value cases. No source change.
 
+## [Unreleased]
+
+### Added
+
+- `docs/proposals/daf-production-readiness.md` — the production-readiness
+  program (design-first): the per-crate gap audit across 8 axes
+  (tenancy/resilience/persistence/observability/config/hot-path
+  latency/assertion gates/supply-chain), the 0.2-facade retirement arc
+  (0.3.x deprecated-in-place → 0.4.0 feature-gated → 0.5.0 removed), the
+  six-wave plan, and the "what only a downstream integration test proves"
+  row.
+- `docs/daf-graphql-seam-design.md` — the GraphQL-seam annex: the
+  `crates/daf-graphql` adapter member (the transport-blind law preserved),
+  the typed-schema thesis (the declaration macros author the field and its
+  wired types — one line per resource), the SDL/DDL agreement artifacts,
+  the generation-driven subscription design, and the eval-surface fit.
+  No source/manifest/lock change.
+
 ## [0.3.2] - 2026-10-25
 
 ### Changed
