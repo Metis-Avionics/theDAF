@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `0.3.1` keeps the tenant-before-pool ordering domain-owned: domain functions receive `Option<&P>` and decide the B-281 denial after scope rules. The published contract now matches the migration pin behavior.
+- Seam composition law: the declaration macros adopt the hand-written access adapters at birth — `daf_query!`/`daf_mutation!` build their access rows by wrapping `QueryAccess`/`MutationAccess` instead of re-authoring the JSON boundary (route refusal, replay ordering, output encoding), and `daf_row!` delegates to `typed_access_row`. One author per pattern; the generated access surface is unchanged.
+- Access hygiene: dropped the dead `duplicate` shadow loop in `DomainDataAccess::new` (its construction-time duplicate check was running the comparison twice and kept an unused flag), the unused `std::any::Any` import and its trailing no-op const, and restored the garbled 0.3.1 pool-ordering comment.
 
 
 ### Added
