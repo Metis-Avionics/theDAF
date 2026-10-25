@@ -15,7 +15,7 @@
 
 [spec]
 name = "theDAF"
-version = "0.1.0"
+version = "0.3.1"
 kind = "data-access-facade"
 status = "architectural-revision"
 
@@ -55,6 +55,25 @@ identity_is_single_field = true
 tenant_is_single_field = true
 global_admin_is_explicit_flag = true
 
+[subject.generic]
+identity_id_is_verified = true
+tenant_id_is_effective_scope = true
+roles_are_data = true
+is_global_admin_is_flag = true
+
+[generic]
+# 0.3 separates one non-object-safe domain function from its object-safe JSON
+# boundary. Domain implementations may use any pool; DAF never imports a
+# storage or transport crate.
+typed_domains = true
+object_safe_boundary = true
+resource_matching_is_fail_closed = true
+pool_denial_names_resource = true
+tenant_before_pool_is_domain_owned = true
+idempotency_replays_before_execution = true
+static_policy_is_fail_closed = true
+
+
 # ---------------------------------------------------------------------------
 # Cache + generation
 # ---------------------------------------------------------------------------
@@ -68,13 +87,13 @@ ladder_count = 4
 origin_tier_is_recorded = true
 
 [cache.generation]
-# The counter authority is `thesix::Generation` (pinned =0.4.0): DAF wraps it
+# The counter authority is `thesix::Generation` (pinned =0.5.0): DAF wraps it
 # as `Missing | Valid(thesix::Generation)` rather than declaring a second u64
 # counter for the same concept. `Missing` is DAF's addition — thesix encodes
 # absence in its EntryState, which a u64 counter cannot. Wrap, do not fork:
 # a second authority for one concept is how the two drift.
 counter_authority = "thesix::Generation"
-counter_pin = "=0.4.0"
+counter_pin = "=0.5.0"
 daf_adds_absence_variant = true
 serde_wire_is_legacy_stable = true
 # advance(): Missing -> Valid(1); Valid(n) -> Valid(n+1) with an overflow
@@ -114,6 +133,30 @@ proof = "crates/daf-core/tests/contract_tests.rs: generation_advancement proves 
 [[gates.binding]]
 clause = "repository.repository_authorizes"
 proof = "crates/daf-application/src/lib.rs: repositories receive an admitted DafSubject and return DataAccessError; no repository holds an admission predicate"
+
+[[gates.binding]]
+clause = "subject.generic.identity_id_is_verified"
+proof = "crates/daf-core/tests/generic_tests.rs: typed_query_parses_runs_and_encodes passes the caller identity through the typed boundary"
+
+[[gates.binding]]
+clause = "generic.object_safe_boundary"
+proof = "crates/daf-core/tests/generic_tests.rs: typed_query_parses_runs_and_encodes proves the QueryAccess JSON boundary invokes the typed domain"
+
+[[gates.binding]]
+clause = "generic.pool_denial_names_resource"
+proof = "crates/daf-core/tests/generic_tests.rs: query_access_denies_missing_pool_by_resource pins the B-281 wording"
+
+[[gates.binding]]
+clause = "generic.idempotency_replays_before_execution"
+proof = "crates/daf-core/tests/generic_tests.rs: mutation_replays_without_a_second_side_effect proves one execution and replay"
+
+[[gates.binding]]
+clause = "generic.resource_matching_is_fail_closed"
+proof = "crates/daf-core/tests/macro_tests.rs: wrong_resource_by_a_concrete_macro_adapter_validation_refuses proves a concrete adapter route failure"
+
+[[gates.binding]]
+clause = "generic.static_policy_is_fail_closed"
+proof = "crates/daf-core/tests/generic_tests.rs: static_policy_admits_and_enforces proves Authenticated and GlobalAdmin modes"
 
 [[gates.binding]]
 clause = "errors.errors_are_enums"

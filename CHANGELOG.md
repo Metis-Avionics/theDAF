@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1]
+
+### Changed
+
+- query/mutation domain functions receive `Option<&P>` so tenant scoping owns its own B-281 pool gate; DAF still never imports a storage/transport crate.
+
 ## [Unreleased]
+
+### Changed
+
+- `0.3.1` keeps the tenant-before-pool ordering domain-owned: domain functions receive `Option<&P>` and decide the B-281 denial after scope rules. The published contract now matches the migration pin behavior.
+- Seam composition law: the declaration macros adopt the hand-written access adapters at birth — `daf_query!`/`daf_mutation!` build their access rows by wrapping `QueryAccess`/`MutationAccess` instead of re-authoring the JSON boundary (route refusal, replay ordering, output encoding), and `daf_row!` delegates to `typed_access_row`. One author per pattern; the generated access surface is unchanged.
+- Access hygiene: dropped the dead `duplicate` shadow loop in `DomainDataAccess::new` (its construction-time duplicate check was running the comparison twice and kept an unused flag), the unused `std::any::Any` import and its trailing no-op const, and restored the garbled 0.3.1 pool-ordering comment.
+
 
 ### Added
 
@@ -16,6 +29,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Intra-workspace path dependencies now pin `version = "0.1.0"` alongside `path` (required by `cargo publish`)
+
+## [0.3.0] - 2026-10-20
+
+### Added
+
+- `daf-core::generic`: `Subject`, `QueryDomain`/`MutationDomain`, object-safe
+  `QueryAccess`/`MutationAccess`, `DomainDataAccess`, static policy tables and
+  declaration macros.
+- Compatibility bridge: `subject_from_legacy_user` moves the legacy 0.2 user
+  identity into a tenant-scoped typed subject.
+
+### Changed
+
+- `UserId`, the old `Algorithm` and the old `Authorizer` are deprecated; the
+  0.2 JSON/FFI facade remains available, while the generic contract is the 0.3
+  surface.
+
+### Deprecated
+
+- The 0.2 JSON/FFI-facing `UserId`, `Algorithm`, and `Authorizer` contracts.
 
 ## [0.2.2] - 2026-08-17
 

@@ -1,3 +1,75 @@
+Agent-daf-kit-law-9f2c Status: active
+Completed session: seam-law audit + access-kit adoption (feat/daf-generic-core-0-3)
+UTC: 2026-10-25T00:28:17.422702+00:00
+
+Released files:
+- crates/daf-core/src/generic/macros.rs — declaration macros wrap the
+  hand-written access adapters (QueryAccess / MutationAccess) instead of
+  re-authoring the JSON boundary; daf_row! delegates to typed_access_row.
+- crates/daf-core/src/generic/access.rs — dead `duplicate` shadow loop in
+  DomainDataAccess::new removed; unused std::any::Any import + trailing
+  no-op const removed; 0.3.1 pool-ordering comment restored.
+- CHANGELOG.md, SESSION.md.
+
+Local gates run:
+- python scripts/power_of_ten_rust.py — green (pure; no cargo/rustc on
+  this box, even as --check: CI owns the Rust verdicts on the pushed head).
+- Brace/token balance sanity on both edited .rs files.
+- CI on the first pushed head (4473966): rust-test green; rust-lint +
+  power-of-ten-rust red on exactly one fmt diff (a missing final
+  newline in macros.rs) — repaired by 608a486 (style) and re-pushed;
+  the re-run's verdict is CI's.
+- Rust fmt/clippy/test NOT run locally (box rule); the branch's own
+  prior gates (fmt/clippy/test at cde42ab) remain the baseline.
+
+Seam-law audit record (branch audit, feat/daf-generic-core-0-3):
+- Re-export-only seam: COMPLIANT — crates/daf-core/src/generic/mod.rs is
+  a pure `pub mod` + `pub use` barrel; zero logic. Any logic landing
+  there in a later wave is a violation.
+- Extraction-at-birth: VIOLATION FOUND AND FIXED — the JSON boundary
+  (route refusal, argument decode, replay ordering, output encode) was
+  authored twice: once in access.rs, once inline in daf_query!/
+  daf_mutation! (the encode mapping at 5 sites; the route/kind refusal
+  strings at 7+5 sites). Macros now wrap the single-authored adapters.
+  Below-threshold residue (2-3 copies): the replay flow hand-authored in
+  MutationAccess + one macro arm, the "not served by this policy"
+  registry denial (2 copies in DomainDataAccess), and the idempotency
+  slot debug_assert (3 copies; the per-function assertion-density gate
+  requires it at each non-const generated fn).
+- One author per type: NO same-shape twin found on the branch. The
+  legacy 0.2 `QueryInfo` vs `generic::QueryInfo` is a NAME shadow across
+  the two planes (different shapes, deliberate 0.2 bridge), not a wire
+  twin; the legacy copy carries no deprecation note unlike its siblings
+  (UserId / Algorithm / Authorizer) — disposition left to the owner.
+
+Agent-daf-generic-core-b7c2 Status: active
+Completed session: daf_generic_core_0_3
+UTC: 2026-10-20T11:26:46.391752+00:00
+
+Released files:
+- crates/daf-core/src/generic/*
+- crates/daf-core/tests/generic_tests.rs, macro_tests.rs, policy_access_tests.rs
+- workspace/package versions and lockfile
+- theDAF.toml, CHANGELOG.md, scripts/power_of_ten_rust.py
+
+Local gates run:
+- tenant-before-pool regression, generic seam, macro, policy and 0.2 bridge tests.
+
+- cargo fmt --all --check equivalent (cargo fmt then check)
+- cargo clippy --workspace --all-targets --all-features -- -D warnings
+- cargo test --workspace --offline
+- python scripts/power_of_ten_rust.py
+- uv run pytest tests/ -q before the deprecation patch; the patch only carries
+  allow(deprecated) at the legacy bridge and no Python-facing code change.
+
+Agent-daf-generic-core-b7c2 Status: active
+
+Claim: crates/daf-core/src/generic/**, crates/daf-core/src/lib.rs,
+crates/daf-core/tests/generic_tests.rs, crates/daf-core/tests/macro_tests.rs,
+crates/*/Cargo.toml, theDAF.toml, CHANGELOG.md, SESSION.md.
+
+Files just released: none yet.
+Next intended files: none until implementation/verification completes.
 # Session Log
 
 ## Session 001 - 2026-08-13

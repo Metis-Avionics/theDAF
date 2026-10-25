@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use std::collections::HashMap;
 
 use daf_core::{

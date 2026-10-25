@@ -1,5 +1,5 @@
+#![allow(deprecated)]
 #![allow(clippy::assertions_on_constants)]
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
@@ -7,7 +7,9 @@ use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
 
+pub mod generic;
 pub mod lock_registry;
+pub use async_trait::async_trait;
 pub use lock_registry::{LockGuard, LockRegistry};
 
 pub type JsonValue = serde_json::Value;
@@ -46,6 +48,10 @@ impl fmt::Display for ResourceId {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
+#[deprecated(
+    since = "0.3.0",
+    note = "use daf_core::generic::Subject; UserId remains a 0.2 compatibility adapter"
+)]
 pub struct UserId(pub String);
 
 impl UserId {
@@ -78,6 +84,10 @@ pub enum DataAccessError {
     Algorithm(#[from] AlgorithmError),
     #[error("authorization failed: {0}")]
     Authorization(#[from] AuthorizationError),
+    #[error("conflict: {0}")]
+    Conflict(crate::ConflictError),
+    #[error("internal error: {0}")]
+    Internal(crate::InternalError),
 }
 
 #[derive(Debug, Error, Clone)]
@@ -139,6 +149,26 @@ impl AlgorithmError {
 pub struct AuthorizationError(pub String);
 
 impl AuthorizationError {
+    pub fn new(msg: impl Into<String>) -> Self {
+        Self(msg.into())
+    }
+}
+
+#[derive(Debug, Error, Clone)]
+#[error("conflict: {0}")]
+pub struct ConflictError(pub String);
+
+impl ConflictError {
+    pub fn new(msg: impl Into<String>) -> Self {
+        Self(msg.into())
+    }
+}
+
+#[derive(Debug, Error, Clone)]
+#[error("internal error: {0}")]
+pub struct InternalError(pub String);
+
+impl InternalError {
     pub fn new(msg: impl Into<String>) -> Self {
         Self(msg.into())
     }
@@ -370,6 +400,10 @@ pub trait Cache: Send + Sync {
     }
 }
 
+#[deprecated(
+    since = "0.3.0",
+    note = "use daf_core::generic::QueryDomain and JSON DataAccess"
+)]
 #[async_trait]
 pub trait Algorithm: Send + Sync {
     async fn execute(
@@ -379,6 +413,10 @@ pub trait Algorithm: Send + Sync {
     async fn get_stats(&self) -> Result<AlgorithmStats, AlgorithmError>;
 }
 
+#[deprecated(
+    since = "0.3.0",
+    note = "use daf_core::generic::StaticPolicyAuthorizer and PolicyAccess"
+)]
 #[async_trait]
 pub trait Authorizer: Send + Sync {
     async fn authorize(

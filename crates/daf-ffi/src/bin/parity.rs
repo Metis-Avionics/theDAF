@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::Arc;

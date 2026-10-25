@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #![allow(clippy::assertions_on_constants)]
 use std::any::Any;
 use std::collections::HashMap;
