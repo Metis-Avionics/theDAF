@@ -3,7 +3,6 @@
 use async_trait::async_trait;
 use serde_json::Value;
 use sha2::Digest;
-use std::any::Any;
 use std::sync::Arc;
 
 use crate::DataAccessError;
@@ -255,9 +254,11 @@ where
         if info.resource != M::RESOURCE {
             return Err(wrong_mutation_route(M::RESOURCE, &info.resource));
         }
-        // Keep pool availability under domain scope/tenant validation: DAF
-        // exposes the optional pool, but never preempts a tenant rule., but after the pool check: a malformed
-        // request must not hide an unconfigured deployment's hard denial.
+        // Keep pool availability under domain scope/tenant validation
+        // (0.3.1 ordering): DAF exposes the optional pool, but never
+        // preempts the tenant rule — the domain function owns the B-281
+        // denial and decides it after its own scope checks. Adapters only
+        // expose pool availability.
         let input = M::parse_arguments(&info.arguments).await?;
         if let Some(idem) = self.idempotency.as_ref()
             && let Some(key) = self.domain.idempotency_key(subject, &input)
@@ -305,7 +306,6 @@ impl DomainDataAccess {
             !rows.iter().any(|(resource, _)| resource.is_empty()),
             "registry resources must be named"
         );
-        let mut duplicate = false;
         for (index, resource) in rows.iter().map(|(resource, _)| *resource).enumerate() {
             debug_assert!(
                 rows[index + 1..]
@@ -313,14 +313,7 @@ impl DomainDataAccess {
                     .all(|(other, _)| *other != resource),
                 "duplicate resource row"
             );
-            if rows[index + 1..]
-                .iter()
-                .any(|(other, _)| *other == resource)
-            {
-                duplicate = true;
-            }
         }
-        let _ = duplicate;
         Self { rows }
     }
 
@@ -370,5 +363,3 @@ impl DataAccess for DomainDataAccess {
         access.execute_mutation(info, subject, context).await
     }
 }
-
-const _: fn(Arc<dyn Any + Send + Sync>) = |_| ();
