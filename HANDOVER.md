@@ -2,6 +2,37 @@
 
 ## Project: Data Access Factory (DAF)
 
+### Current State (2026-10-25)
+
+`main` @ `e41558f` = the #50 merge (seam-law audit + access-kit adoption —
+content in `daf-core`'s generic module only). crates.io = all 9 `daf-*` at
+**0.3.1** (published 2026-10-20, 11:40–11:42 UTC). This branch
+(`chore/release-0.3.2`) prepares the **0.3.2 patch band**: no new public
+surface (`typed_access_row` pre-existed on the published 0.3.1), no
+signature or macro-grammar change, the `Default` bound relaxed; the 0.2
+facade's deprecation posture is unchanged (still available, still annotated
+deprecated — no removal in this band). All nine crates re-publish
+band-wide per the workspace single-version model.
+
+Publish recipe (the owner's tokened window; nothing on this lane publishes):
+
+1. Verify the band: 9 lock rows + 16 intra-workspace reqs + 2 manifest rows
+   (`Cargo.toml`, `theDAF.toml`) at 0.3.2.
+2. Per crate, dry-run first: `cargo publish -p daf-core --dry-run` (and each
+   of the nine), then the scripted order with the settled runner:
+   `nohup bash scripts/publish_crates_io.sh <delay> > /tmp/crates-publish.log 2>&1 &`
+   — order: `daf-core` → `daf-runtime` → `daf-repository` → `daf-algorithms`
+   → `daf-cache` → `daf-messaging` → `daf-application` → `daf-http` →
+   `daf-ffi`; skip-if-published idempotent; 429 backoff; 120 s settle
+   between crates.
+3. Registry verify: the API `max_stable_version` = 0.3.2 for all nine.
+
+Downstream re-point (a downstream consumer pins the engines exact-band):
+`daf-core "=0.3.1"` → `"=0.3.2"`; the `thesix =0.5.0` engine requirement
+carries over unchanged (re-verified at the site); `themql-core` and the
+`prv-*` rows untouched; no API migration — the generated access surface is
+unchanged and the 0.2 facade remains available.
+
 ### Current State (2026-10-07)
 
 **All 9 `daf-*` crates are live on crates.io at 0.2.0**, published from
