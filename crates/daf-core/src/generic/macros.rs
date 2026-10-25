@@ -1,6 +1,13 @@
 //! Declarative composition macros for typed domains.
 //! No proc macros, no recursion and no identifier synthesis.
-//! Each invocation names its access/domain types and one monomorphic body.
+//! Each invocation names its access/domain types and one monomorphic body;
+//! the access half wraps the hand-written JSON adapters (`QueryAccess` /
+//! `MutationAccess`) instead of re-authoring their boundary logic.
+//!
+//! The one-author rule holds at birth: the JSON boundary — route refusal,
+//! argument decoding, replay ordering and output encoding — is authored once
+//! in `access`, and every declaration macro adopts that kit by delegation.
+//! Only the domain struct and its typed contract impl are authored here.
 
 #[macro_export]
 macro_rules! daf_query {
@@ -41,22 +48,33 @@ macro_rules! daf_query {
         }
 
         $(#[$access_meta])*
-        #[derive(Debug, Clone, Default)]
+        #[derive(Debug, Clone)]
         #[allow(missing_docs)]
         $access_vis struct $access {
-            pool: Option<$pool>,
+            inner: $crate::generic::QueryAccess<$domain, $pool>,
         }
 
         #[allow(missing_docs)]
         impl $access {
             #[must_use]
             pub const fn new(pool: Option<$pool>) -> Self {
-                Self { pool }
+                Self {
+                    inner: $crate::generic::QueryAccess::new($domain, pool),
+                }
             }
 
             #[must_use]
             pub const fn pool(&self) -> Option<&$pool> {
-                self.pool.as_ref()
+                self.inner.pool()
+            }
+        }
+
+        #[allow(missing_docs)]
+        impl ::core::default::Default for $access {
+            fn default() -> Self {
+                Self {
+                    inner: $crate::generic::QueryAccess::new($domain, None),
+                }
             }
         }
 
@@ -64,32 +82,29 @@ macro_rules! daf_query {
         #[allow(missing_docs)]
         #[::async_trait::async_trait]
         impl $crate::generic::DataAccess for $access {
-            async fn query(&self, info: &$crate::generic::QueryInfo, subject: &$crate::generic::Subject) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
-                if info.resource != $resource {
-                    return Err($crate::DataAccessError::Validation($crate::ValidationError::new(format!(
-                        "the registered query adapter serves '{}', not '{}'",
-                        $resource, info.resource
-                    ))));
-                }
-                let arguments = info.arguments.clone().unwrap_or_default();
-                let input = <$domain as $crate::generic::QueryDomain<$pool>>::parse_arguments(&arguments).await?;
-                let output = <$domain as $crate::generic::QueryDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject).await?;
-                ::serde_json::to_value(&output).map_err(|error| {
-                    $crate::DataAccessError::Internal($crate::InternalError::new(format!(
-                        "{} output encode: {error}", $resource
-                    )))
-                })
+            async fn query(
+                &self,
+                info: &$crate::generic::QueryInfo,
+                subject: &$crate::generic::Subject,
+            ) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
+                debug_assert!(
+                    !info.resource.is_empty(),
+                    "query requests name the resource"
+                );
+                self.inner.query(info, subject).await
             }
 
             async fn execute_mutation(
                 &self,
                 info: &$crate::generic::MutationInfo,
-                _subject: &$crate::generic::Subject,
-                _context: &$crate::generic::MutationContext,
+                subject: &$crate::generic::Subject,
+                context: &$crate::generic::MutationContext,
             ) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
-                Err($crate::DataAccessError::Authorization($crate::AuthorizationError::new(
-                    format!("'{}' is a query — it serves no mutations", info.resource),
-                )))
+                debug_assert!(
+                    !info.resource.is_empty(),
+                    "mutation requests name the resource"
+                );
+                self.inner.execute_mutation(info, subject, context).await
             }
         }
     };
@@ -141,18 +156,19 @@ macro_rules! daf_mutation {
         }
 
         $(#[$access_meta])*
-        #[derive(Clone, Default)]
+        #[derive(Clone)]
         #[allow(missing_docs)]
         $access_vis struct $access {
-            pool: Option<$pool>,
-            idempotency: Option<::std::sync::Arc<dyn $crate::generic::Idempotency>>,
+            inner: $crate::generic::MutationAccess<$domain, $pool>,
         }
 
         #[allow(missing_docs)]
         impl $access {
             #[must_use]
             pub const fn new(pool: Option<$pool>) -> Self {
-                Self { pool, idempotency: None }
+                Self {
+                    inner: $crate::generic::MutationAccess::new($domain, pool),
+                }
             }
 
             #[must_use]
@@ -161,13 +177,22 @@ macro_rules! daf_mutation {
                     ::std::mem::size_of::<Option<::std::sync::Arc<dyn $crate::generic::Idempotency>>>() > 0,
                     "idempotency slot is representable"
                 );
-                self.idempotency = Some(store);
+                self.inner = self.inner.with_idempotency(store);
                 self
             }
 
             #[must_use]
             pub const fn pool(&self) -> Option<&$pool> {
-                self.pool.as_ref()
+                self.inner.pool()
+            }
+        }
+
+        #[allow(missing_docs)]
+        impl ::core::default::Default for $access {
+            fn default() -> Self {
+                Self {
+                    inner: $crate::generic::MutationAccess::new($domain, None),
+                }
             }
         }
 
@@ -175,25 +200,29 @@ macro_rules! daf_mutation {
         #[allow(missing_docs)]
         #[::async_trait::async_trait]
         impl $crate::generic::DataAccess for $access {
-            async fn query(&self, info: &$crate::generic::QueryInfo, _subject: &$crate::generic::Subject) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
-                Err($crate::DataAccessError::Validation($crate::ValidationError::new(format!(
-                    "'{}' is a mutation — it serves no queries", info.resource
-                ))))
+            async fn query(
+                &self,
+                info: &$crate::generic::QueryInfo,
+                subject: &$crate::generic::Subject,
+            ) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
+                debug_assert!(
+                    !info.resource.is_empty(),
+                    "query requests name the resource"
+                );
+                self.inner.query(info, subject).await
             }
 
-            async fn execute_mutation(&self, info: &$crate::generic::MutationInfo, subject: &$crate::generic::Subject, context: &$crate::generic::MutationContext) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
-                if info.resource != $resource {
-                    return Err($crate::DataAccessError::Validation($crate::ValidationError::new(format!(
-                        "the registered mutation adapter serves '{}', not '{}'", $resource, info.resource
-                    ))));
-                }
-                let input = <$domain as $crate::generic::MutationDomain<$pool>>::parse_arguments(&info.arguments).await?;
-                let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject, context).await?;
-                ::serde_json::to_value(&output).map_err(|error| {
-                    $crate::DataAccessError::Internal($crate::InternalError::new(format!(
-                        "{} output encode: {error}", $resource
-                    )))
-                })
+            async fn execute_mutation(
+                &self,
+                info: &$crate::generic::MutationInfo,
+                subject: &$crate::generic::Subject,
+                context: &$crate::generic::MutationContext,
+            ) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
+                debug_assert!(
+                    !info.resource.is_empty(),
+                    "mutation requests name the resource"
+                );
+                self.inner.execute_mutation(info, subject, context).await
             }
         }
     };
@@ -241,18 +270,19 @@ macro_rules! daf_mutation {
         }
 
         $(#[$access_meta])*
-        #[derive(Clone, Default)]
+        #[derive(Clone)]
         #[allow(missing_docs)]
         $access_vis struct $access {
-            pool: Option<$pool>,
-            idempotency: Option<::std::sync::Arc<dyn $crate::generic::Idempotency>>,
+            inner: $crate::generic::MutationAccess<$domain, $pool>,
         }
 
         #[allow(missing_docs)]
         impl $access {
             #[must_use]
             pub const fn new(pool: Option<$pool>) -> Self {
-                Self { pool, idempotency: None }
+                Self {
+                    inner: $crate::generic::MutationAccess::new($domain, pool),
+                }
             }
 
             #[must_use]
@@ -261,13 +291,22 @@ macro_rules! daf_mutation {
                     ::std::mem::size_of::<Option<::std::sync::Arc<dyn $crate::generic::Idempotency>>>() > 0,
                     "idempotency slot is representable"
                 );
-                self.idempotency = Some(store);
+                self.inner = self.inner.with_idempotency(store);
                 self
             }
 
             #[must_use]
             pub const fn pool(&self) -> Option<&$pool> {
-                self.pool.as_ref()
+                self.inner.pool()
+            }
+        }
+
+        #[allow(missing_docs)]
+        impl ::core::default::Default for $access {
+            fn default() -> Self {
+                Self {
+                    inner: $crate::generic::MutationAccess::new($domain, None),
+                }
             }
         }
 
@@ -275,40 +314,29 @@ macro_rules! daf_mutation {
         #[allow(missing_docs)]
         #[::async_trait::async_trait]
         impl $crate::generic::DataAccess for $access {
-            async fn query(&self, info: &$crate::generic::QueryInfo, _subject: &$crate::generic::Subject) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
-                Err($crate::DataAccessError::Validation($crate::ValidationError::new(format!(
-                    "'{}' is a mutation — it serves no queries", info.resource
-                ))))
+            async fn query(
+                &self,
+                info: &$crate::generic::QueryInfo,
+                subject: &$crate::generic::Subject,
+            ) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
+                debug_assert!(
+                    !info.resource.is_empty(),
+                    "query requests name the resource"
+                );
+                self.inner.query(info, subject).await
             }
 
-            async fn execute_mutation(&self, info: &$crate::generic::MutationInfo, subject: &$crate::generic::Subject, context: &$crate::generic::MutationContext) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
-                if info.resource != $resource {
-                    return Err($crate::DataAccessError::Validation($crate::ValidationError::new(format!(
-                        "the registered mutation adapter serves '{}', not '{}'", $resource, info.resource
-                    ))));
-                }
-                let input = <$domain as $crate::generic::MutationDomain<$pool>>::parse_arguments(&info.arguments).await?;
-                if let Some(store) = self.idempotency.as_ref() {
-                    if let Some(key) = <$domain as $crate::generic::MutationDomain<$pool>>::idempotency_key(&$domain, subject, &input) {
-                        if let Some(replayed) = store.replay(&key).await? {
-                            return Ok(replayed);
-                        }
-                        let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject, context).await?;
-                        let encoded = ::serde_json::to_value(&output).map_err(|error| {
-                            $crate::DataAccessError::Internal($crate::InternalError::new(format!(
-                                "{} output encode: {error}", $resource
-                            )))
-                        })?;
-                        store.record(&key, &encoded, None).await?;
-                        return Ok(encoded);
-                    }
-                }
-                let output = <$domain as $crate::generic::MutationDomain<$pool>>::run(&$domain, self.pool.as_ref(), input, subject, context).await?;
-                ::serde_json::to_value(&output).map_err(|error| {
-                    $crate::DataAccessError::Internal($crate::InternalError::new(format!(
-                        "{} output encode: {error}", $resource
-                    )))
-                })
+            async fn execute_mutation(
+                &self,
+                info: &$crate::generic::MutationInfo,
+                subject: &$crate::generic::Subject,
+                context: &$crate::generic::MutationContext,
+            ) -> ::core::result::Result<serde_json::Value, $crate::DataAccessError> {
+                debug_assert!(
+                    !info.resource.is_empty(),
+                    "mutation requests name the resource"
+                );
+                self.inner.execute_mutation(info, subject, context).await
             }
         }
     };
@@ -379,9 +407,6 @@ macro_rules! daf_rows {
 #[macro_export]
 macro_rules! daf_row {
     ($resource:expr, access = $access:expr $(,)?) => {
-        (
-            $resource,
-            ::std::sync::Arc::new($access) as ::std::sync::Arc<dyn $crate::generic::DataAccess>,
-        )
+        $crate::generic::typed_access_row($resource, $access)
     };
 }
