@@ -14,7 +14,6 @@ daf-repository = { path = "../daf-repository", version = "0.3.2" }
 daf-algorithms = { path = "../daf-algorithms", version = "0.3.2" }
 async-trait.workspace = true
 tokio.workspace = true
-thiserror.workspace = true
 sha2.workspace = true
 hex.workspace = true
 lru.workspace = true

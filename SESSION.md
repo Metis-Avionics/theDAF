@@ -1,3 +1,15 @@
+Agent-impl-cure-11-14b Status: active
+Completed session: the machete cure — the unused thiserror declarations left by the brought-up cache-wave manifests dropped
+UTC: 2026-11-14
+
+Released files:
+- crates/daf-cache/Cargo.toml, crates/daf-application/Cargo.toml — thiserror.workspace dropped (zero references); Cargo.lock pruned by cargo metadata.
+
+Local gates (cargo through the serial /proc gate, scoped):
+- cargo metadata --locked --offline — green.
+- cargo deny check advisories bans licenses sources — green (all four ok).
+- cargo check -p daf-cache, cargo check -p daf-application — green (offline).
+
 Agent-impl-cure-11-14 Status: active
 Completed session: the supply-chain gate lock cure (the brought-up lock repaired + the yanked chacha20 lifted)
 UTC: 2026-11-14
