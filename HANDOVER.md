@@ -2,6 +2,17 @@
 
 ## Project: Data Access Factory (DAF)
 
+### Current State (2026-10-25, supply-chain gate)
+
+`main` @ `3a80b96` + this branch: the W-P2 supply-chain panel of the
+production-readiness program landed — `deny.toml` (cargo-deny policy:
+advisories v2 with the four-field ignore disposition, licenses v2, bans,
+sources), the CI `supply-chain` job (`cargo deny check advisories bans
+licenses sources`, `cargo machete`, `cargo audit`, wired into `build.needs`),
+and the `daf-messaging` manifest trim (four unused declared deps dropped; no
+source or lock-graph change beyond that entry). Publish cadence stays with
+the owner, unchanged.
+
 ### Current State (2026-10-25)
 
 `main` @ `e41558f` = the #50 merge (seam-law audit + access-kit adoption —

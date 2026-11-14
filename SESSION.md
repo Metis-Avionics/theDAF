@@ -1,3 +1,31 @@
+Agent-daf-impl-hygiene Status: active
+Completed session: W-P2 supply-chain hygiene (deny.toml + CI supply-chain job + daf-messaging dep trim)
+UTC: 2026-10-25T09:00Z
+
+Released files:
+- deny.toml — cargo-deny policy: advisories v2 (four-field disposition law
+  for any ignore entry: `why | not-exploitable | path | reassess`), licenses
+  v2 (workspace MIT + reviewed transitive carriers), bans (wildcards deny,
+  duplicate versions warn with the tightening path stated), sources locked
+  to crates.io.
+- .github/workflows/ci.yml — the `supply-chain` job: `cargo deny check
+  advisories bans licenses sources`, `cargo machete`, `cargo audit` (all
+  three tools via taiki-e/install-action), wired into `build.needs`.
+- crates/daf-messaging/Cargo.toml — dropped the four unused declared deps
+  (daf-core, daf-algorithms, async-trait, tokio); the 2-line shell references
+  none of them and machete now proves that in CI. Role disposition stays with
+  W-P5/W-P6.
+- CHANGELOG.md (the two [Unreleased] sections merged while landing the
+  W-P2 row), SESSION.md.
+
+Local gates run (cargo invocations through the serial /proc gate:
+MemAvailable>=3GB, load<4; cargo-deny 0.20.2 local, machete prebuilt 0.9.2):
+- cargo deny check advisories bans licenses sources — recorded below.
+- cargo machete — recorded below.
+- python scripts/power_of_ten_rust.py — green (no Rust source change).
+- cargo audit local verdict transfers to CI (the CI `supply-chain` job owns
+  the authoritative verdict on the pushed head).
+
 Agent-daf-prod-plan-4c19 Status: active
 Completed session: the production-readiness program + the GraphQL seam annex (design-first, docs only)
 UTC: 2026-10-25T04:05Z

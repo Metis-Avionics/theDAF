@@ -7,8 +7,8 @@ description = "Messaging primitives for the Data Access Factory (DAF)"
 repository.workspace = true
 keywords = ["data-access", "messaging", "events"]
 
-[dependencies]
-daf-core = { path = "../daf-core", version = "0.3.2" }
-daf-algorithms = { path = "../daf-algorithms", version = "0.3.2" }
-async-trait.workspace = true
-tokio.workspace = true
+# No [dependencies]: the shell carries none until its role lands (the
+# generation-watch subscription home per
+# docs/daf-graphql-seam-design.md §D — the wave that re-homes it re-adds the
+# deps it needs). Supply-chain hygiene (W-P2): an empty published crate must
+# not declare unused dependencies.

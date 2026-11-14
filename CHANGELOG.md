@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Supply-chain gate (W-P2 of `docs/proposals/daf-production-readiness.md`):
+  `deny.toml` (cargo-deny advisories/bans/licenses/sources over the committed
+  `Cargo.lock`, with the four-field advisory-disposition policy:
+  `why | not-exploitable | path | reassess`) and the CI `supply-chain` job
+  (`cargo deny check`, `cargo machete`, `cargo audit`), wired into
+  `build.needs`.
 - `docs/daf-utilization-flag.md` + `docs/daf-utilization-flag.json` — the 0.3
   utilization flag: an AST-grade structural-resolution pass (use-path symbol
   sets, body-verified references with string literals blanked, macro-keyed use
@@ -18,11 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `prv-optimizer` 24.3%, `prv-evaluation` 20.0%; the transport/runtime/FFI/
   messaging legs 0%), the unused-capability groups (types/traits/macros/
   adapters/policy), and the sanitized value cases. No source change.
-
-## [Unreleased]
-
-### Added
-
 - `docs/proposals/daf-production-readiness.md` — the production-readiness
   program (design-first): the per-crate gap audit across 8 axes
   (tenancy/resilience/persistence/observability/config/hot-path
@@ -36,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wired types — one line per resource), the SDL/DDL agreement artifacts,
   the generation-driven subscription design, and the eval-surface fit.
   No source/manifest/lock change.
+
+### Changed
+
+- Supply-chain hygiene: `daf-messaging`'s manifest no longer declares its four
+  unused dependencies (`daf-core`, `daf-algorithms`, `async-trait`, `tokio` —
+  the 2-line shell references none of them, which is exactly what
+  `cargo machete` now proves in CI). The crate's role disposition (the
+  generation-watch subscription home or retirement) is W-P5/W-P6 and re-adds
+  only what that wave requires. No API or lock-graph change.
 
 ## [0.3.2] - 2026-10-25
 
