@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `why | not-exploitable | path | reassess`) and the CI `supply-chain` job
   (`cargo deny check`, `cargo machete`, `cargo audit`), wired into
   `build.needs`.
+
+- Advisory fixes the gate's first run proved (three pre-existing RustSec
+  advisories on `main`'s lock, all real, none of them introduced here):
+  `lru` 0.12.5 → 0.18.x (RUSTSEC-2026-0002 fixed ≥0.16.3; RUSTSEC-2026-0253
+  has the binding bar ≥0.18.2 — the workspace req moves "0.12" → "0.18" and
+  the three call sites in `daf-cache` compile unchanged:
+  `new(NonZeroUsize)`/`unbounded()` signature-stable across the bump), and a
+  tokio lock-update 1.53.1 → 1.53.3 (RUSTSEC-2026-0386, `AsyncFd`
+  I/O-safety — semver-compatible within the `"1"` request, lock-only).
+  Ignoring any of the three was rejected: each has a patch, and the gate's
+  own disposition law reserves `ignore` for advisories without one.
 - `docs/daf-utilization-flag.md` + `docs/daf-utilization-flag.json` — the 0.3
   utilization flag: an AST-grade structural-resolution pass (use-path symbol
   sets, body-verified references with string literals blanked, macro-keyed use

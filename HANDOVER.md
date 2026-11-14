@@ -9,9 +9,12 @@ production-readiness program landed — `deny.toml` (cargo-deny policy:
 advisories v2 with the four-field ignore disposition, licenses v2, bans,
 sources), the CI `supply-chain` job (`cargo deny check advisories bans
 licenses sources`, `cargo machete`, `cargo audit`, wired into `build.needs`),
-and the `daf-messaging` manifest trim (four unused declared deps dropped; no
-source or lock-graph change beyond that entry). Publish cadence stays with
-the owner, unchanged.
+the `daf-messaging` manifest trim (four unused declared deps dropped; no
+source change beyond that entry), and the gate's first-run findings fixed:
+`lru` 0.12 → 0.18 (RUSTSEC-2026-0002 ≥0.16.3, RUSTSEC-2026-0253 binding at
+≥0.18.2 — call sites signature-stable) and a tokio lock-update to 1.53.3
+(RUSTSEC-2026-0386). Publish cadence stays with the owner, unchanged: the
+next release band re-publishes `daf-*` under the moved requests.
 
 ### Current State (2026-10-25)
 

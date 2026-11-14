@@ -18,6 +18,20 @@ Released files:
 - CHANGELOG.md (the two [Unreleased] sections merged while landing the
   W-P2 row), SESSION.md.
 
+- Advisory-fix rows (the gate run): the cargo-deny first CI run found three
+  pre-existing RustSec advisories on main's lock — the lru pair
+  (RUSTSEC-2026-0002 the IterMut soundness, fixed >=0.16.3, and
+  RUSTSEC-2026-0253 the pop() panic-safety use-after-free, whose binding bar
+  is >=0.18.2) and the tokio AsyncFd I/O-safety one (RUSTSEC-2026-0386,
+  fixed >=1.53.3). Fixed in this change: the workspace lru request
+  "0.12" -> "0.18" (the only three call sites, in daf-cache, are
+  signature-stable: LruCache::new(NonZeroUsize) and LruCache::unbounded()
+  compile unchanged) + the tokio lock update to 1.53.3 (lock-only; the "1"
+  request holds). No ignore entries taken. The 0.16-first attempt was
+  corrected by the gate's own second run — the binding bar lives at 0.18.2;
+  the landed lock resolves the request to lru 0.18.5 (hashbrown 0.17.1
+  transitive; allocator-api2 leaves the lock with the new lru line).
+
 Local gates run (cargo invocations through the serial /proc gate:
 MemAvailable>=3GB, load<4; cargo-deny 0.20.2 local, machete prebuilt 0.9.2):
 - cargo deny check advisories bans licenses sources — recorded below.
