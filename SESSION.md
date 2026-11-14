@@ -1,3 +1,15 @@
+Agent-impl-cure-11-14c Status: active
+Completed session: the machete cure full inventory — the 11 unused declarations dropped across the five brought-up crates
+UTC: 2026-11-14
+
+Released files:
+- crates/daf-cache/Cargo.toml, crates/daf-application/Cargo.toml, crates/daf-http/Cargo.toml, crates/daf-ffi/Cargo.toml, crates/daf-repository/Cargo.toml — the machete-flagged unused declarations removed (each grep-proven: zero src and zero tests/benches references, macro names checked for the async_trait attribute form); Cargo.lock pruned by cargo metadata.
+
+Local gates (cargo through the serial /proc gate, scoped):
+- cargo metadata --locked --offline — green.
+- cargo deny check advisories bans licenses sources — green (all four ok).
+- cargo check -p daf-cache / daf-application / daf-http / daf-ffi / daf-repository — green (offline).
+
 Agent-impl-cure-11-14b Status: active
 Completed session: the machete cure — the unused thiserror declarations left by the brought-up cache-wave manifests dropped
 UTC: 2026-11-14

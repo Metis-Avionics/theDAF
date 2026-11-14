@@ -17,9 +17,6 @@ daf-application = { path = "../daf-application", version = "0.3.2" }
 daf-cache = { path = "../daf-cache", version = "0.3.2" }
 daf-repository = { path = "../daf-repository", version = "0.3.2" }
 daf-algorithms = { path = "../daf-algorithms", version = "0.3.2" }
-async-trait.workspace = true
 tokio.workspace = true
-thiserror.workspace = true
-libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

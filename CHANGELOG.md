@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The machete cure, full inventory: the 11 unused dependency declarations left in the brought-up tree dropped across daf-cache (serde, serde_json), daf-application (daf-algorithms, lru), daf-http (async-trait, tokio, serde, serde_json, thiserror), daf-ffi (async-trait, libc, thiserror) and daf-repository (serde_json, thiserror) — zero source/test references (grep + macro-name-proofed), lock pruned by the resolver; scoped checks for the five crates + deny all four legs green.
 - The machete cure: thiserror left unused in the brought-up daf-cache/daf-application manifests (zero source references, grep-proven) — the two workspace lines dropped, the lock pruned by the resolver; scoped -p daf-cache / -p daf-application checks green; deny advisories/bans/licenses/sources green.
 - The supply-chain gate lock cure: the brought-up lock re-resolved to the non-yanked graph (rand 0.10.2 -> 0.10.3, chacha20 0.10.1 (yanked) -> 0.10.2, ulid 3.0.0 verified latest; the merge hashbrown/foldhash artifacts repaired to the crate-manifest truth). The advisories verdict green with lru 0.18.5 + tokio 1.53.3 carried through the merge.
 

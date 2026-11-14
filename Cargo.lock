@@ -384,12 +384,10 @@ version = "0.3.2"
 dependencies = [
  "async-trait",
  "chrono",
- "daf-algorithms",
  "daf-cache",
  "daf-core",
  "daf-repository",
  "hex",
- "lru",
  "serde_json",
  "sha2 0.10.9",
  "tokio",
@@ -405,8 +403,6 @@ dependencies = [
  "lru",
  "moka",
  "redis",
- "serde",
- "serde_json",
  "sled",
  "sqlx",
  "tokio",
@@ -432,16 +428,13 @@ dependencies = [
 name = "daf-ffi"
 version = "0.3.2"
 dependencies = [
- "async-trait",
  "daf-algorithms",
  "daf-application",
  "daf-cache",
  "daf-core",
  "daf-repository",
- "libc",
  "serde",
  "serde_json",
- "thiserror",
  "tokio",
 ]
 
@@ -449,14 +442,9 @@ dependencies = [
 name = "daf-http"
 version = "0.3.2"
 dependencies = [
- "async-trait",
  "axum",
  "daf-application",
  "daf-core",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -470,8 +458,6 @@ dependencies = [
  "async-trait",
  "daf-core",
  "serde",
- "serde_json",
- "thiserror",
  "tokio",
  "ulid",
 ]
