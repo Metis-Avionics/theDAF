@@ -1,0 +1,63 @@
+# cargo-deny configuration — theDAF supply-chain gate (W-P2 of
+# docs/proposals/daf-production-readiness.md).
+#
+# `cargo deny check` is the blocking CI gate (the `supply-chain` job in
+# .github/workflows/ci.yml) and covers four surfaces over the committed
+# Cargo.lock: advisories (RustSec), bans (duplicate/forbidden crates),
+# licenses, and sources. A local run must match CI exactly:
+#
+#     cargo deny check advisories bans licenses sources
+#
+# Advisory-exception policy:
+#   Each entry in [advisories].ignore MUST carry a single `reason` string with
+#   the four-field disposition, pipe-separated:
+#     why | not-exploitable | path | reassess
+#   An advisory without a complete disposition must not be ignored — an
+#   exception is an owned decision, not noise suppression.
+
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-gnu" },
+    { triple = "x86_64-unknown-linux-musl" },
+    { triple = "aarch64-unknown-linux-musl" },
+]
+
+[advisories]
+version = 2
+# A yanked release may disappear from origin at any time; the lock may not be
+# re-resolvable around it. Tighten to "deny" only after a reviewed run proves
+# the current lock clean.
+yanked = "warn"
+# Append entries only in the four-field form documented in the header.
+ignore = []
+
+[licenses]
+version = 2
+# The workspace tree is MIT; every additional license below is a reviewed
+# transitive-carrier license observed in Cargo.lock (cargo-deny's
+# license-not-encountered warnings keep this list honest — an unmatched
+# allowance is a dead row and gets removed). A new ID may be added only as a
+# reviewed change naming the crate that introduced it.
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+[bans]
+# Duplicate transitive versions are recorded, not failed: the graph is small
+# and the duplication surface is owned by the dependency authors. Promote to
+# "deny" as a reviewed tightening with the worklist resolved first.
+multiple-versions = "warn"
+wildcards = "deny"
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

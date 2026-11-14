@@ -8,7 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The machete cure, full inventory: the 11 unused dependency declarations left in the brought-up tree dropped across daf-cache (serde, serde_json), daf-application (daf-algorithms, lru), daf-http (async-trait, tokio, serde, serde_json, thiserror), daf-ffi (async-trait, libc, thiserror) and daf-repository (serde_json, thiserror) — zero source/test references (grep + macro-name-proofed), lock pruned by the resolver; scoped checks for the five crates + deny all four legs green.
+- The machete cure: thiserror left unused in the brought-up daf-cache/daf-application manifests (zero source references, grep-proven) — the two workspace lines dropped, the lock pruned by the resolver; scoped -p daf-cache / -p daf-application checks green; deny advisories/bans/licenses/sources green.
+- The supply-chain gate lock cure: the brought-up lock re-resolved to the non-yanked graph (rand 0.10.2 -> 0.10.3, chacha20 0.10.1 (yanked) -> 0.10.2, ulid 3.0.0 verified latest; the merge hashbrown/foldhash artifacts repaired to the crate-manifest truth). The advisories verdict green with lru 0.18.5 + tokio 1.53.3 carried through the merge.
 
+- Supply-chain gate (W-P2 of `docs/proposals/daf-production-readiness.md`):
+  `deny.toml` (cargo-deny advisories/bans/licenses/sources over the committed
+  `Cargo.lock`, with the four-field advisory-disposition policy:
+  `why | not-exploitable | path | reassess`) and the CI `supply-chain` job
+  (`cargo deny check`, `cargo machete`, `cargo audit`), wired into
+  `build.needs`.
+
+- Advisory fixes the gate's first run proved (three pre-existing RustSec
+  advisories on `main`'s lock, all real, none of them introduced here):
+  `lru` 0.12.5 → 0.18.x (RUSTSEC-2026-0002 fixed ≥0.16.3; RUSTSEC-2026-0253
+  has the binding bar ≥0.18.2 — the workspace req moves "0.12" → "0.18" and
+  the three call sites in `daf-cache` compile unchanged:
+  `new(NonZeroUsize)`/`unbounded()` signature-stable across the bump), and a
+  tokio lock-update 1.53.1 → 1.53.3 (RUSTSEC-2026-0386, `AsyncFd`
+  I/O-safety — semver-compatible within the `"1"` request, lock-only).
+  Ignoring any of the three was rejected: each has a patch, and the gate's
+  own disposition law reserves `ignore` for advisories without one.
 - The `daf-cache` L4 battery: `tests/sled_cache_tests.rs` runs the full
   `Cache` trait contract against real ephemeral sled stores (`temporary(true)`
   — every test owns its pages, no external service): set/get roundtrip with
@@ -55,11 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `prv-optimizer` 24.3%, `prv-evaluation` 20.0%; the transport/runtime/FFI/
   messaging legs 0%), the unused-capability groups (types/traits/macros/
   adapters/policy), and the sanitized value cases. No source change.
-
-## [Unreleased]
-
-### Added
-
 - `docs/proposals/daf-production-readiness.md` — the production-readiness
   program (design-first): the per-crate gap audit across 8 axes
   (tenancy/resilience/persistence/observability/config/hot-path
@@ -73,6 +88,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wired types — one line per resource), the SDL/DDL agreement artifacts,
   the generation-driven subscription design, and the eval-surface fit.
   No source/manifest/lock change.
+
+### Changed
+
+- Supply-chain hygiene: `daf-messaging`'s manifest no longer declares its four
+  unused dependencies (`daf-core`, `daf-algorithms`, `async-trait`, `tokio` —
+  the 2-line shell references none of them, which is exactly what
+  `cargo machete` now proves in CI). The crate's role disposition (the
+  generation-watch subscription home or retirement) is W-P5/W-P6 and re-adds
+  only what that wave requires. No API or lock-graph change.
 
 ## [0.3.2] - 2026-10-25
 

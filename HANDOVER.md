@@ -29,6 +29,19 @@ L4 leg. No version band taken — the next release band + crates.io publish
 remain the owner's cadence. Consumers adopting the tier ladder no longer
 face compile-time stubs on the remote slots: `postgres` and `redis` are
 alternative fillers of the L3 slot, `sled` holds L4.
+### Current State (2026-10-25, supply-chain gate)
+
+`main` @ `3a80b96` + this branch: the W-P2 supply-chain panel of the
+production-readiness program landed — `deny.toml` (cargo-deny policy:
+advisories v2 with the four-field ignore disposition, licenses v2, bans,
+sources), the CI `supply-chain` job (`cargo deny check advisories bans
+licenses sources`, `cargo machete`, `cargo audit`, wired into `build.needs`),
+the `daf-messaging` manifest trim (four unused declared deps dropped; no
+source change beyond that entry), and the gate's first-run findings fixed:
+`lru` 0.12 → 0.18 (RUSTSEC-2026-0002 ≥0.16.3, RUSTSEC-2026-0253 binding at
+≥0.18.2 — call sites signature-stable) and a tokio lock-update to 1.53.3
+(RUSTSEC-2026-0386). Publish cadence stays with the owner, unchanged: the
+next release band re-publishes `daf-*` under the moved requests.
 
 ### Current State (2026-10-25)
 

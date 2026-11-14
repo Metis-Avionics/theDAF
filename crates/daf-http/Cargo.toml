@@ -10,9 +10,4 @@ keywords = ["data-access", "http", "axum"]
 [dependencies]
 daf-core = { path = "../daf-core", version = "0.3.2" }
 daf-application = { path = "../daf-application", version = "0.3.2" }
-async-trait.workspace = true
-tokio.workspace = true
 axum = { version = "0.7", features = ["macros"] }
-serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true

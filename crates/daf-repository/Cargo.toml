@@ -11,7 +11,5 @@ keywords = ["data-access", "repository", "storage"]
 daf-core = { path = "../daf-core", version = "0.3.2" }
 async-trait.workspace = true
 tokio.workspace = true
-thiserror.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 ulid = "3.0.0"

@@ -11,10 +11,7 @@ keywords = ["data-access", "cache", "caching"]
 daf-core = { path = "../daf-core", version = "0.3.2" }
 async-trait.workspace = true
 tokio.workspace = true
-thiserror.workspace = true
 lru.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 moka = { version = "0.12", features = ["future"] }
 tracing = "0.1"
 

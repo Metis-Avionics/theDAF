@@ -1,3 +1,38 @@
+Agent-impl-cure-11-14c Status: active
+Completed session: the machete cure full inventory — the 11 unused declarations dropped across the five brought-up crates
+UTC: 2026-11-14
+
+Released files:
+- crates/daf-cache/Cargo.toml, crates/daf-application/Cargo.toml, crates/daf-http/Cargo.toml, crates/daf-ffi/Cargo.toml, crates/daf-repository/Cargo.toml — the machete-flagged unused declarations removed (each grep-proven: zero src and zero tests/benches references, macro names checked for the async_trait attribute form); Cargo.lock pruned by cargo metadata.
+
+Local gates (cargo through the serial /proc gate, scoped):
+- cargo metadata --locked --offline — green.
+- cargo deny check advisories bans licenses sources — green (all four ok).
+- cargo check -p daf-cache / daf-application / daf-http / daf-ffi / daf-repository — green (offline).
+
+Agent-impl-cure-11-14b Status: active
+Completed session: the machete cure — the unused thiserror declarations left by the brought-up cache-wave manifests dropped
+UTC: 2026-11-14
+
+Released files:
+- crates/daf-cache/Cargo.toml, crates/daf-application/Cargo.toml — thiserror.workspace dropped (zero references); Cargo.lock pruned by cargo metadata.
+
+Local gates (cargo through the serial /proc gate, scoped):
+- cargo metadata --locked --offline — green.
+- cargo deny check advisories bans licenses sources — green (all four ok).
+- cargo check -p daf-cache, cargo check -p daf-application — green (offline).
+
+Agent-impl-cure-11-14 Status: active
+Completed session: the supply-chain gate lock cure (the brought-up lock repaired + the yanked chacha20 lifted)
+UTC: 2026-11-14
+
+Released files:
+- Cargo.lock — the merge's textual-graph artifacts repaired to the resolver truth (hashbrown 0.17.1 deps = allocator-api2 + equivalent + foldhash 0.2.0 per the crate manifest; the bare duplicate hashbrown block and the doubled foldhash block removed), then the targeted re-resolves: rand 0.10.2 -> 0.10.3, chacha20 0.10.1 (yanked) -> 0.10.2, ulid stays 3.0.0 (latest). lru 0.18.5 + tokio 1.53.3 carried through the merge.
+
+Local gates (cargo through the serial /proc gate, scoped):
+- cargo metadata --locked --offline — green.
+- cargo deny check advisories — green (advisories ok, no yanked warning).
+
 Agent-daf-cache-l4-battery Status: active
 Completed session: the daf-cache L4 sled rung battery (the stacked recovery leg)
 UTC: 2026-11-14T00:00Z
@@ -85,6 +120,51 @@ Notes:
   verdict lands with that PR, not this one.
 - The crates.io publish + the next release band stay with the owner; no
   version bump is taken in this change (the feature ships as Unreleased).
+Agent-daf-impl-hygiene Status: active
+Completed session: W-P2 supply-chain hygiene (deny.toml + CI supply-chain job + daf-messaging dep trim)
+UTC: 2026-10-25T09:00Z
+
+Released files:
+- deny.toml — cargo-deny policy: advisories v2 (four-field disposition law
+  for any ignore entry: `why | not-exploitable | path | reassess`), licenses
+  v2 (workspace MIT + reviewed transitive carriers), bans (wildcards deny,
+  duplicate versions warn with the tightening path stated), sources locked
+  to crates.io.
+- .github/workflows/ci.yml — the `supply-chain` job: `cargo deny check
+  advisories bans licenses sources`, `cargo machete`, `cargo audit` (all
+  three tools via taiki-e/install-action), wired into `build.needs`.
+- crates/daf-messaging/Cargo.toml — dropped the four unused declared deps
+  (daf-core, daf-algorithms, async-trait, tokio); the 2-line shell references
+  none of them and machete now proves that in CI. Role disposition stays with
+  W-P5/W-P6.
+- CHANGELOG.md (the two [Unreleased] sections merged while landing the
+  W-P2 row), SESSION.md.
+
+- Advisory-fix rows (the gate run): the cargo-deny first CI run found three
+  pre-existing RustSec advisories on main's lock — the lru pair
+  (RUSTSEC-2026-0002 the IterMut soundness, fixed >=0.16.3, and
+  RUSTSEC-2026-0253 the pop() panic-safety use-after-free, whose binding bar
+  is >=0.18.2) and the tokio AsyncFd I/O-safety one (RUSTSEC-2026-0386,
+  fixed >=1.53.3). Fixed in this change: the workspace lru request
+  "0.12" -> "0.18" (the only three call sites, in daf-cache, are
+  signature-stable: LruCache::new(NonZeroUsize) and LruCache::unbounded()
+  compile unchanged) + the tokio lock update to 1.53.3 (lock-only; the "1"
+  request holds). No ignore entries taken. The 0.16-first attempt was
+  corrected by the gate's own second run — the binding bar lives at 0.18.2;
+  the landed lock resolves the request to lru 0.18.5 (hashbrown 0.17.1
+  transitive; allocator-api2 leaves the lock with the new lru line).
+
+Local gates run (cargo invocations through the serial /proc gate:
+MemAvailable>=3GB, load<4; cargo-deny 0.20.2 local, machete prebuilt 0.9.2):
+- cargo deny check advisories bans licenses sources — recorded below.
+- cargo machete — recorded below.
+- python scripts/power_of_ten_rust.py — green (no Rust source change).
+- cargo audit local verdict transfers to CI (the CI `supply-chain` job owns
+  the authoritative verdict on the pushed head).
+
+Agent-daf-prod-plan-4c19 Status: active
+Completed session: the production-readiness program + the GraphQL seam annex (design-first, docs only)
+UTC: 2026-10-25T04:05Z
 
 Released files:
 - docs/proposals/daf-production-readiness.md — the gap audit (8 axes x the
