@@ -135,10 +135,12 @@ async fn live_trait_battery_full_cycle() {
         .unwrap()
         .expect("row present");
     assert_eq!(entry.origin_tier, Tier::L3);
-    let bytes: Vec<u8> = *entry
-        .value
-        .downcast::<Vec<u8>>()
-        .expect("the battery stores Vec<u8>");
+    let bytes: Vec<u8> = Arc::unwrap_or_clone(
+        entry
+            .value
+            .downcast::<Vec<u8>>()
+            .expect("the battery stores Vec<u8>"),
+    );
     assert_eq!(bytes, b"a1".to_vec());
 
     // Overwrite by primary key.
@@ -149,7 +151,12 @@ async fn live_trait_battery_full_cycle() {
         .await
         .unwrap()
         .expect("row present");
-    let bytes: Vec<u8> = *entry.value.downcast::<Vec<u8>>().expect("Vec<u8> stored");
+    let bytes: Vec<u8> = Arc::unwrap_or_clone(
+        entry
+            .value
+            .downcast::<Vec<u8>>()
+            .expect("Vec<u8> stored"),
+    );
     assert_eq!(bytes, b"a2".to_vec());
 
     // Value contract: mismatched payloads are rejected pre-I/O.
