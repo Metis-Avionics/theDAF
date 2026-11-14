@@ -215,6 +215,6 @@ mod tests {
     #[test]
     fn unicode_prefixes_survive_escaping() {
         assert_eq!(escape_like_prefix("ключ"), "ключ%");
-        assert_eq!(escape_like_prefix("日_%本"), "日\\_%本%");
+        assert_eq!(escape_like_prefix("日_%本"), "日\\_\\%本%");
     }
 }

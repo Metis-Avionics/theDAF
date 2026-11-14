@@ -2,10 +2,12 @@
 //! The `Cache`-trait battery for the L3 Postgres tier.
 //!
 //! Two legs, both honest:
-//! - **Server-free legs** — construction inlets, tier ordering, URL-parse
-//!   rejection, the value contract (checked before any I/O), and transport
-//!   failures surfacing as `CacheError` (never silent collapse, never
-//!   `Ok(None)` ghosts) against a guaranteed-unreachable endpoint.
+//! - **Server-free legs** — construction inlets, tier ordering, the value
+//!   contract (checked before any I/O), and transport failures surfacing as
+//!   `CacheError` (never silent collapse, never `Ok(None)` ghosts) against a
+//!   guaranteed-unreachable endpoint. Every pool-building leg is a
+//!   `#[tokio::test]`: sqlx 0.9's lazy pool construction spawns its reaper
+//!   tasks, so building a pool outside a runtime context panics.
 //! - **Live legs** — the full trait cycle against a real PostgreSQL, gated
 //!   on `DAF_CACHE_PG_URL` (skipped with a recorded line when unset). CI or
 //!   a local container sets the url; the battery stays green either way.
@@ -36,8 +38,8 @@ fn unreachable_cache() -> PostgresCache {
     PostgresCache::with_pool(pool)
 }
 
-#[test]
-fn tier_pin_l3_orders_between_l2_and_l4() {
+#[tokio::test]
+async fn tier_pin_l3_orders_between_l2_and_l4() {
     let cache = unreachable_cache();
     assert_eq!(cache.tier(), Tier::L3);
     assert!(
@@ -46,14 +48,22 @@ fn tier_pin_l3_orders_between_l2_and_l4() {
     );
 }
 
-#[test]
-fn bad_url_is_a_parse_error_not_a_construction() {
-    let result = PostgresCache::connect_lazy("http://127.0.0.1:1/not-a-postgres");
-    assert!(result.is_err(), "a non-postgres url must be rejected");
+#[tokio::test]
+async fn garbage_scheme_is_not_rejected_at_lazy_construction() {
+    // sqlx 0.9 lazy semantics, proved against the real crate: construction
+    // defers the options handling entirely — a garbage-scheme str yields a
+    // usable-shaped tier, and whatever that url cannot honor surfaces at the
+    // first transport call (the unreachable-endpoint legs pin that Err
+    // behavior). No network is touched at construction.
+    let cache = match PostgresCache::connect_lazy("http://127.0.0.1:1/not-a-postgres") {
+        Ok(cache) => cache,
+        Err(e) => panic!("lazy construction must not reject: {e}"),
+    };
+    assert_eq!(cache.tier(), Tier::L3);
 }
 
-#[test]
-fn connect_lazy_never_touches_the_network() {
+#[tokio::test]
+async fn connect_lazy_never_touches_the_network() {
     // A parseable but unreachable url constructs eagerly and cheaply; no
     // connection is attempted until the first trait call.
     let cache = match PostgresCache::connect_lazy("postgres://127.0.0.1:1/unreachable-tier") {
@@ -135,10 +145,12 @@ async fn live_trait_battery_full_cycle() {
         .unwrap()
         .expect("row present");
     assert_eq!(entry.origin_tier, Tier::L3);
-    let bytes: Vec<u8> = *entry
-        .value
-        .downcast::<Vec<u8>>()
-        .expect("the battery stores Vec<u8>");
+    let bytes: Vec<u8> = Arc::unwrap_or_clone(
+        entry
+            .value
+            .downcast::<Vec<u8>>()
+            .expect("the battery stores Vec<u8>"),
+    );
     assert_eq!(bytes, b"a1".to_vec());
 
     // Overwrite by primary key.
@@ -149,7 +161,8 @@ async fn live_trait_battery_full_cycle() {
         .await
         .unwrap()
         .expect("row present");
-    let bytes: Vec<u8> = *entry.value.downcast::<Vec<u8>>().expect("Vec<u8> stored");
+    let bytes: Vec<u8> =
+        Arc::unwrap_or_clone(entry.value.downcast::<Vec<u8>>().expect("Vec<u8> stored"));
     assert_eq!(bytes, b"a2".to_vec());
 
     // Value contract: mismatched payloads are rejected pre-I/O.
