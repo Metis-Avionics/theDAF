@@ -38,6 +38,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --workspace
+      # The daf-cache tier batteries (the L3 Postgres battery's server-free
+      # legs + the L4 Sled battery run here; its live legs record a skip
+      # unless DAF_CACHE_PG_URL is set) compile under the real feature set:
+      # the default-posture workspace run above must not silently stop
+      # proving the tier backends.
+      - run: cargo test -p daf-cache --features postgres,redis,sled
 
   power-of-ten:
     runs-on: ubuntu-latest

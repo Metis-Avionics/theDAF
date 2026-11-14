@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `daf-cache` L3 Postgres tier realized: the feature-gated stub
+  (`PostgresCache` with `_pool: ()`, a trait-incomplete `delete_prefix`, and
+  no `tier()` — undeclared in `lib.rs`, thus never compiled) became a real
+  pg-backed remote shared tier behind the new `postgres` feature flag
+  (optional `sqlx` 0.9, default-features off). Session/row storage
+  (`daf_cache_entries`: `key TEXT PRIMARY KEY`, `value BYTEA`), three
+  construction inlets (`connect` eager + idempotent `ensure_schema`,
+  `connect_lazy`, `with_pool`), the full `Cache` trait contract (L3 origin
+  markers, pre-I/O `Vec<u8>` value-contract rejection, literal-prefix
+  `delete_prefix` with `ESCAPE '\'`, `shake`/`clear`), and the trait battery
+  (`tests/postgres_cache_tests.rs`): server-free legs always run; live legs
+  gate on `DAF_CACHE_PG_URL` with a recorded skip. The crate's
+  no-runtime-dependency default posture is unchanged. No release band taken
+  (publish cadence stays with the owner); a stacked L4 leg adds the
+  `SledCache` rung battery separately, and the utilization flag's tier-stub
+  claim carries a dated erratum (`docs/daf-utilization-flag.md`).
+
+## [Unreleased]
+
+### Added
+
 - `docs/daf-utilization-flag.md` + `docs/daf-utilization-flag.json` — the 0.3
   utilization flag: an AST-grade structural-resolution pass (use-path symbol
   sets, body-verified references with string literals blanked, macro-keyed use

@@ -3,6 +3,8 @@
 //! - `MemoryCache` (L1): in-memory cache with LRU eviction and trie-based prefix operations.
 //! - `MokaCache` (L2): concurrent process cache with prefix index for invalidation.
 //! - `RedisCache` (L3): distributed shared cache behind `redis` feature flag.
+//! - `PostgresCache` (L3): the Postgres-backed remote shared tier (session/row
+//!   storage: `(key, value)` rows) behind `postgres` feature flag.
 //! - `SledCache` (L4): durable local materialized state behind `sled` feature flag.
 //!
 //! Feature compilation (`--all-features clippy`) proves backend behavior.
@@ -15,6 +17,8 @@ use tokio::sync::RwLock;
 
 pub mod hierarchical;
 pub mod moka;
+#[cfg(feature = "postgres")]
+pub mod postgres;
 #[cfg(feature = "redis")]
 pub mod redis;
 #[cfg(feature = "sled")]
@@ -23,6 +27,8 @@ pub mod trie;
 
 pub use crate::hierarchical::HierarchicalCache;
 pub use crate::moka::MokaCache;
+#[cfg(feature = "postgres")]
+pub use crate::postgres::PostgresCache;
 #[cfg(feature = "redis")]
 pub use crate::redis::RedisCache;
 #[cfg(feature = "sled")]

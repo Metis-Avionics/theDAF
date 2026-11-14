@@ -1,6 +1,60 @@
-Agent-daf-prod-plan-4c19 Status: active
-Completed session: the production-readiness program + the GraphQL seam annex (design-first, docs only)
-UTC: 2026-10-25T04:05Z
+Agent-daf-cache-tiers Status: active
+Completed session: the daf-cache L3/L4 tier realization (utilization finding #4's blocker cleared)
+UTC: 2026-10-25T09:40Z
+
+Released files:
+- crates/daf-cache/src/postgres.rs — the L3 Postgres tier realized: the
+  feature-gated stub (`_pool: ()`, trait-incomplete `delete_prefix`, no
+  `tier()`, never even declared in lib.rs) became a real `PostgresCache` over
+  sqlx PgPool with session/row storage (`daf_cache_entries`: `key TEXT
+  PRIMARY KEY`, `value BYTEA`). Three construction inlets (eager `connect`
+  with idempotent `ensure_schema`, deferred `connect_lazy`, shared-pool
+  `with_pool`); the `Cache` trait fully implemented: get carries
+  `origin_tier = Tier::L3`, set enforces the `Vec<u8>` value contract BEFORE
+  any I/O, delete_prefix is LITERAL-prefix (LIKE with `ESCAPE '\'`; `%`, `_`,
+  `\` in the caller's prefix match themselves), shake counts and empties,
+  clear wipes the row store, tier pins L3 between L2 and L4. The value
+  contract is checked pre-I/O so a mismatched payload rejects even against an
+  unreachable tier; transport failures surface as `CacheError` (never silent
+  collapse, never Ok(None) ghosts).
+- crates/daf-cache/src/lib.rs — the module wired in: `#[cfg(feature =
+  "postgres")] pub mod postgres;` + the `PostgresCache` re-export + the
+  crate-doc line. The stub previously could not have compiled anywhere: its
+  `delete_prefix` returned `Result<(), CacheError>` against the trait's
+  `Result<u64, CacheError>`.
+- crates/daf-cache/Cargo.toml — `postgres` feature adding optional `sqlx`
+  (0.9, default-features off: postgres + runtime-tokio + tls-none) — the
+  no-runtime-dep default posture of the crate is unchanged: without
+  `--features postgres` the tier does not compile in, exactly like
+  `redis`/`sled`.
+- crates/daf-cache/tests/postgres_cache_tests.rs — the trait battery:
+  server-free legs (tier pin, URL-parse rejection, lazy-contract, value
+  contract pre-I/O rejection, transport failures surfacing as CacheError on
+  get/delete/set) + live legs over `DAF_CACHE_PG_URL` (recorded skip when
+  unset; full get/set/overwrite/delete/delete_prefix-literal/shake/clear
+  cycle + ensure_schema idempotence against a real PostgreSQL).
+- docs/daf-utilization-flag.md — the dated erratum on the tier-stub claim
+  (see the doc's Erratum section).
+- CHANGELOG.md, SESSION.md, HANDOVER.md — the ledger rows.
+
+Local gates run:
+- cargo fmt -p daf-cache (toolchain-pinned 1.99.0) — clean.
+- python scripts/power_of_ten_rust.py — green (the escape helper carried a
+  rule-5 assertion gap during drafting; fixed in the same change).
+- cargo invocations through the serial /proc gate (MemAvailable>=3GB,
+  load<4, flock-serialized slot), scoped `-p daf-cache` only:
+  recorded below in this entry as they complete. The default-feature
+  posture (`cargo test -p daf-cache`) and the realized tier
+  (`cargo test -p daf-cache --features postgres`) are separate verdicts.
+
+Notes:
+- L4 (`SledCache`) was verified real-in-tree by this lane (contrary to the
+  utilization doc's "two remote tiers are stubs" wording — redis.rs:1..99
+  and sled.rs:1..89 carry real trait bodies; the published 0.3.2 inherits
+  them). Its rung remains battery-less until the stacked L4 leg; the L4
+  verdict lands with that PR, not this one.
+- The crates.io publish + the next release band stay with the owner; no
+  version bump is taken in this change (the feature ships as Unreleased).
 
 Released files:
 - docs/proposals/daf-production-readiness.md — the gap audit (8 axes x the

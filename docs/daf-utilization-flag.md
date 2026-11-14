@@ -211,3 +211,17 @@ resolution pass is stdlib-only (no cargo, no rustc): inventory from engine
 sources, use-tree parsing + body-token verification + macro keying +
 one-hop barrel crediting, as described in *Method*. `--offline`-reproducible
 against any pinned consumer snapshot.
+
+## Erratum (2026-10-25, post-publication)
+
+The tier-stub claim is corrected by evidence at the `main` head this wave
+read: `SledCache` and `RedisCache` are **not** stubs — both carry real trait
+bodies and compile under their feature flags (the `dc55b27` lineage that
+predates this flag's publication), and the published 0.3.2 inherits them.
+The claim's evidence anchor was real but narrower than its wording:
+`PostgresCache` alone was the stub (`_pool: ()`, undeclared in `lib.rs`, a
+`delete_prefix` that could not have compiled against the trait). That stub
+is now realized as the feature-gated `postgres` tier — the caveat in Value
+case 3 above should be read accordingly: the ladder's remote slot offers a
+real Postgres-backed filler beside `redis`, and the remaining honesty gap
+(the unbatteried rungs) is closed by the tier batteries, not by new bodies.
