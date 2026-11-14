@@ -26,6 +26,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   I/O-safety — semver-compatible within the `"1"` request, lock-only).
   Ignoring any of the three was rejected: each has a patch, and the gate's
   own disposition law reserves `ignore` for advisories without one.
+- The `daf-cache` L4 battery: `tests/sled_cache_tests.rs` runs the full
+  `Cache` trait contract against real ephemeral sled stores (`temporary(true)`
+  — every test owns its pages, no external service): set/get roundtrip with
+  the L4 origin marker, get-miss, overwrite-last-write-wins, the pre-I/O
+  `Vec<u8>` value contract, delete-exact and absent-delete-is-ok, LITERAL
+  prefix deletes (sled's `scan_prefix` never treats `%`/`_` as wildcards —
+  the same contract the L3 Postgres tier upholds with `ESCAPE '\'`),
+  `shake` counting-and-emptying, `clear`, and the tier pin (L4 orders
+  strictly between L3 and L5). Authored 2026-10-25 with the L3 leg; lands
+  2026-11-14 as the stacked recovery leg. No source or manifest change (the
+  L4 rung body was already real-in-tree per the utilization-flag erratum).
+
+## [Unreleased]
+
+### Added
+
+- The `daf-cache` L3 Postgres tier realized: the feature-gated stub
+  (`PostgresCache` with `_pool: ()`, a trait-incomplete `delete_prefix`, and
+  no `tier()` — undeclared in `lib.rs`, thus never compiled) became a real
+  pg-backed remote shared tier behind the new `postgres` feature flag
+  (optional `sqlx` 0.9, default-features off). Session/row storage
+  (`daf_cache_entries`: `key TEXT PRIMARY KEY`, `value BYTEA`), three
+  construction inlets (`connect` eager + idempotent `ensure_schema`,
+  `connect_lazy`, `with_pool`), the full `Cache` trait contract (L3 origin
+  markers, pre-I/O `Vec<u8>` value-contract rejection, literal-prefix
+  `delete_prefix` with `ESCAPE '\'`, `shake`/`clear`), and the trait battery
+  (`tests/postgres_cache_tests.rs`): server-free legs always run; live legs
+  gate on `DAF_CACHE_PG_URL` with a recorded skip. The crate's
+  no-runtime-dependency default posture is unchanged. No release band taken
+  (publish cadence stays with the owner); a stacked L4 leg adds the
+  `SledCache` rung battery separately, and the utilization flag's tier-stub
+  claim carries a dated erratum (`docs/daf-utilization-flag.md`).
+
+## [Unreleased]
+
+### Added
+
 - `docs/daf-utilization-flag.md` + `docs/daf-utilization-flag.json` — the 0.3
   utilization flag: an AST-grade structural-resolution pass (use-path symbol
   sets, body-verified references with string literals blanked, macro-keyed use

@@ -19,8 +19,15 @@ moka = { version = "0.12", features = ["future"] }
 tracing = "0.1"
 
 [features]
+postgres = ["dep:sqlx"]
 redis = ["dep:redis"]
 sled = ["dep:sled"]
+
+[dependencies.sqlx]
+version = "0.9"
+optional = true
+default-features = false
+features = ["postgres", "runtime-tokio", "tls-none"]
 
 [dependencies.redis]
 version = "0.27"

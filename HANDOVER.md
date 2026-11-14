@@ -2,6 +2,33 @@
 
 ## Project: Data Access Factory (DAF)
 
+### Current State (2026-11-14, cache tiers — L4 battery)
+
+The L4 rung's battery is landed (`tests/sled_cache_tests.rs`, stacked on the
+L3 Postgres leg): the full `Cache` contract runs against real ephemeral sled
+stores — set/get with the L4 origin marker, the pre-I/O `Vec<u8>` value
+contract, LITERAL prefix deletes (`scan_prefix` never wildcards `%`/`_`,
+matching the L3 tier's `ESCAPE '\'`), `shake`/`clear`, and the tier pin
+(L4 strictly between L3 and L5). With the L3 battery from the stacked leg,
+the tier ladder's honesty gap closed: postgres/redis/sled are real bodies
+with rung batteries. The remaining ladder note is unchanged — the publish
+cadence stays with the owner.
+
+### Current State (2026-10-25, cache tiers)
+
+`main` @ `3a80b96` + this branch: the `daf-cache` remote-tier blocker is
+removed. The L3 Postgres tier is real (feature `postgres`: optional
+`sqlx` 0.9; session/row storage `daf_cache_entries(key, value BYTEA)`; eager
+`connect` + idempotent `ensure_schema`, `connect_lazy`, `with_pool`; full
+`Cache` trait contract with literal-prefix deletes), replacing the
+never-compiled stub (`postgres.rs` was undeclared in `lib.rs` and
+trait-incomplete). The L3 battery (`tests/postgres_cache_tests.rs`) runs
+server-free legs always and live legs on `DAF_CACHE_PG_URL` (recorded skip).
+The L4 rung (`SledCache`) is real-in-tree; its battery lands in the stacked
+L4 leg. No version band taken — the next release band + crates.io publish
+remain the owner's cadence. Consumers adopting the tier ladder no longer
+face compile-time stubs on the remote slots: `postgres` and `redis` are
+alternative fillers of the L3 slot, `sled` holds L4.
 ### Current State (2026-10-25, supply-chain gate)
 
 `main` @ `3a80b96` + this branch: the W-P2 supply-chain panel of the
