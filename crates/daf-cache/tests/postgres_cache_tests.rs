@@ -151,12 +151,8 @@ async fn live_trait_battery_full_cycle() {
         .await
         .unwrap()
         .expect("row present");
-    let bytes: Vec<u8> = Arc::unwrap_or_clone(
-        entry
-            .value
-            .downcast::<Vec<u8>>()
-            .expect("Vec<u8> stored"),
-    );
+    let bytes: Vec<u8> =
+        Arc::unwrap_or_clone(entry.value.downcast::<Vec<u8>>().expect("Vec<u8> stored"));
     assert_eq!(bytes, b"a2".to_vec());
 
     // Value contract: mismatched payloads are rejected pre-I/O.
