@@ -23,10 +23,12 @@ fn ephemeral_cache() -> SledCache {
 }
 
 fn stored_bytes(entry: daf_core::CacheEntry) -> Vec<u8> {
-    *entry
-        .value
-        .downcast::<Vec<u8>>()
-        .expect("the battery stores Vec<u8>")
+    Arc::unwrap_or_clone(
+        entry
+            .value
+            .downcast::<Vec<u8>>()
+            .expect("the battery stores Vec<u8>"),
+    )
 }
 
 #[test]
