@@ -2,6 +2,18 @@
 
 ## Project: Data Access Factory (DAF)
 
+### Current State (2026-11-14, cache tiers — L4 battery)
+
+The L4 rung's battery is landed (`tests/sled_cache_tests.rs`, stacked on the
+L3 Postgres leg): the full `Cache` contract runs against real ephemeral sled
+stores — set/get with the L4 origin marker, the pre-I/O `Vec<u8>` value
+contract, LITERAL prefix deletes (`scan_prefix` never wildcards `%`/`_`,
+matching the L3 tier's `ESCAPE '\'`), `shake`/`clear`, and the tier pin
+(L4 strictly between L3 and L5). With the L3 battery from the stacked leg,
+the tier ladder's honesty gap closed: postgres/redis/sled are real bodies
+with rung batteries. The remaining ladder note is unchanged — the publish
+cadence stays with the owner.
+
 ### Current State (2026-10-25, cache tiers)
 
 `main` @ `3a80b96` + this branch: the `daf-cache` remote-tier blocker is

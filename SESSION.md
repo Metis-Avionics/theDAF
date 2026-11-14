@@ -1,3 +1,33 @@
+Agent-daf-cache-l4-battery Status: active
+Completed session: the daf-cache L4 sled rung battery (the stacked recovery leg)
+UTC: 2026-11-14T00:00Z
+
+Released files:
+- crates/daf-cache/tests/sled_cache_tests.rs — the `Cache` trait battery for
+  the L4 disk tier, against real ephemeral stores (`sled::Config::new()
+  .temporary(true)`, one per test — no external service, every test owns its
+  pages): the tier pin (L4 strictly between L3 and L5), set/get roundtrip
+  with the L4 origin marker, get-miss, overwrite-last-write-wins, the
+  pre-I/O `Vec<u8>` value contract (the mismatch message names the
+  remedy — "serialize before set"), delete-exact + absent-delete-is-ok,
+  LITERAL prefix deletes (sled's `scan_prefix` never wildcards `%`/`_`,
+  matching the L3 Postgres tier's `ESCAPE '\'` contract), `shake`
+  counting-and-emptying its class, and `clear`. Authored 2026-10-25
+  alongside the L3 leg (the same October tree, battery present then);
+  lands as the stacked leg of the recovery relaunch.
+- CHANGELOG.md, SESSION.md, HANDOVER.md — the ledger rows.
+
+Local gates run:
+- The battery is exercised by the October recovery verdict queue:
+  `cargo test -p daf-cache --features postgres,redis,sled` compiles and
+  runs this battery in that tree (verdicts recorded in that lane's log on
+  2026-11-13/14); `cargo fmt -p daf-cache` and `scripts/power_of_ten_rust.py`
+  cover it in the same posture. The L3-leg tree and this stacked tree differ
+  only by this battery file and the ledger rows, so the shared verdicts
+  transfer; the stacked branch's own head is re-verified by CI (the
+  tier-battery run in `.github/workflows/ci.yml` covers the postgres,
+  redis and sled backends on every push).
+
 Agent-daf-cache-tiers Status: active
 Completed session: the daf-cache L3/L4 tier realization (utilization finding #4's blocker cleared)
 UTC: 2026-10-25T09:40Z

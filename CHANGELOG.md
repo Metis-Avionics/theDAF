@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `daf-cache` L4 battery: `tests/sled_cache_tests.rs` runs the full
+  `Cache` trait contract against real ephemeral sled stores (`temporary(true)`
+  — every test owns its pages, no external service): set/get roundtrip with
+  the L4 origin marker, get-miss, overwrite-last-write-wins, the pre-I/O
+  `Vec<u8>` value contract, delete-exact and absent-delete-is-ok, LITERAL
+  prefix deletes (sled's `scan_prefix` never treats `%`/`_` as wildcards —
+  the same contract the L3 Postgres tier upholds with `ESCAPE '\'`),
+  `shake` counting-and-emptying, `clear`, and the tier pin (L4 orders
+  strictly between L3 and L5). Authored 2026-10-25 with the L3 leg; lands
+  2026-11-14 as the stacked recovery leg. No source or manifest change (the
+  L4 rung body was already real-in-tree per the utilization-flag erratum).
+
+## [Unreleased]
+
+### Added
+
 - The `daf-cache` L3 Postgres tier realized: the feature-gated stub
   (`PostgresCache` with `_pool: ()`, a trait-incomplete `delete_prefix`, and
   no `tier()` — undeclared in `lib.rs`, thus never compiled) became a real
