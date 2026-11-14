@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The supply-chain gate lock cure: the brought-up lock re-resolved to the non-yanked graph (rand 0.10.2 -> 0.10.3, chacha20 0.10.1 (yanked) -> 0.10.2, ulid 3.0.0 verified latest; the merge hashbrown/foldhash artifacts repaired to the crate-manifest truth). The advisories verdict green with lru 0.18.5 + tokio 1.53.3 carried through the merge.
 
 - Supply-chain gate (W-P2 of `docs/proposals/daf-production-readiness.md`):
   `deny.toml` (cargo-deny advisories/bans/licenses/sources over the committed

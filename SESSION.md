@@ -1,3 +1,14 @@
+Agent-impl-cure-11-14 Status: active
+Completed session: the supply-chain gate lock cure (the brought-up lock repaired + the yanked chacha20 lifted)
+UTC: 2026-11-14
+
+Released files:
+- Cargo.lock — the merge's textual-graph artifacts repaired to the resolver truth (hashbrown 0.17.1 deps = allocator-api2 + equivalent + foldhash 0.2.0 per the crate manifest; the bare duplicate hashbrown block and the doubled foldhash block removed), then the targeted re-resolves: rand 0.10.2 -> 0.10.3, chacha20 0.10.1 (yanked) -> 0.10.2, ulid stays 3.0.0 (latest). lru 0.18.5 + tokio 1.53.3 carried through the merge.
+
+Local gates (cargo through the serial /proc gate, scoped):
+- cargo metadata --locked --offline — green.
+- cargo deny check advisories — green (advisories ok, no yanked warning).
+
 Agent-daf-cache-l4-battery Status: active
 Completed session: the daf-cache L4 sled rung battery (the stacked recovery leg)
 UTC: 2026-11-14T00:00Z
